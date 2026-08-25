@@ -1,0 +1,15 @@
+[
+  {
+    "id": "5d5f390b-8c2a-4f1e-9b3a-1c2d3e4f5a6b",
+    "project_id": "proj-shared",
+    "interview_id": "iv-p07",
+    "segment_id": "seg-p07-0",
+    "code_ids": ["c1"],
+    "coder_name": "Ada",
+    "char_start": null,
+    "char_end": null,
+    "deleted": false,
+    "revision": 1,
+    "updated_at": "2026-08-18T12:00:00Z"
+  }
+]

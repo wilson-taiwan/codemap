@@ -1,0 +1,839 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Codemap — Liquid Glass
+   --------------------------------------------------------------------------
+   Three ideas carry the whole system:
+
+   1. LAYERS. Content sits on an ambient wash. Glass floats above content.
+      Nothing is opaque except type. Depth comes from blur + shadow, never
+      from a hard border.
+   2. SPECULAR EDGE. Every glass surface is lit from above: a bright 1px
+      inner highlight on the top edge, a faint one on the bottom. That single
+      detail is what makes a translucent rectangle read as a physical pane.
+   3. CONCENTRIC RADII. A child's radius = parent's radius − parent's padding.
+      The --r-* scale is built so the common pairings already line up.
+
+   Perf note: backdrop-filter is expensive and compounds when stacked. It is
+   deliberately limited to the six .glass-* surfaces below. Buttons, chips and
+   fields use flat translucent fills that cost nothing.
+   ========================================================================== */
+
+@theme {
+  /* `system-ui` already resolves to Segoe UI on Windows, but it sits after
+     "Inter" here — so a machine with Inter installed for some other reason
+     would render the whole app in it. Naming the Windows faces explicitly
+     keeps each platform on its own UI font. */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text",
+    "Segoe UI", "Inter", system-ui, sans-serif;
+  --font-serif: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono",
+    Consolas, monospace;
+}
+
+:root {
+  /* Follows the resolved theme, not the OS. This drives the *native* widgets —
+     scrollbars, `<select>` menus, checkboxes — and leaving it as `light dark`
+     would paint them dark on a dark-OS machine while every token around them
+     stayed light. Redefined for each theme below. */
+  color-scheme: light;
+
+  /* --- radii (concentric scale) --- */
+  --r-xs: 6px;
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-2xl: 28px;
+  --r-full: 999px;
+
+  /* --- motion --- */
+  --ease-glass: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 140ms;
+  --dur: 240ms;
+  --dur-slow: 420ms;
+
+  /* --- light theme ---
+     Neutral greys, gold accent. The ink ramp used to carry a violet cast
+     (#16161a, #55555f) which read as blue-grey against a warm accent; these
+     are hue-neutral so the gold is the only colour in the chrome.
+
+     🔑 Accent values here are not eyeballed. #8a6410 clears 5.37:1 against the
+     white text on a primary button and 4.98:1 as text on the light ground —
+     both past 4.5:1. Brighter, more obviously "gold" values do not: #b5860f is
+     3.29:1 behind white text, which is why the bright gold is confined to dark
+     mode where it sits on a dark ground. */
+  --ink: #17181a;
+  --ink-2: #55575c;
+  /* 🔑 Ratios against the reading page (#ffffff), at the 10.5–12px these two
+     actually carry: --ink-3 ~5.5:1, --ink-4 ~4.8:1. They were #85878d (3.40)
+     and #a7a9af (2.22) — both failing AA while carrying nearly every hint,
+     eyebrow, timestamp, code definition and placeholder in the app. The
+     accent ramp was verified to four decimals; this one, used an order of
+     magnitude more often, never was.
+
+     The ramp is deliberately compressed at the dim end: there is not room
+     between #55575c and the 4.5:1 line for four visually distinct steps, so
+     tier 3 and tier 4 differ by about half a step and the hierarchy is carried
+     by size and weight instead. Do not "restore contrast range" by lightening
+     --ink-4; that is the bug. */
+  --ink-3: #66686e;
+  --ink-4: #6f7177;
+  --ink-inv: #ffffff;
+
+  --accent: #8a6410;
+  --accent-hi: #a3771a;
+  --accent-soft: rgba(138, 100, 16, 0.13);
+  --accent-ink: #ffffff;
+  /* The primary button's drop shadow. Was a hardcoded rgba(10, 108, 255, 0.32)
+     — a blue shadow under a gold button, left behind when the accent changed. */
+  --accent-shadow: rgba(138, 100, 16, 0.32);
+
+  /* Chip text is NOT the semantic colour. A chip sets a ~12% tint of its own
+     hue as background, which lifts the ground out from under the text: the
+     accent chip measured 4.29:1 and the ok chip 3.77:1 at 11.5px while the
+     same colours cleared AA everywhere else. These are the semantic hues
+     darkened until they clear 5:1 on the lightest surface a chip sits on
+     (measured — glass composites differently per panel). */
+  --accent-chip-ink: #7c5a0e;
+  --ok-chip-ink: #0f6e4c;
+  --warn-chip-ink: #964c17;
+
+  --ok: #12855b;
+  --ok-soft: rgba(18, 133, 91, 0.12);
+  /* Orange, not amber. Amber is now the accent, and a warning the same colour
+     as the primary action is not a warning. */
+  --warn: #a8551a;
+  --warn-soft: rgba(168, 85, 26, 0.13);
+  --danger: #c8352b;
+  --danger-soft: rgba(200, 53, 43, 0.12);
+
+  /* ambient wash — bright, calm, and never desktop-coloured in light mode.
+
+     🔴 `--amb-alpha` is platform-gated, not a plain theme value. The wash is
+     only allowed to be translucent where the platform actually composites it
+     over something dark: macOS gives us vibrancy (`transparent: true` +
+     windowEffects "sidebar"). tauri.windows.conf.json replaces app.windows[0]
+     wholesale (RFC 7386 — arrays replace, same rule that bit the v0.7.0 port)
+     and sets neither, so on Windows a 0.7-alpha wash composited over the
+     webview's default white and the "dark" ground resolved to ~rgb(87,87,86),
+     dropping --ink-3 to 2.00:1. Opaque is the safe default. Light mode keeps
+     it opaque even on macOS so a dark desktop cannot turn a reading surface
+     grey; only the dark palette opts into vibrancy below.
+
+     The wash itself is paper-white, not grey. A cool-grey base (#f7f6f4)
+     plus translucent glass is what made light mode read as a dim overlay
+     even after the transcript got its own page. Gold blobs stay, at a
+     whisper — warmth, not dirt. */
+  --amb-base: 255, 255, 255;
+  --amb-alpha-vibrant: 1;
+  --amb-alpha: 1;
+  --amb-1: rgba(245, 214, 140, 0.07);
+  --amb-2: rgba(255, 236, 200, 0.05);
+  --amb-3: rgba(255, 248, 236, 0.06);
+
+  /* glass fills, per elevation. Near-opaque white so chrome does not pick
+     up a grey wash underneath. The reading page is a separate token so it
+     can be paper even if a panel stays slightly glassy. */
+  --g1: rgba(250, 247, 240, 0.96); /* panels, rails */
+  --g2: #ffffff; /* bars, cards */
+  --g3: #ffffff; /* sheets, popovers, modals */
+  --reading-bg: #ffffff; /* transcript page — opaque paper, never a wash */
+  --g-hairline: rgba(40, 36, 28, 0.14);
+  --g-rim: rgba(40, 36, 28, 0.15);
+
+  /* specular highlight */
+  --spec-top: rgba(255, 255, 255, 0.92);
+  --spec-bot: rgba(255, 255, 255, 0.35);
+
+  /* interactive fills */
+  --fill: rgba(40, 36, 28, 0.06);
+  --fill-hi: rgba(40, 36, 28, 0.1);
+  --fill-on: #ffffff;
+
+  --scrim: rgba(40, 36, 28, 0.14);
+
+  --shadow-1: 0 1px 2px rgba(73, 63, 43, 0.07), 0 4px 12px rgba(73, 63, 43, 0.06);
+  --shadow-2: 0 2px 6px rgba(73, 63, 43, 0.09), 0 12px 32px rgba(73, 63, 43, 0.1);
+  --shadow-3: 0 8px 20px rgba(73, 63, 43, 0.12), 0 32px 80px rgba(73, 63, 43, 0.18);
+
+  --blur-1: saturate(180%) blur(20px);
+  --blur-2: saturate(190%) blur(30px);
+  --blur-3: saturate(200%) blur(44px);
+}
+
+/* ── Dark theme ───────────────────────────────────────────────────────────────
+   Applied two ways, and deliberately not a third.
+
+   `[data-theme="dark"]` is an explicit choice. `[data-theme="system"]` defers
+   to the operating system. A bare `:root` — no attribute, or the attribute set
+   to "light" — stays light **even on a machine set to dark**, because light is
+   this app's default rather than the OS's preference being adopted wholesale.
+   Transcripts are long-form reading and that is a choice worth making
+   explicitly.
+
+   The selector list is duplicated rather than nested because a media query
+   cannot be `@media` inside a selector without CSS nesting, and this file
+   targets a WKWebView whose nesting support is not worth depending on. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+    /* Dark mode is where the gold gets to be gold: #e8b93c clears 10.3:1
+       against the dark ground, so the accent can carry real warmth instead of
+       the muted bronze light mode is limited to. */
+    --ink: #f5f4f2;
+    --ink-2: #b8b7b4;
+    /* Same correction as light, same reasoning — see the light block. Against
+       the composited dark ground (#0f0f0e): --ink-3 6.77:1, --ink-4 5.30:1.
+       They were #87868a (5.30, passing) and #63636a (3.22, failing), so the
+       ramp shifts up one step and the old --ink-3 becomes the new --ink-4. */
+    --ink-3: #9a999d;
+    --ink-4: #87868a;
+    --ink-inv: #131312;
+
+    --accent: #e8b93c;
+    --accent-hi: #f2cd68;
+    --accent-soft: rgba(232, 185, 60, 0.17);
+    --accent-ink: #1a1408;
+    /* Black, not gold: on a dark ground a tinted shadow reads as a glow. */
+    --accent-shadow: rgba(0, 0, 0, 0.45);
+
+    /* Dark mode needs no separate chip ink: the tint darkens the ground rather
+       than lifting it, so the bright hues clear AA as-is. Kept as tokens so
+       .chip-* reads the same property in both themes. */
+    --accent-chip-ink: var(--accent);
+    --ok-chip-ink: var(--ok);
+    --warn-chip-ink: var(--warn);
+
+    --ok: #3fd39a;
+    --ok-soft: rgba(63, 211, 154, 0.16);
+    --warn: #f09155;
+    --warn-soft: rgba(240, 145, 85, 0.16);
+    --danger: #ff6b5e;
+    --danger-soft: rgba(255, 107, 94, 0.16);
+
+    --amb-base: 15, 15, 14;
+    --amb-alpha-vibrant: 0.7;
+    --amb-1: rgba(200, 155, 45, 0.22);
+    --amb-2: rgba(140, 115, 60, 0.17);
+    --amb-3: rgba(110, 110, 115, 0.12);
+
+    --g1: rgba(255, 255, 255, 0.05);
+    --g2: rgba(255, 255, 255, 0.08);
+    --g3: rgba(38, 38, 46, 0.74);
+    --reading-bg: rgba(255, 255, 255, 0.08);
+    --g-hairline: rgba(255, 255, 255, 0.12);
+    --g-rim: rgba(0, 0, 0, 0.4);
+
+    --spec-top: rgba(255, 255, 255, 0.3);
+    --spec-bot: rgba(255, 255, 255, 0.07);
+
+    --fill: rgba(255, 255, 255, 0.07);
+    --fill-hi: rgba(255, 255, 255, 0.13);
+    --fill-on: rgba(255, 255, 255, 0.16);
+    --scrim: rgba(10, 10, 14, 0.45);
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.42);
+    --shadow-3: 0 8px 20px rgba(0, 0, 0, 0.5), 0 32px 80px rgba(0, 0, 0, 0.6);
+  
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    color-scheme: dark;
+    /* Dark mode is where the gold gets to be gold: #e8b93c clears 10.3:1
+       against the dark ground, so the accent can carry real warmth instead of
+       the muted bronze light mode is limited to. */
+    --ink: #f5f4f2;
+    --ink-2: #b8b7b4;
+    /* Same correction as light, same reasoning — see the light block. Against
+       the composited dark ground (#0f0f0e): --ink-3 6.77:1, --ink-4 5.30:1.
+       They were #87868a (5.30, passing) and #63636a (3.22, failing), so the
+       ramp shifts up one step and the old --ink-3 becomes the new --ink-4. */
+    --ink-3: #9a999d;
+    --ink-4: #87868a;
+    --ink-inv: #131312;
+
+    --accent: #e8b93c;
+    --accent-hi: #f2cd68;
+    --accent-soft: rgba(232, 185, 60, 0.17);
+    --accent-ink: #1a1408;
+    /* Black, not gold: on a dark ground a tinted shadow reads as a glow. */
+    --accent-shadow: rgba(0, 0, 0, 0.45);
+
+    /* Dark mode needs no separate chip ink: the tint darkens the ground rather
+       than lifting it, so the bright hues clear AA as-is. Kept as tokens so
+       .chip-* reads the same property in both themes. */
+    --accent-chip-ink: var(--accent);
+    --ok-chip-ink: var(--ok);
+    --warn-chip-ink: var(--warn);
+
+    --ok: #3fd39a;
+    --ok-soft: rgba(63, 211, 154, 0.16);
+    --warn: #f09155;
+    --warn-soft: rgba(240, 145, 85, 0.16);
+    --danger: #ff6b5e;
+    --danger-soft: rgba(255, 107, 94, 0.16);
+
+    --amb-base: 15, 15, 14;
+    --amb-alpha-vibrant: 0.7;
+    --amb-1: rgba(200, 155, 45, 0.22);
+    --amb-2: rgba(140, 115, 60, 0.17);
+    --amb-3: rgba(110, 110, 115, 0.12);
+
+    --g1: rgba(255, 255, 255, 0.05);
+    --g2: rgba(255, 255, 255, 0.08);
+    --g3: rgba(38, 38, 46, 0.74);
+    --reading-bg: rgba(255, 255, 255, 0.08);
+    --g-hairline: rgba(255, 255, 255, 0.12);
+    --g-rim: rgba(0, 0, 0, 0.4);
+
+    --spec-top: rgba(255, 255, 255, 0.3);
+    --spec-bot: rgba(255, 255, 255, 0.07);
+
+    --fill: rgba(255, 255, 255, 0.07);
+    --fill-hi: rgba(255, 255, 255, 0.13);
+    --fill-on: rgba(255, 255, 255, 0.16);
+    --scrim: rgba(10, 10, 14, 0.45);
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.42);
+    --shadow-3: 0 8px 20px rgba(0, 0, 0, 0.5), 0 32px 80px rgba(0, 0, 0, 0.6);
+  
+  }
+}
+
+/* --- platform opt-in to the translucent wash ------------------------------
+   `data-platform` is stamped on <html> by lib/platform's
+   applyPlatformAttribute(), called at module scope in main.tsx before render,
+   so this resolves on the first paint rather than one frame late. Anything
+   unrecognised keeps the opaque ground — the safe direction, since the failure
+   mode of guessing "vibrancy" wrong is an unreadable interface, and the
+   failure mode of guessing "opaque" wrong is a slightly flatter background. */
+:root[data-platform="macos"] {
+  --amb-alpha: var(--amb-alpha-vibrant);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+/* The window itself is translucent (macOS vibrancy). This wash tints the
+   desktop showing through without hiding it, and stays a valid background
+   on its own if the platform gives us an opaque window. */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(78% 62% at 8% -8%, var(--amb-1), transparent 62%),
+    radial-gradient(64% 58% at 102% 6%, var(--amb-2), transparent 60%),
+    radial-gradient(90% 70% at 46% 108%, var(--amb-3), transparent 66%),
+    rgba(var(--amb-base), var(--amb-alpha));
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* 🔑 This MUST stay inside `@layer base`. Unlayered CSS beats every layered
+   rule regardless of specificity — that is the cascade-layers contract, not a
+   specificity accident. Unlayered, `color: inherit` here overrode the `color`
+   on every `.btn-*` and `.chip-*` in `@layer components`, so the primary
+   button rendered `--ink` on `--accent`: 1.67:1 in dark mode against the
+   9.97:1 the accent was chosen for. The tokens were right; nothing painted
+   them. lib/contrast-audit.ts re-measures this in the running app on every dev
+   boot; lib/contrast-tokens.test.ts covers the token values themselves. */
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/* Apple-style overlay scrollbars — visible on hover, invisible at rest. */
+.scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color var(--dur) var(--ease-glass);
+}
+.scroll:hover {
+  scrollbar-color: var(--ink-4) transparent;
+}
+.scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border: 3px solid transparent;
+  border-radius: var(--r-full);
+  background-clip: content-box;
+  transition: background var(--dur) var(--ease-glass);
+}
+.scroll:hover::-webkit-scrollbar-thumb {
+  background: var(--ink-4);
+  background-clip: content-box;
+}
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* macOS traffic-light clearance.
+ *
+ * Window dragging is NOT done in CSS. `-webkit-app-region: drag` is an
+ * Electron/Chromium-shell feature and is silently ignored by WKWebView, which
+ * is what Tauri embeds — this file carried `.drag` / `.no-drag` rules for two
+ * releases and they never moved the window once. The titlebar is hidden
+ * (`titleBarStyle: "Overlay"` + `hiddenTitle`), so with no working drag region
+ * the window could not be moved at all.
+ *
+ * Tauri's mechanism is the `data-tauri-drag-region` attribute, handled by an
+ * injected script that invokes `plugin:window|start_dragging`. That command is
+ * NOT part of `core:window:default`, so `core:window:allow-start-dragging`
+ * also has to be granted in capabilities/default.json. Both halves are
+ * required; either one alone fails silently.
+ *
+ * The gutter is macOS-only. Windows keeps its native titlebar (see
+ * tauri.windows.conf.json) and puts its window controls on the *right*, so
+ * reserving 78px on the left there is just a dent in the layout. Gated on the
+ * `data-platform` attribute `main.tsx` stamps before first paint. */
+.traffic-pad {
+  padding-left: 12px;
+}
+
+:root[data-platform="macos"] .traffic-pad {
+  padding-left: 78px;
+}
+
+@layer components {
+  /* ========================================================================
+     Glass surfaces
+     ====================================================================== */
+
+  .glass,
+  .glass-panel,
+  .glass-bar,
+  .glass-card,
+  .glass-sheet,
+  .glass-pop {
+    position: relative;
+    isolation: isolate;
+  }
+
+  /* The specular edge. One pseudo-element, no layout cost, and it is what
+     separates "translucent div" from "pane of glass". */
+  .glass::before,
+  .glass-panel::before,
+  .glass-bar::before,
+  .glass-card::before,
+  .glass-sheet::before,
+  .glass-pop::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+      inset 0 1px 0 var(--spec-top),
+      inset 0 -1px 0 var(--spec-bot),
+      inset 0 0 0 1px var(--g-hairline);
+  }
+
+  .glass {
+    background: var(--g1);
+    -webkit-backdrop-filter: var(--blur-1);
+    backdrop-filter: var(--blur-1);
+    border-radius: var(--r-lg);
+  }
+
+  .glass-panel {
+    background: var(--g1);
+    -webkit-backdrop-filter: var(--blur-1);
+    backdrop-filter: var(--blur-1);
+  }
+
+  .glass-bar {
+    background: var(--g2);
+    -webkit-backdrop-filter: var(--blur-2);
+    backdrop-filter: var(--blur-2);
+  }
+
+  .glass-card {
+    background: var(--g2);
+    -webkit-backdrop-filter: var(--blur-2);
+    backdrop-filter: var(--blur-2);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-1);
+  }
+
+  .glass-sheet {
+    background: var(--g3);
+    -webkit-backdrop-filter: var(--blur-3);
+    backdrop-filter: var(--blur-3);
+    border-radius: var(--r-2xl);
+    box-shadow: var(--shadow-3);
+  }
+
+  .glass-pop {
+    background: var(--g3);
+    -webkit-backdrop-filter: var(--blur-3);
+    backdrop-filter: var(--blur-3);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-2);
+  }
+
+  /* Scrim behind sheets. Light mode stays a pale veil so the app does not
+     suddenly look like a dark-grey room the moment a sheet opens. */
+  .scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+    animation: fade-in var(--dur) var(--ease-out) both;
+  }
+
+  /* The transcript's page — the one large surface that is flat, not glass.
+     backdrop-filter over a full-height scrolling column is the most expensive
+     paint in the app, and long-form text wants a *calmer* ground than the
+     ambient wash, not a more effected one. --reading-bg is opaque paper in
+     light mode and a raised panel in dark; never a translucent overlay. */
+  .reading-page {
+    background: var(--reading-bg);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-1), inset 0 0 0 1px var(--g-rim);
+  }
+
+  /* ========================================================================
+     Controls
+     ====================================================================== */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 0;
+    border-radius: var(--r-full);
+    background: var(--fill);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background var(--dur-fast) var(--ease-glass),
+      transform var(--dur-fast) var(--ease-glass),
+      opacity var(--dur-fast) var(--ease-glass),
+      box-shadow var(--dur-fast) var(--ease-glass);
+  }
+  .btn:hover:not(:disabled) {
+    background: var(--fill-hi);
+  }
+  /* The gel press: squash, don't just darken. */
+  .btn:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      0 1px 3px var(--accent-shadow);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hi);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink-2);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--fill);
+    color: var(--ink);
+  }
+
+  .btn-outline {
+    background: var(--g2);
+    box-shadow: inset 0 0 0 1px var(--g-rim);
+  }
+  .btn-outline:hover:not(:disabled) {
+    background: var(--fill-on);
+  }
+
+  .btn-danger {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: var(--danger);
+    color: #fff;
+  }
+
+  .btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .btn-lg {
+    padding: 11px 22px;
+    font-size: 15px;
+  }
+  .btn-icon {
+    padding: 0;
+    width: 30px;
+    height: 30px;
+  }
+  .btn-block {
+    width: 100%;
+  }
+
+  /* Fields */
+  .field {
+    width: 100%;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: var(--r-md);
+    background: var(--fill);
+    box-shadow: inset 0 0 0 1px var(--g-rim);
+    color: var(--ink);
+    font-size: 14px;
+    transition:
+      box-shadow var(--dur-fast) var(--ease-glass),
+      background var(--dur-fast) var(--ease-glass);
+  }
+  .field::placeholder {
+    color: var(--ink-4);
+  }
+  .field:focus {
+    outline: none;
+    background: var(--fill-on);
+    box-shadow:
+      inset 0 0 0 1px var(--accent),
+      0 0 0 3.5px var(--accent-soft);
+  }
+  .field-sm {
+    padding: 5px 9px;
+    font-size: 12.5px;
+    border-radius: var(--r-sm);
+  }
+  textarea.field {
+    resize: none;
+    line-height: 1.55;
+  }
+  select.field {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 28px;
+    background-image: linear-gradient(
+        45deg,
+        transparent 50%,
+        currentColor 50%
+      ),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position:
+      calc(100% - 15px) calc(50% + 1px),
+      calc(100% - 10px) calc(50% + 1px);
+    background-size:
+      5px 5px,
+      5px 5px;
+    background-repeat: no-repeat;
+  }
+
+  .label {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--ink-2);
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+
+  .hint {
+    color: var(--ink-3);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  /* Section heading used across panels */
+  .eyebrow {
+    color: var(--ink-3);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: var(--r-full);
+    background: var(--fill);
+    color: var(--ink-2);
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .chip-accent {
+    background: var(--accent-soft);
+    color: var(--accent-chip-ink);
+  }
+  .chip-ok {
+    background: var(--ok-soft);
+    color: var(--ok-chip-ink);
+  }
+  .chip-warn {
+    background: var(--warn-soft);
+    color: var(--warn-chip-ink);
+  }
+
+  /* Inline advisory. Sits in the flow and is read at the moment of choosing —
+     as opposed to a modal, which interrupts and gets clicked away. Used where
+     the app has an opinion but not a veto: picking a synced project folder is
+     a real trade-off, not a mistake to be blocked. */
+  .notice {
+    border-radius: var(--r-md);
+    padding: 10px 12px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    background: var(--fill);
+    color: var(--ink-2);
+    border: 1px solid var(--g-rim);
+  }
+  .notice-warn {
+    background: var(--warn-soft);
+    border-color: transparent;
+    color: var(--ink-2);
+  }
+  .notice-warn strong {
+    color: var(--warn);
+    font-weight: 600;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--g-rim);
+  }
+
+  /* Focus ring for keyboard users only */
+  .btn:focus-visible,
+  .chip:focus-visible,
+  [role="button"]:focus-visible,
+  /* Menu rows are <button role="menuitem"> and carry no `.btn` class, so they
+     matched none of the selectors above and keyboard focus in the overflow
+     menu and every context menu was completely invisible. */
+  [role="menuitem"]:focus-visible,
+  [role="option"]:focus-visible,
+  a:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3.5px var(--accent-soft), inset 0 0 0 1px var(--accent);
+  }
+}
+
+/* ==========================================================================
+   Motion
+   ========================================================================== */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.anim-sheet {
+  animation: sheet-in var(--dur) var(--ease-out) both;
+}
+.anim-slide {
+  animation: slide-in-right var(--dur) var(--ease-out) both;
+}
+.anim-rise {
+  animation: rise var(--dur) var(--ease-out) both;
+}
+.anim-fade {
+  animation: fade-in var(--dur) var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   Typography helpers
+   ========================================================================== */
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+.wordmark {
+  font-weight: 600;
+  letter-spacing: -0.022em;
+}

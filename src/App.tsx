@@ -1,0 +1,90 @@
+import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { useProjectStore } from "./store/project-store";
+import { WelcomeScreen } from "./components/WelcomeScreen";
+import { WorkspaceLayout } from "./components/WorkspaceLayout";
+import { UserGuidePanel } from "./components/UserGuidePanel";
+import { AboutModal } from "./components/AboutModal";
+import { SetupWizard } from "./components/setup/SetupWizard";
+import { SyncSheet } from "./components/SyncSheet";
+import { CoderIdentityModal } from "./components/CoderIdentityModal";
+import { JoinStudyModal } from "./components/JoinStudyModal";
+import { SettingsSheet } from "./components/SettingsSheet";
+import { OpeningOverlay } from "./components/OpeningOverlay";
+import { UpdatePreparationOverlay } from "./components/UpdateAction";
+import { SelftestRunner } from "./selftest/runner";
+import { ToastStack } from "./components/ToastStack";
+import { api } from "./lib/api";
+import { useAppInit, useGlobalKeyboardShortcuts } from "./hooks/useAppInit";
+import { useMenuEvents } from "./hooks/useMenuEvents";
+
+function App() {
+  const project = useProjectStore((s) => s.project);
+  const loading = useProjectStore((s) => s.loading);
+  const openingPath = useProjectStore((s) => s.openingPath);
+  const [isSelftest, setIsSelftest] = useState(() =>
+    window.location.search.includes("selftest"),
+  );
+
+  useEffect(() => {
+    invoke<boolean>("is_selftest")
+      .then((active) => {
+        if (active) setIsSelftest(true);
+      })
+      .catch(() => {});
+
+    api
+      .takeUncleanExitNotice()
+      .then((unclean) => {
+        if (unclean) {
+          useProjectStore
+            .getState()
+            .showStatus(
+              "Codemap closed unexpectedly during its last session. Your project database has been verified and is ready.",
+              "info",
+            );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const unlisten = listen("sync://workspace-changed", () => {
+      const store = useProjectStore.getState();
+      if (!store.project) return;
+      void api
+        .getLiveWorkspaceSnapshot(store.activeInterviewId)
+        .then((snapshot) => useProjectStore.getState().reconcileLiveWorkspace(snapshot))
+        .catch(() => {});
+    });
+    return () => {
+      void unlisten.then((dispose) => dispose());
+    };
+  }, []);
+
+  useAppInit();
+  useGlobalKeyboardShortcuts();
+  useMenuEvents();
+
+  return (
+    <>
+      {/* Tints the desktop showing through the translucent window. */}
+      <div className="ambient" aria-hidden="true" />
+      {project ? <WorkspaceLayout /> : <WelcomeScreen />}
+      <SetupWizard />
+      <UserGuidePanel />
+      <AboutModal />
+      <SyncSheet />
+      <CoderIdentityModal />
+      <JoinStudyModal />
+      <SettingsSheet />
+      <UpdatePreparationOverlay />
+      <ToastStack />
+      {loading && <OpeningOverlay path={openingPath} />}
+      {isSelftest && <SelftestRunner />}
+    </>
+  );
+}
+
+export default App;

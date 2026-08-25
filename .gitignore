@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+dist/
+
+# Rust
+src-tauri/target/
+
+# Packaged releases (build locally; upload to Drive)
+releases/*.dmg
+releases/*.app/
+releases/*.msi
+releases/*.exe
+releases/*.tar.gz
+releases/*.sig
+releases/latest.json
+releases/*.tmp
+releases/*-snapshot.json
+releases/.verify-*/
+releases/.win-staging-*/
+
+# Test output
+test-results/
+
+# Local test projects
+*.qcproj/
+*.codemap/
+
+# OS & editors
+.DS_Store
+.idea/
+.vscode/
+.claude/
+
+# Env
+.env
+.env.*

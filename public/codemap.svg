@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Favicon build of the app icon: no filters, thicker bars, legible at 16px. -->
+  <defs>
+    <linearGradient id="t" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0%" stop-color="#4E8DFF" />
+      <stop offset="42%" stop-color="#2B5CE6" />
+      <stop offset="100%" stop-color="#5B3BD4" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#t)" />
+  <g fill="#ffffff">
+    <rect x="15" y="18" width="21" height="5" rx="2.5" opacity="0.45" />
+    <rect x="15" y="29" width="34" height="5" rx="2.5" />
+    <rect x="15" y="40" width="26" height="5" rx="2.5" opacity="0.45" />
+  </g>
+</svg>

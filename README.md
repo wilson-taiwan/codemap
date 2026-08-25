@@ -1,0 +1,117 @@
+# Codemap
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Offline-first desktop application for **reflexive thematic analysis**. Import transcripts, code passages (whole turns or phrase selections) with a living codebook, write reflexive memos, and collaborate with your research team across machines.
+
+Built with **Tauri v2**, **React 19**, **TypeScript**, **Tailwind CSS**, and **SQLite**.
+
+---
+
+## Key Features
+
+- **Offline-First Privacy**: Project data is stored in a local SQLite database (`.codemap`). Transcripts and private memos never leave your local machine without your explicit action.
+- **Span & Whole-Turn Coding**: Drag across words to highlight a specific phrase or click a passage to code the whole turn.
+- **Living Codebook**: Create, merge, split, recode, color-code, and organize codes hierarchically. Click any code to inspect all associated passages.
+- **Collaborative Sync (Optional)**: Connect via self-hosted or managed Supabase using Sync Protocol v2. Coding decisions, codebook structure, and memberships synchronize as opaque references without transmitting transcript content.
+- **Multi-Format Import**: Native parsing for WebVTT, SRT, plain text with speaker labels, Microsoft Word (`.docx`), and CSV transcripts.
+- **Rich Exports**: Export your project to structured CSV datasets, formatted Markdown, standalone HTML summaries, and DOCX reports.
+- **Native Experience**: Native desktop app for macOS (Universal / Apple Silicon & Intel) and Windows 10/11.
+
+---
+
+## Getting Started
+
+### Installation
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/wilson-taiwan/codemap/releases/latest):
+
+- **macOS**: Download `Codemap-*-mac.dmg`, open the disk image, and drag **Codemap** into your **Applications** folder.
+- **Windows**: Download `Codemap_*_x64-setup.exe` and run the installer.
+
+For detailed usage instructions and workflow tips, see the [User Guide](docs/USER-GUIDE.md).
+
+---
+
+## Quick Workflow
+
+1. **Create or Join a Study**: Start a new study locally (`⌘N` / `Ctrl+N`) or join an existing team study using an 8-character invite code.
+2. **Import Transcripts**: Add participant interviews in VTT, SRT, TXT, DOCX, or CSV formats.
+3. **Code Passages**: Select text in the transcript panel to bring up the coding bubble. Type an existing code name or enter a new one to create it immediately.
+4. **Reflect & Memo**: Record reflexive notes on individual highlights or broader interview-level memos.
+5. **Export & Share**: Generate publication-ready codebooks, coded segment listings, and thematic matrices from the **Export** menu (`⇧⌘E` / `Ctrl+Shift+E`).
+
+---
+
+## Architecture & Privacy Model
+
+Codemap separates **local research data** from **collaborative synchronization metadata**:
+
+```
+Project Folder (my-study.codemap/)
+├── project.json       # Project configuration and metadata
+├── project.db         # Local SQLite database (transcripts, segments, codes, memos, sync log)
+├── interviews/        # Raw source transcripts (stored locally)
+└── exports/           # Generated CSV, Markdown, HTML, and DOCX exports
+```
+
+- **Local-First Boundary**: Transcripts, participant identifiers, and personal memos reside solely in local storage.
+- **Sync Protocol v2**: When cloud synchronization is enabled, only deterministic segment hashes, code definitions, and coder attribution timestamps cross the wire.
+
+---
+
+## Development
+
+### Prerequisites
+
+- **Node.js**: 20.x or higher
+- **Rust**: Latest stable Rust toolchain via [rustup](https://rustup.rs)
+- **Tauri Prerequisites**: See the [Tauri v2 Prerequisites Guide](https://v2.tauri.app/start/prerequisites/) for OS-specific system libraries.
+
+### Setup
+
+```bash
+# Clone repository
+git clone https://github.com/wilson-taiwan/codemap.git
+cd codemap
+
+# Install frontend dependencies
+npm install
+
+# Run desktop development server (frontend + Tauri backend)
+npm run tauri dev
+
+# Run frontend-only browser preview with mock backend
+npm run dev
+```
+
+### Testing & Verification
+
+```bash
+# Run unit and contract tests
+npm test
+
+# Run Rust unit tests
+cargo test --manifest-path src-tauri/Cargo.toml
+
+# Run Playwright end-to-end tests
+npm run test:e2e
+```
+
+---
+
+## Methodology
+
+Codemap is designed to support **reflexive thematic analysis** (Braun & Clarke, 2019, 2021). It emphasizes qualitative rigor, researcher subjectivity, and iterative codebook refinement over inter-rater reliability scores or algorithmic consensus.
+
+---
+
+## Contributing
+
+Contributions, bug reports, and feature suggestions are welcome! Please check [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on development workflows, code standards, and submitting pull requests.
+
+---
+
+## License
+
+Codemap is open-source software licensed under the [MIT License](LICENSE).

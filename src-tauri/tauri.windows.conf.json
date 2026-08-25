@@ -1,0 +1,31 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "Codemap",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "preventOverflow": { "width": 16, "height": 16 },
+        "transparent": false,
+        "backgroundColor": "#f7f6f4"
+      }
+    ]
+  },
+  "bundle": {
+    "targets": [
+      "nsis"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "skip"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "template": "installer.nsi",
+        "installerHooks": "nsis-hooks.nsh"
+      }
+    }
+  }
+}

@@ -1,0 +1,526 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectInfo {
+    pub path: String,
+    pub title: String,
+    pub methodology: String,
+    pub coders: Vec<String>,
+    pub last_saved_by: Option<String>,
+    pub last_saved_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Code {
+    pub id: String,
+    pub name: String,
+    pub definition: Option<String>,
+    pub inclusion_criteria: Option<String>,
+    pub exclusion_criteria: Option<String>,
+    pub example: Option<String>,
+    pub parent_id: Option<String>,
+    pub color: String,
+    pub sort_order: i32,
+    pub is_retired: bool,
+    /// Distinct passages carrying this code, across every interview and coder.
+    /// Counted per segment, not per row, matching `handoff_digest`.
+    pub usage_count: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCodeInput {
+    pub name: String,
+    pub definition: Option<String>,
+    pub inclusion_criteria: Option<String>,
+    pub exclusion_criteria: Option<String>,
+    pub example: Option<String>,
+    pub parent_id: Option<String>,
+    pub color: Option<String>,
+}
+
+/// Every field is applied. The UI sends the whole code back, so an omitted
+/// optional means "clear it" rather than "leave it alone" — a partial-update
+/// shape would make clearing a definition impossible to express.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateCodeInput {
+    pub id: String,
+    pub name: String,
+    pub definition: Option<String>,
+    pub inclusion_criteria: Option<String>,
+    pub exclusion_criteria: Option<String>,
+    pub example: Option<String>,
+    pub parent_id: Option<String>,
+    pub color: String,
+}
+
+/// What "delete this code" should mean when passages already carry it.
+///
+/// Retiring is the reflexive-TA-safe default: the codebook evolves constantly,
+/// and a code you stop using is part of the audit trail rather than a mistake.
+/// Purging exists because genuinely mistaken codes also happen, but it is the
+/// only operation here that destroys analysis, so the UI states the passage
+/// count before offering it.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DeleteCodeMode {
+    /// Hide from the codebook; existing coding keeps the label.
+    Retire,
+    /// Strip the code from every passage, then delete it outright.
+    Purge,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteCodeResult {
+    pub mode: DeleteCodeMode,
+    pub code_name: String,
+    /// Passages the code was stripped from (purge only).
+    pub segments_updated: i32,
+    /// Coded-segment rows removed because the code was their last one.
+    pub coded_segments_removed: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Interview {
+    pub id: String,
+    pub participant_label: String,
+    pub interview_date: Option<String>,
+    pub modality: Option<String>,
+    pub diagnosis_notes: Option<String>,
+    pub interviewers: Vec<String>,
+    pub hub_memo: Option<String>,
+    pub audio_path: Option<String>,
+    pub segment_count: i32,
+    /// Passages the *other* coder reports for this interview, when sync has
+    /// seen it. `Some(n)` with a local `segment_count` of 0 is the joining
+    /// coder's normal state: the interview arrived through the roster and its
+    /// transcript is still sitting in the shared folder.
+    pub remote_segment_count: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateInterviewInput {
+    pub participant_label: String,
+    pub interview_date: Option<String>,
+    pub modality: Option<String>,
+    pub diagnosis_notes: Option<String>,
+    pub interviewers: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateInterviewInput {
+    pub id: String,
+    pub participant_label: String,
+    pub interview_date: Option<String>,
+    pub modality: Option<String>,
+    pub diagnosis_notes: Option<String>,
+}
+
+/// What deleting an interview would destroy. Fetched before the confirm so the
+/// dialog can name real numbers instead of warning in the abstract.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InterviewDeleteImpact {
+    pub participant_label: String,
+    pub segment_count: i32,
+    pub coded_segment_count: i32,
+    pub has_hub_memo: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TranscriptSegment {
+    pub id: String,
+    pub interview_id: String,
+    pub segment_index: i32,
+    pub speaker: String,
+    pub timestamp_start: String,
+    pub timestamp_end: Option<String>,
+    pub text: String,
+    pub block_id: Option<String>,
+    pub section_tag: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SegmentInput {
+    pub speaker: String,
+    pub timestamp_start: String,
+    pub timestamp_end: Option<String>,
+    pub text: String,
+    pub section_tag: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportSegmentsInput {
+    pub interview_id: String,
+    pub segments: Vec<SegmentInput>,
+    pub raw_vtt_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CodedSegment {
+    pub id: String,
+    pub interview_id: String,
+    pub segment_id: String,
+    pub code_ids: Vec<String>,
+    pub coder_name: String,
+    pub memo: Option<String>,
+    pub char_start: Option<i32>,
+    pub char_end: Option<i32>,
+    pub quote_text: String,
+    pub block_id: Option<String>,
+    pub timestamp_start: String,
+    pub participant_label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApplyCodesInput {
+    pub interview_id: String,
+    pub segment_id: String,
+    pub code_ids: Vec<String>,
+    pub coder_name: String,
+    pub memo: Option<String>,
+    pub char_start: Option<i32>,
+    pub char_end: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnsureCodeAndApplyInput {
+    pub name: String,
+    pub color: Option<String>,
+    pub interview_id: String,
+    pub segment_id: String,
+    pub coder_name: String,
+    pub char_start: Option<i32>,
+    pub char_end: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangedCodingEdge {
+    pub interview_id: String,
+    pub segment_id: String,
+    pub code_id: String,
+    pub char_start: Option<i32>,
+    pub char_end: Option<i32>,
+    pub present: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnsureCodeAndApplyResult {
+    pub code: Code,
+    pub coded_segment: CodedSegment,
+    pub created: bool,
+    pub changed_edges: Vec<ChangedCodingEdge>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MutateCodingEdgeInput {
+    pub interview_id: String,
+    pub segment_id: String,
+    pub code_id: String,
+    pub coder_name: String,
+    pub char_start: Option<i32>,
+    pub char_end: Option<i32>,
+    pub present: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MutateCodingEdgeResult {
+    pub coded_segment: Option<CodedSegment>,
+    pub changed_edge: ChangedCodingEdge,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatchCodingMemoInput {
+    pub coded_segment_id: String,
+    pub memo: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivityLogEntry {
+    pub id: String,
+    pub coder_name: String,
+    pub action: String,
+    pub detail: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateProjectInput {
+    pub parent_dir: String,
+    pub project_name: String,
+    pub title: String,
+    pub coders: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportConfigInput {
+    pub preset: String,
+    pub items: Vec<String>,
+    #[serde(rename = "includeParticipantScope")]
+    pub include_participant_scope: String,
+    #[serde(rename = "selectedParticipantIds")]
+    pub selected_participant_ids: Option<Vec<String>>,
+    #[serde(rename = "includeCoderScope")]
+    pub include_coder_scope: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportResult {
+    pub exports_dir: String,
+    pub coded_segment_count: usize,
+    pub interview_file_count: usize,
+    pub unresolved_conflict_count: usize,
+    pub files: Vec<String>,
+    pub exported_at: String,
+    pub exported_by: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WorkspaceState {
+    pub active_interview_id: Option<String>,
+    pub selected_segment_id: Option<String>,
+    pub active_coder: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RecentProject {
+    pub path: String,
+    pub title: String,
+    pub last_opened_at: String,
+    /// The shared project id this folder is bound to, when it is in a group.
+    #[serde(default)]
+    pub group_id: Option<String>,
+    /// The group's title, cached for offline rendering.
+    #[serde(default)]
+    pub group_title: Option<String>,
+    /// The name this machine files coding under in that group.
+    #[serde(default)]
+    pub coder_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordRecentProjectInput {
+    pub path: String,
+    pub title: String,
+    #[serde(default)]
+    pub group_id: Option<String>,
+    #[serde(default)]
+    pub group_title: Option<String>,
+    #[serde(default)]
+    pub coder_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PanelWidths {
+    pub codebook: u32,
+    pub memos: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppPreferences {
+    #[serde(default)]
+    pub reopen_last_project: bool,
+    #[serde(default)]
+    pub signin_prompt_seen: bool,
+    pub last_guide_section_id: Option<String>,
+    pub panel_widths: Option<PanelWidths>,
+    /// Whether the workspace next-step coach has been dismissed for good.
+    #[serde(default)]
+    pub coach_dismissed: bool,
+    /// Merge consecutive same-speaker turns into one passage on import.
+    ///
+    /// Import-time only — the value is read when a transcript is parsed, and
+    /// re-importing with a different one does not re-split what is already
+    /// imported. Defaulted `true` in both directions (serde for a prefs file
+    /// written before the field existed, `Default` for no prefs file at
+    /// all): the two paths disagreeing would mean fresh installs and upgrades
+    /// quietly behaved differently.
+    #[serde(default = "default_merge_same_speaker")]
+    pub merge_same_speaker: bool,
+    /// "light", "dark", or "system".
+    ///
+    /// Absent means light. The app deliberately does **not** default to the
+    /// operating system's appearance: transcripts are long-form reading, and
+    /// dark mode is a preference for that rather than an obviously better
+    /// default. Anyone who wants it can say so, and "system" is there for
+    /// people who want the machine to decide.
+    #[serde(default)]
+    pub theme: Option<String>,
+    /// Which coder this machine is, per project path.
+    ///
+    /// Identity belongs to the person at the keyboard, not to the project, so
+    /// it lives in app data and never travels in a handoff bundle. Keyed by
+    /// path because one person can be "Ada Lovelace" in one study and "A.L." in
+    /// another, and because a shared Mac genuinely has two different answers.
+    #[serde(default)]
+    pub coder_identities: std::collections::HashMap<String, String>,
+    /// Sync server for this installation.
+    ///
+    /// Per machine rather than per project, and deliberately not inside
+    /// `project.db`: where this laptop syncs is a property of the laptop, not
+    /// of the study. The anon key is
+    /// safe here — it is designed to ship inside clients, and row-level
+    /// security, not the key's secrecy, is what protects the data.
+    #[serde(default)]
+    pub sync_url: Option<String>,
+    #[serde(default)]
+    pub sync_anon_key: Option<String>,
+}
+
+fn default_merge_same_speaker() -> bool {
+    true
+}
+
+/// Hand-written rather than derived: the derive would give
+/// `merge_same_speaker: false`, contradicting the serde default above for the
+/// no-preferences-file case. Every other field's falsey default is intended.
+impl Default for AppPreferences {
+    fn default() -> Self {
+        Self {
+            reopen_last_project: false,
+            signin_prompt_seen: false,
+            last_guide_section_id: None,
+            panel_widths: None,
+            coach_dismissed: false,
+            theme: None,
+            merge_same_speaker: true,
+            coder_identities: Default::default(),
+            sync_url: None,
+            sync_anon_key: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppVersionInfo {
+    pub name: String,
+    pub version: String,
+    pub copyright: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectFileEntry {
+    pub path: String,
+    pub relative_path: String,
+    pub name: String,
+    pub size: u64,
+    pub modified_at: Option<String>,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClearWorkspaceInput {
+    pub interview_id: Option<String>,
+    pub clear_hub_memos: bool,
+    pub clear_activity_log: bool,
+    pub coder_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClearWorkspaceResult {
+    pub cleared_coded_segments: i32,
+    pub cleared_block_ids: i32,
+    pub cleared_hub_memos: i32,
+    pub cleared_activity_log: bool,
+    pub scope: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiagnosticCounts {
+    pub codes: usize,
+    pub interviews: usize,
+    pub segments: usize,
+    pub coded_segments: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiagnosticTimings {
+    pub connection: u64,
+    pub schema: u64,
+    pub snapshot_queries: u64,
+    pub total: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectOpenDiagnostics {
+    pub schema_version: i32,
+    pub counts: DiagnosticCounts,
+    pub timings_ms: DiagnosticTimings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectOpenSnapshot {
+    pub project: ProjectInfo,
+    pub codes: Vec<Code>,
+    pub interviews: Vec<Interview>,
+    pub workspace: WorkspaceState,
+    pub active_interview_id: Option<String>,
+    pub selected_segment_id: Option<String>,
+    pub segments: Vec<TranscriptSegment>,
+    pub coded_segments: Vec<CodedSegment>,
+    pub total_coded_count: usize,
+    pub recent_code_ids: Vec<String>,
+    pub diagnostics: ProjectOpenDiagnostics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncConflictSummary {
+    pub id: String,
+    pub entity_type: String,
+    pub entity_id: String,
+    pub field_name: String,
+    pub status: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncConflictDetail {
+    pub id: String,
+    pub entity_type: String,
+    pub entity_label: String,
+    pub field_name: String,
+    pub current_value: serde_json::Value,
+    pub proposed_value: serde_json::Value,
+    pub proposer_label: Option<String>,
+    pub status: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LiveWorkspaceSyncStatus {
+    pub protocol: i64,
+    pub generation: Option<String>,
+    pub local_sequence: i64,
+    pub observed_head: i64,
+    pub outbox_count: i64,
+    pub blocked_count: i64,
+    pub unresolved_conflict_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LiveWorkspaceSnapshot {
+    pub project: ProjectInfo,
+    pub interviews: Vec<Interview>,
+    pub codes: Vec<Code>,
+    pub retired_codes: Vec<Code>,
+    pub active_interview_id: Option<String>,
+    pub selected_segment_id: Option<String>,
+    pub segments: Vec<TranscriptSegment>,
+    pub coded_segments: Vec<CodedSegment>,
+    pub pending_coded_count: i64,
+    pub coded_count: usize,
+    pub conflicts: Vec<SyncConflictSummary>,
+    pub sync_status: LiveWorkspaceSyncStatus,
+    pub local_revision: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateSegment {
+    pub index: i64,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectDeletionSummary {
+    pub interview_count: usize,
+    pub coded_segment_count: usize,
+    pub memo_count: usize,
+}

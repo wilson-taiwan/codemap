@@ -1,0 +1,15 @@
+<!--
+  Codemap recovery email.
+
+  Paste the body into:
+    Supabase → Codemap → Authentication → Email Templates → Reset Password
+  Subject: Your Codemap reset code
+
+  Do not add a ConfirmationURL. That URL is GET /auth/v1/verify — it
+  consumes the one-time token and redirects to Site URL (localhost:3000)
+  with no password form. A leftover click also burns the code below.
+-->
+<h2>Reset your Codemap password</h2>
+<p>Type this code in Codemap (Forgot password), then choose a new password.</p>
+<p style="font-size:28px;letter-spacing:0.25em;font-weight:600">{{ .Token }}</p>
+<p>If you didn't request this, you can ignore this email.</p>

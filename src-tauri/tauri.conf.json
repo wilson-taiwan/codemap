@@ -1,0 +1,100 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Codemap",
+  "version": "1.0.0",
+  "identifier": "app.codemap.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "title": "Codemap",
+        "dragDropEnabled": false,
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "preventOverflow": {
+          "width": 16,
+          "height": 16
+        },
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "windowEffects": {
+          "effects": [
+            "sidebar"
+          ],
+          "state": "followsWindowActiveState"
+        }
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "codemap",
+          "qcproj"
+        ],
+        "name": "Codemap Project",
+        "mimeType": "application/x-codemap",
+        "role": "Editor",
+        "rank": "Owner"
+      }
+    ],
+    "category": "Productivity",
+    "shortDescription": "Qualitative coding for reflexive thematic analysis",
+    "longDescription": "Import Zoom transcripts, code passages with a living codebook, and export coded segments. Offline-first; projects sync via Google Drive or Box.",
+    "copyright": "Codemap contributors",
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "dmg": {
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        },
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        }
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk5Q0NBNzAzOUQyOTA1NjIKUldSaUJTbWRBNmZNbWRTVytqSHM3aHJ2VEpneDJVOFRlNWNYNGdkTHRQMzhzNy9TZTkrV25PaXgK",
+      "endpoints": [
+        "https://github.com/wilson-taiwan/codemap/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

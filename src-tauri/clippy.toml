@@ -1,0 +1,6 @@
+disallowed-methods = [
+  { path = "tokio::spawn", reason = "Use tauri::async_runtime::spawn to avoid panicking outside a Tokio runtime context" },
+  { path = "tokio::task::spawn", reason = "Use tauri::async_runtime::spawn to avoid panicking outside a Tokio runtime context" },
+  { path = "tokio::task::spawn_local", reason = "Use tauri::async_runtime::spawn to avoid panicking outside a Tokio runtime context" },
+  { path = "tokio::runtime::Handle::current", reason = "Use tauri::async_runtime to obtain Tokio runtime handles safely" },
+]
