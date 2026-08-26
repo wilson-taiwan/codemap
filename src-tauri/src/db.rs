@@ -4737,32 +4737,43 @@ pub fn clear_workspace(
         let actor_key = v2_actor_key(&tx, &input.coder_name)?;
         // (interview_id, segment_id, code_id, char_start, char_end) for one edge.
         type ResetEdge = (String, String, String, Option<i32>, Option<i32>);
-        let edges: Vec<ResetEdge> =
-            if let Some(ref iid) = input.interview_id {
-                let mut stmt = tx.prepare(
-                    "SELECT interview_id, segment_id, code_id, char_start, char_end
+        let edges: Vec<ResetEdge> = if let Some(ref iid) = input.interview_id {
+            let mut stmt = tx.prepare(
+                "SELECT interview_id, segment_id, code_id, char_start, char_end
                        FROM coding_assignments
                       WHERE actor_key = ?1 AND present != 0 AND interview_id = ?2",
-                )?;
-                let rows = stmt
-                    .query_map(params![actor_key, iid], |row| {
-                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
-                    })?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                rows
-            } else {
-                let mut stmt = tx.prepare(
-                    "SELECT interview_id, segment_id, code_id, char_start, char_end
+            )?;
+            let rows = stmt
+                .query_map(params![actor_key, iid], |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        } else {
+            let mut stmt = tx.prepare(
+                "SELECT interview_id, segment_id, code_id, char_start, char_end
                        FROM coding_assignments
                       WHERE actor_key = ?1 AND present != 0",
-                )?;
-                let rows = stmt
-                    .query_map(params![actor_key], |row| {
-                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
-                    })?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                rows
-            };
+            )?;
+            let rows = stmt
+                .query_map(params![actor_key], |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
 
         for (interview_id, segment_id, code_id, char_start, char_end) in &edges {
             let edge_input = crate::models::MutateCodingEdgeInput {

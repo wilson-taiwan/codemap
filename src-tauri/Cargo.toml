@@ -1,6 +1,6 @@
 [package]
 name = "qualitative-coding-app"
-version = "1.0.0"
+version = "1.1.0"
 description = "Offline qualitative coding for reflexive thematic analysis"
 authors = ["Codemap contributors"]
 license = "MIT"
