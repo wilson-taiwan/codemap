@@ -13,7 +13,7 @@ Built with **Tauri v2**, **React 19**, **TypeScript**, **Tailwind CSS**, and **S
 - **Offline-First Privacy**: Project data is stored in a local SQLite database (`.codemap`). Transcripts and private memos never leave your local machine without your explicit action.
 - **Span & Whole-Turn Coding**: Drag across words to highlight a specific phrase or click a passage to code the whole turn.
 - **Living Codebook**: Create, merge, split, recode, color-code, and organize codes hierarchically. Click any code to inspect all associated passages.
-- **Collaborative Sync (Optional)**: Connect via self-hosted or managed Supabase using Sync Protocol v2. Coding decisions, codebook structure, and memberships synchronize as opaque references without transmitting transcript content.
+- **Collaborative Sync (Optional)**: Connect via self-hosted or managed Supabase using Sync Protocol v2. Coding decisions, codebook structure, and memberships synchronize as opaque references without transmitting transcript content. Sync on the hosted service is **free during the beta**; once the beta ends it will require a subscription, while offline/local coding stays free forever and people who join during the beta keep founder pricing. (Self-hosting your own Supabase is always free.)
 - **Multi-Format Import**: Native parsing for WebVTT, SRT, plain text with speaker labels, Microsoft Word (`.docx`), and CSV transcripts.
 - **Rich Exports**: Export your project to structured CSV datasets, formatted Markdown, standalone HTML summaries, and DOCX reports.
 - **Native Experience**: Native desktop app for macOS (Universal / Apple Silicon & Intel) and Windows 10/11.

@@ -750,6 +750,15 @@ body {
     color: var(--warn);
     font-weight: 600;
   }
+  .notice-info {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--ink-2);
+  }
+  .notice-info strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
 
   .divider {
     height: 1px;

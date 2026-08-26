@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSyncStore } from "../store/sync-store";
+import { BetaNotice } from "./BetaNotice";
 import {
   joinPasswordProblem,
   parseRecoveryPaste,
@@ -176,6 +177,8 @@ export function AccountForm({
           </button>
         </div>
       )}
+
+      {mode === "new" && <BetaNotice />}
 
       <div>
         <label className="label" htmlFor={`${idPrefix}-email`}>
