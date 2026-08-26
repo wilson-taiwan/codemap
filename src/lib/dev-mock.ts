@@ -31,6 +31,19 @@ function isStressFixture(): boolean {
   );
 }
 
+/**
+ * Dev-only fixture: a protocol-1 study with a member who is not ready, so the
+ * passive "turns on automatically" state can be exercised. Only reachable with
+ * the dev mock (no `tauri` IPC), never in a packaged build.
+ */
+function isSyncNotReadyFixture(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    (window.location.search.includes("fixture=sync-not-ready") ||
+      window.location.hash.includes("fixture=sync-not-ready"))
+  );
+}
+
 function sha256Sync(str: string): string {
   function rightRotate(value: number, amount: number) {
     return (value >>> amount) | (value << (32 - amount));
@@ -533,6 +546,12 @@ const mockSync = {
   joined: true,
   lastSyncedAt: null as string | null,
   groupKey: "ABCD-1234",
+  // Auto-activation is stateful: sync_v2_activate flips this to 2, and the
+  // status + readiness handlers read it. The not-ready fixture keeps it on 1.
+  protocol: 1 as 1 | 2,
+  allReady: !isSyncNotReadyFixture(),
+  generationSuffix: null as string | null,
+  head: 0,
   // The roster the group sheet renders. "Ada" (no membership) is the
   // coding-before-the-group-existed case, kept visible on purpose.
   members: [
@@ -1225,10 +1244,10 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
         coordinatorBackoffAttempt: 0,
         coordinatorLastTrigger: null,
         oldestOutboxAgeSeconds: null,
-        protocol: 1,
-        generationSuffix: null,
+        protocol: mockSync.protocol,
+        generationSuffix: mockSync.protocol === 2 ? mockSync.generationSuffix : null,
         localSequence: 0,
-        observedHead: 0,
+        observedHead: mockSync.protocol === 2 ? mockSync.head : 0,
         outboxCount: mockSync.pending,
         blockedOutboxCount: 0,
         unresolvedConflictCount: 0,
@@ -1303,21 +1322,26 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
       };
     case "sync_v2_readiness":
       return {
-        protocol: 1,
-        generationSuffix: null,
-        head: 0,
+        protocol: mockSync.protocol,
+        generationSuffix: mockSync.protocol === 2 ? mockSync.generationSuffix : null,
+        head: mockSync.protocol === 2 ? mockSync.head : 0,
         members: mockSync.members
           .filter((member) => member.userId)
           .map((member, index) => ({
             userId: member.userId,
             coderName: member.coderName,
             role: member.role ?? "coder",
-            ready: index === 0,
-            readyAt: index === 0 ? new Date().toISOString() : null,
-            lastDeviceIdSuffix: index === 0 ? "00000001" : null,
+            ready: mockSync.allReady,
+            readyAt: mockSync.allReady || member.role === "admin"
+              ? new Date().toISOString()
+              : null,
+            lastDeviceIdSuffix: mockSync.allReady || index === 0 ? "00000001" : null,
           })),
       };
     case "sync_v2_activate":
+      mockSync.protocol = 2;
+      mockSync.generationSuffix = "00000002";
+      mockSync.head = 0;
       return {
         protocol: 2,
         generationSuffix: "00000002",

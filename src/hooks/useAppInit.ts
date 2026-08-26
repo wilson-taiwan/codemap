@@ -65,7 +65,11 @@ export function useAppInit() {
       if (cancelled) return;
       const me = useSyncStore.getState().group?.members.find((m) => m.isYou);
       if (me) useProjectStore.getState().adoptCoderName(me.coderName);
-      void useSyncStore.getState().syncNow({ silent: true });
+      await useSyncStore.getState().syncNow({ silent: true });
+      if (cancelled) return;
+      // Registration above marks this device ready on a protocol-1 study, so
+      // this is where a long-awaited upgrade finally happens — silently.
+      await useSyncStore.getState().maybeAutoActivateV2();
     })();
     return () => {
       cancelled = true;

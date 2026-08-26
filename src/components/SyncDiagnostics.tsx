@@ -168,6 +168,28 @@ export function SyncDiagnostics({ status }: SyncDiagnosticsProps) {
           </summary>
           <div className="mt-2 space-y-1.5 font-mono">
             <div>
+              <span className="text-muted">Sync protocol: </span>
+              <span>
+                {status?.protocol === 2
+                  ? "2"
+                  : status?.protocol === 1
+                    ? "Legacy (1)"
+                    : "unknown"}
+              </span>
+            </div>
+            {status?.protocol === 2 && (
+              <>
+                <div>
+                  <span className="text-muted">Generation: </span>
+                  <span>{status?.generationSuffix ?? "unknown"}</span>
+                </div>
+                <div>
+                  <span className="text-muted">Server head: </span>
+                  <span>{status?.observedHead ?? "unknown"}</span>
+                </div>
+              </>
+            )}
+            <div>
               <span className="text-muted">Coded cursor: </span>
               <span>{report?.rawCodedCursor ?? "1970-01-01T00:00:00Z"}</span>
             </div>

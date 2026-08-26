@@ -22,6 +22,8 @@ interface SyncStore {
   /** The most recent run, for the "pulled 3 passages" line. */
   lastOutcome: SyncOutcome | null;
   showSyncSheet: boolean;
+  /** True while a silent protocol-2 activation attempt is in flight. */
+  autoActivatingV2: boolean;
   /**
    * The open project's group — key, roster, activity. Null when the project
    * has no group or the roster has not been fetched yet.
@@ -90,6 +92,13 @@ interface SyncStore {
    */
   joinAndBindOpenProject: (key: string, coderName: string) => Promise<boolean>;
   syncNow: (opts?: { silent?: boolean }) => Promise<void>;
+  /**
+   * Silently upgrade the open protocol-1 study to Sync Protocol 2 when the
+   * caller is its admin and every member is ready, leaving the study working
+   * on Protocol 1 otherwise. Never surfaces an error and never interrupts
+   * work: a study that is not ready simply retries on a later trigger.
+   */
+  maybeAutoActivateV2: () => Promise<void>;
   openSyncSheet: () => void;
   closeSyncSheet: () => void;
   clearError: () => void;
@@ -101,6 +110,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
   error: null,
   lastOutcome: null,
   showSyncSheet: false,
+  autoActivatingV2: false,
   group: null,
   groupLoaded: false,
 
@@ -136,6 +146,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       // Creating re-offers everything local, so run immediately rather than
       // leaving the coder looking at a group that says nothing has synced.
       await get().syncNow();
+      await get().maybeAutoActivateV2();
       return true;
     } catch (e) {
       set({ error: String(e) });
@@ -318,6 +329,35 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
       activeUiSyncRequests = Math.max(0, activeUiSyncRequests - 1);
       if (activeUiSyncRequests === 0) set({ syncing: false });
       await get().refreshStatus();
+    }
+  },
+
+  maybeAutoActivateV2: async () => {
+    const s = get();
+    const status = s.status;
+    // Only a study admin can activate; the server re-checks admin + all-ready
+    // itself, so a stale view here just becomes one more silent retry.
+    if (!status?.isGroupAdmin) return;
+    if (status.protocol !== 1) return; // already P2 (or no v2 protocol)
+    if ((status.serverSchemaVersion ?? 0) < 10) return;
+    if (s.autoActivatingV2) return; // in-flight guard: no duplicate RPCs
+    set({ autoActivatingV2: true });
+    try {
+      const readiness = await api.syncV2Readiness();
+      const allReady =
+        readiness.protocol === 1 &&
+        readiness.members.length > 0 &&
+        readiness.members.every((m) => m.ready);
+      if (!allReady) return; // wait until every member has updated + synced
+      await api.syncV2Activate(); // server re-checks admin + all-ready
+      await get().syncNow({ silent: true }); // re-register → protocol 2 + salvage
+      await get().refreshStatus();
+      await get().refreshGroup();
+    } catch {
+      // Not-all-ready / transient / pre-v2 server: stay on P1, retry next
+      // trigger. This must never replace the store's visible error.
+    } finally {
+      set({ autoActivatingV2: false });
     }
   },
 

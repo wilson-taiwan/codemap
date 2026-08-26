@@ -6,6 +6,7 @@ import { Icon } from "./ui/Icon";
 import { Menu } from "./ui/Menu";
 import { TranscriptLinkPanel } from "./TranscriptLinkPanel";
 import { SyncDiagnostics } from "./SyncDiagnostics";
+import { BetaNotice } from "./BetaNotice";
 import { api } from "../lib/api";
 import { useSyncStore } from "../store/sync-store";
 import { useAppStore } from "../store/app-store";
@@ -83,7 +84,6 @@ export function SyncSheet() {
   const [showLinkPanel, setShowLinkPanel] = useState(false);
   const [v2Readiness, setV2Readiness] = useState<SyncV2Readiness | null>(null);
   const [readinessError, setReadinessError] = useState<string | null>(null);
-  const [activatingV2, setActivatingV2] = useState(false);
   const [conflicts, setConflicts] = useState<SyncConflictDetail[]>([]);
   const [resolvingConflict, setResolvingConflict] = useState<string | null>(null);
   const [editingConflict, setEditingConflict] = useState<string | null>(null);
@@ -123,16 +123,34 @@ export function SyncSheet() {
       setReadinessError(null);
       return;
     }
-    void api.syncV2Readiness()
-      .then((readiness) => {
-        if (!cancelled) {
-          setV2Readiness(readiness);
-          setReadinessError(null);
+    void (async () => {
+      try {
+        const readiness = await api.syncV2Readiness();
+        if (cancelled) return;
+        setV2Readiness(readiness);
+        setReadinessError(null);
+        if (
+          readiness.protocol === 1 &&
+          readiness.members.length > 0 &&
+          readiness.members.every((m) => m.ready)
+        ) {
+          // The sheet is itself an activation trigger: a long-open admin
+          // session may have been waiting for the last teammate to update and
+          // sync. The helper self-guards; refresh the view once it resolves.
+          await useSyncStore.getState().maybeAutoActivateV2();
+          if (cancelled) return;
+          const fresh = await api.syncV2Readiness().catch(() => null);
+          if (fresh && !cancelled) {
+            setV2Readiness(fresh);
+            setReadinessError(null);
+          }
         }
-      })
-      .catch(() => {
-        if (!cancelled) setReadinessError("Protocol readiness is unavailable right now.");
-      });
+      } catch {
+        if (!cancelled) {
+          setReadinessError("Protocol readiness is unavailable right now.");
+        }
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -240,28 +258,6 @@ export function SyncSheet() {
       }
     } finally {
       setDeletingGroup(false);
-    }
-  }
-
-  async function activateV2() {
-    if (!v2Readiness || v2Readiness.protocol !== 1 || activatingV2) return;
-    const allReady = v2Readiness.members.length > 0 && v2Readiness.members.every((m) => m.ready);
-    if (!allReady) return;
-    const ok = await confirm(
-      "Activate Sync Protocol 2 for this study? Every current member is ready. This locks out older Codemap clients; there is no downgrade.",
-      { title: "Activate Sync Protocol 2?", kind: "warning" },
-    );
-    if (!ok) return;
-    setActivatingV2(true);
-    try {
-      await api.syncV2Activate();
-      const [readiness] = await Promise.all([api.syncV2Readiness(), refreshStatus(), refreshGroup()]);
-      setV2Readiness(readiness);
-      await syncNow();
-    } catch {
-      setReadinessError("Protocol activation did not complete. The study remains on its current protocol until the server confirms activation.");
-    } finally {
-      setActivatingV2(false);
     }
   }
 
@@ -382,6 +378,8 @@ export function SyncSheet() {
         </>
       }
     >
+      <BetaNotice className="mb-4" />
+
       {error && (
         <div
           className="mb-4 rounded-lg px-3 py-2 text-[12.5px]"
@@ -698,45 +696,21 @@ export function SyncSheet() {
 
           {(serverSchemaVersion ?? 0) >= 10 && (
             <section className="mt-6 border-t pt-5" style={{ borderColor: "var(--g-rim)" }}>
-              <h3 className="label mb-1.5">Sync Protocol 2</h3>
               {readinessError ? (
-                <p className="hint" style={{ color: "var(--warning)" }}>{readinessError}</p>
-              ) : !v2Readiness ? (
-                <p className="hint">Checking every current member’s readiness…</p>
-              ) : v2Readiness.protocol === 2 ? (
                 <p className="hint">
-                  Active · generation …{v2Readiness.generationSuffix ?? "unknown"} · head {v2Readiness.head}. Older Codemap clients cannot write to this study.
+                  Collaboration status could not be checked right now. Try again in a moment.
+                </p>
+              ) : !v2Readiness ? (
+                <p className="hint">Checking collaboration status…</p>
+              ) : v2Readiness.protocol === 2 ? (
+                <span className="chip chip-ok">Real-time collaboration active</span>
+              ) : v2Readiness.members.some((member) => !member.ready) ? (
+                <p className="hint">
+                  Real-time collaboration turns on automatically once everyone on
+                  your team updates Codemap.
                 </p>
               ) : (
-                <>
-                  <p className="hint mb-2">
-                    Each current member needs Codemap 0.27 and one final protocol-1 sync before this irreversible cutover.
-                  </p>
-                  <ul className="flex flex-col gap-1.5" aria-label="Protocol 2 readiness">
-                    {v2Readiness.members.map((member) => (
-                      <li key={member.userId} className="flex items-center justify-between gap-2 text-[12.5px]">
-                        <span className="truncate">{member.coderName}{member.role === "admin" ? " · admin" : ""}</span>
-                        <span className={member.ready ? "chip chip-ok shrink-0" : "chip chip-warn shrink-0"}>
-                          {member.ready ? "Ready" : "Needs Codemap 0.27 / final sync"}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  {isGroupAdmin && (
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-sm mt-3"
-                      disabled={
-                        activatingV2 ||
-                        v2Readiness.members.length === 0 ||
-                        !v2Readiness.members.every((member) => member.ready)
-                      }
-                      onClick={() => void activateV2()}
-                    >
-                      {activatingV2 ? "Activating…" : "Activate Sync Protocol 2"}
-                    </button>
-                  )}
-                </>
+                <p className="hint">Setting up real-time collaboration…</p>
               )}
             </section>
           )}
