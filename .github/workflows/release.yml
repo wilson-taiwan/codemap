@@ -4,10 +4,77 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 jobs:
+  validate:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fail closed: a tag push is the only trigger, but prove the ref is a
+      # version tag and matches the manifest version before any build runs.
+      - name: Refuse non-tag refs
+        run: |
+          test "${{ github.ref }}" = "refs/tags/${{ github.ref_name }}" \
+            && echo "ref is a tag: ${{ github.ref_name }}"
+      - name: Tag matches app version
+        run: |
+          TAG_VERSION="${{ github.ref_name }}"
+          APP_VERSION="$(node -p "require('./package.json').version")"
+          test "$TAG_VERSION" = "v$APP_VERSION" \
+            || { echo "Tag $TAG_VERSION does not match app version v$APP_VERSION"; exit 1; }
+
+      - name: Validate workflow YAML syntax
+        run: |
+          ruby -e 'require "yaml"; YAML.load_file(ARGV.fetch(0))' .github/workflows/test.yml
+          ruby -e 'require "yaml"; YAML.load_file(ARGV.fetch(0))' .github/workflows/release.yml
+
+      - name: Static migration gate
+        run: bash scripts/verify-supabase-migrations.sh
+
+      - name: Migration verifier self-check (negative fixtures)
+        run: bash scripts/verify-supabase-migrations.test.sh
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      - name: Frontend unit tests
+        run: npm test
+
+      - name: Frontend build
+        run: npm run build
+
+      - name: Rust format
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Rust clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # This job performs no database mutation of any kind: database push,
+      # migration repair, bootstrap, or similar are forbidden on the release
+      # path. Production schema changes are applied manually and reviewed.
+
   release:
+    needs: validate
     permissions:
       contents: write
     strategy:

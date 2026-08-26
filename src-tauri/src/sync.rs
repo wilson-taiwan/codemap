@@ -1822,6 +1822,23 @@ pub async fn reconcile_corpus(
     }
 }
 
+/// Classify a failed direct REST write (`upsert`): entitlement token first,
+/// then the protocol's ordinary outcomes.
+fn classify_rest_upsert_failure(status: u16, body: String) -> SyncError {
+    if let Some(err) = classify_entitlement_failure(&body) {
+        return err;
+    }
+    match status {
+        401 => SyncError::Unauthorized,
+        // A unique violation here is not the `id` conflict we asked to merge —
+        // that one resolves. It is the (project, segment, coder, span)
+        // constraint, which can only trip when one coder codes the same span of
+        // the same passage from two machines under two different row ids.
+        409 => SyncError::DuplicateCoding(body),
+        s => SyncError::Network(format!("{s}: {body}")),
+    }
+}
+
 async fn upsert<T: Serialize>(
     client: &Client,
     cfg: &SyncConfig,
@@ -1840,21 +1857,15 @@ async fn upsert<T: Serialize>(
         .await
         .map_err(|e| SyncError::Network(e.to_string()))?;
 
-    match response.status() {
-        s if s.is_success() => Ok(()),
-        StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-        // A unique violation here is not the `id` conflict we asked to merge —
-        // that one resolves. It is the (project, segment, coder, span)
-        // constraint, which can only trip when one coder codes the same span of
-        // the same passage from two machines under two different row ids.
-        StatusCode::CONFLICT => Err(SyncError::DuplicateCoding(
-            response.text().await.unwrap_or_default(),
-        )),
-        s => Err(SyncError::Network(format!(
-            "{s}: {}",
-            response.text().await.unwrap_or_default()
-        ))),
+    if response.status().is_success() {
+        return Ok(());
     }
+    // Read the body once: an entitlement fail-closed gate on this table's RLS
+    // arrives as HTTP 403 and must map to the friendly message, not to the
+    // generic permission or network text.
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    Err(classify_rest_upsert_failure(status, body))
 }
 
 pub async fn push(
@@ -2605,7 +2616,36 @@ pub const RPC_CONTRACTS: &[RpcSpec] = &[
     RPC_SERVER_SCHEMA_VERSION,
 ];
 
+/// Stable server-side token raised by `require_sync_entitlement()` for every
+/// entitlement-gated write path (RPC bodies and direct REST policy failures).
+pub const ENTITLEMENT_REQUIRED_TOKEN: &str = "CODEMAP_ENTITLEMENT_REQUIRED";
+
+/// Exact user-facing message for an entitlement-gated write failure. Held in
+/// one place so RPC classification and direct REST paths cannot drift apart.
+pub const ENTITLEMENT_REQUIRED_MESSAGE: &str =
+    "Syncing new coding needs an active Codemap subscription. Your work is \
+     saved safely on this computer, and you can still pull your team's latest \
+     — subscribe to resume syncing your own changes.";
+
+/// Detect the entitlement token anywhere in a response body (the raise lands
+/// in the PostgREST error body, nested JSON, or plain text depending on the
+/// path), and map it to the friendly `ServerRejected` message without exposing
+/// the raw body. Returns `None` when the token is absent.
+fn classify_entitlement_failure(body_str: &str) -> Option<SyncError> {
+    if body_str.contains(ENTITLEMENT_REQUIRED_TOKEN) {
+        return Some(SyncError::ServerRejected {
+            status: 403,
+            code: Some(ENTITLEMENT_REQUIRED_TOKEN.to_string()),
+            public_message: Some(ENTITLEMENT_REQUIRED_MESSAGE.to_string()),
+        });
+    }
+    None
+}
+
 pub fn classify_rpc_failure(status: u16, body_str: &str, function_name: &'static str) -> SyncError {
+    if let Some(err) = classify_entitlement_failure(body_str) {
+        return err;
+    }
     if status == 401 {
         return SyncError::Unauthorized;
     }
@@ -3118,6 +3158,19 @@ pub async fn server_schema_version_fn(client: &Client, cfg: &SyncConfig) -> Resu
 /// The group key is minted by the caller and sent with the insert: it never
 /// has to come back over the wire to be read, and a unique-index collision is
 /// retried here with a fresh draw rather than shown to anybody.
+/// Classify a failed direct REST project create: entitlement token first, then
+/// the ordinary outcomes. A `group_key` conflict is a retry for the caller, so
+/// it is classified separately and never surfaces here.
+fn classify_rest_create_failure(status: u16, body: String) -> SyncError {
+    if let Some(err) = classify_entitlement_failure(&body) {
+        return err;
+    }
+    match status {
+        401 => SyncError::Unauthorized,
+        s => SyncError::Network(format!("{s}: {body}")),
+    }
+}
+
 pub async fn create_remote_project(
     client: &Client,
     cfg: &SyncConfig,
@@ -3138,27 +3191,25 @@ pub async fn create_remote_project(
             .await
             .map_err(|e| SyncError::Network(e.to_string()))?;
 
-        match response.status() {
-            s if s.is_success() => return Ok(key),
+        if response.status().is_success() {
+            return Ok(key);
+        }
+        // Read the body once: an entitlement-gated create arrives as HTTP 403
+        // with the stable token and must map to the friendly message, not to a
+        // generic network error or an exhausted retry loop.
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        if classify_entitlement_failure(&body).is_some() {
+            return Err(classify_rest_create_failure(status.as_u16(), body));
+        }
+        if status == StatusCode::CONFLICT && body.contains("group_key") {
             // A conflict on the key's unique index is a duplicate draw; any
             // other conflict is the project id, which retrying cannot fix —
             // but the detail string distinguishes them.
-            StatusCode::CONFLICT => {
-                let body = response.text().await.unwrap_or_default();
-                if !body.contains("group_key") {
-                    return Err(SyncError::Network(format!("409: {body}")));
-                }
-                last_conflict = Some(body);
-                continue;
-            }
-            StatusCode::UNAUTHORIZED => return Err(SyncError::Unauthorized),
-            s => {
-                return Err(SyncError::Network(format!(
-                    "{s}: {}",
-                    response.text().await.unwrap_or_default()
-                )))
-            }
+            last_conflict = Some(body);
+            continue;
         }
+        return Err(classify_rest_create_failure(status.as_u16(), body));
     }
     Err(SyncError::Network(format!(
         "Could not find an unused group key after 5 tries: {}",
@@ -4274,10 +4325,7 @@ mod tests {
             "1afe114e-05f5-4249-b24d-42f5d781ddfa"
         );
         assert_eq!(summaries[0].coder_name, "Ada");
-        assert_eq!(
-            summaries[0].title,
-            "Sample Interview Study"
-        );
+        assert_eq!(summaries[0].title, "Sample Interview Study");
 
         // …and the frontend still receives camelCase, which is the reason the
         // container rename was there in the first place.

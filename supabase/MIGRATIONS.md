@@ -8,6 +8,7 @@ legacy paths as immutable evidence; they are not discovered by the CLI.
 | --- | --- |
 | `20260823000000_v1_certified_baseline.sql` | Builds the certified v1 schema represented by the historical schema plus migrations 002–009. |
 | `20260823000001_sync_protocol_v2_schema_10.sql` | Adds Sync Protocol v2, its ordered log/materialized state/RPCs, the protocol-1 lockout, and server-schema certification version 10. |
+| `20260826000000_entitlements_and_sync_gate.sql` | Adds the per-user entitlement store, `is_entitled` predicate, beta auto-grant + backfill, the write-path entitlement gate (any protocol), and gated current/legacy join + create. **Additive; schema certification stays 10.** |
 
 ## Local verification
 
@@ -15,10 +16,12 @@ Run from the repository root. These commands only target the local Supabase
 stack. They must never be pointed at production for routine development.
 
 ```bash
-bash scripts/verify-supabase-migrations.sh
+bash scripts/verify-supabase-migrations.sh        # static gate; no database needed
 supabase db reset --local --no-seed
-supabase db lint --local
-bash scripts/test-local-supabase-v2.sh
+supabase db lint --local --level error --fail-on error
+supabase test db --local supabase/tests/sync-v2.pgtap.sql
+supabase test db --local supabase/tests/entitlements.pgtap.sql
+bash scripts/test-local-supabase-v2.sh            # all of the above, Docker-gated
 ```
 
 After starting local Supabase, certify the local API through the public RPC
@@ -30,7 +33,19 @@ bash scripts/check-server-schema.sh 10
 
 The verification script rejects absent or misordered standard migrations,
 missing schema-10 RPCs, a nonstandard `schema_paths` override, and any release
-workflow that reintroduces a database mutation command.
+workflow that reintroduces a database mutation command. Its negative-fixture
+self-check (`scripts/verify-supabase-migrations.test.sh`) proves the rejection
+cases without touching real files.
+
+## Sync Protocol 2 activation in 1.1.0+
+
+Codemap 1.1.0 activates protocol 2 **automatically and silently**, on study
+open and on study creation, when the server's own checks permit it (an admin
+client on a protocol-1 study, every current member capable of protocol 2 and
+registered). The old manual "Activate Sync Protocol 2" button is gone. A
+multi-member study upgrades only once every member has updated and synced
+once — the server still enforces that readiness gate, and it remains
+irreversible per study. See [`README.md`](../README.md).
 
 ## Production migration procedure
 
@@ -53,11 +68,16 @@ it does not run `supabase db push`, migration repair, or mutating SQL.
    fails, keep the database at its last committed transaction state and make a
    forward corrective migration; never edit an applied migration or downgrade
    a protocol-2 study.
-6. Run the read-only server certification (`scripts/check-server-schema.sh 10`)
+6. Apply the entitlements migration (`20260826000000_entitlements_and_sync_gate.sql`)
+   the same way. Every existing account is backfilled to an active `beta`
+   entitlement, so behavior is unchanged during the free beta: the gate is live
+   but transparent for all current users.
+7. Run the read-only server certification (`scripts/check-server-schema.sh 10`)
    and inspect the remote migration list. Record version, history alignment,
    timestamp, operator, and any baseline-reconciliation evidence.
-7. Only after certification may a v0.27 client register readiness. Study
-   activation remains a separate per-study RPC/UI action and is irreversible.
+8. After certification, a current Codemap 1.0.0 client may register readiness
+   and run the pre-1.1.0 flows; clients upgraded to 1.1.0 activate protocol 2
+   automatically on study open/create once the server's readiness gate passes.
 
 ## Recovery boundary
 

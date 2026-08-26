@@ -24,6 +24,19 @@ jobs:
             exit 1
           fi
 
+  verify-migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate workflow YAML syntax
+        run: |
+          ruby -e 'require "yaml"; YAML.load_file(ARGV.fetch(0))' .github/workflows/test.yml
+          ruby -e 'require "yaml"; YAML.load_file(ARGV.fetch(0))' .github/workflows/release.yml
+      - name: Static migration gate
+        run: bash scripts/verify-supabase-migrations.sh
+      - name: Migration verifier self-check (negative fixtures)
+        run: bash scripts/verify-supabase-migrations.test.sh
+
   test-frontend:
     runs-on: ubuntu-latest
     steps:

@@ -306,6 +306,78 @@ fn error_taxonomy_classification_and_display() {
 }
 
 #[test]
+fn entitlement_token_maps_to_one_friendly_message() {
+    use super::classify_rest_create_failure;
+    use super::classify_rest_upsert_failure;
+
+    let friendly = "Syncing new coding needs an active Codemap subscription. \
+     Your work is saved safely on this computer, and you can still pull your \
+     team's latest — subscribe to resume syncing your own changes.";
+
+    // 1. RPC path: 403 with the token in a nested PostgREST body.
+    let body_403 =
+        r#"{"code":"42501","message":"CODEMAP_ENTITLEMENT_REQUIRED","details":null,"hint":null}"#;
+    let err = super::classify_rpc_failure(403, body_403, "sync_v2_apply");
+    assert_eq!(
+        err,
+        SyncError::ServerRejected {
+            status: 403,
+            code: Some("CODEMAP_ENTITLEMENT_REQUIRED".into()),
+            public_message: Some(friendly.into()),
+        }
+    );
+    assert_eq!(err.to_string(), friendly);
+    assert!(!err.to_string().contains("CODEMAP_ENTITLEMENT_REQUIRED"));
+    assert!(!err.to_string().contains("42501"));
+
+    // 2. RPC path: 400 nested JSON carrying the token (defensive parity with
+    //    PostgREST wrapping) — same mapping, never the generic branch.
+    let body_400 = r#"{"code":"P0001","message":"CODEMAP_ENTITLEMENT_REQUIRED","details":{"table":"codebook"}}"#;
+    let err = super::classify_rpc_failure(400, body_400, "sync_v2_apply");
+    assert_eq!(err.to_string(), friendly);
+
+    // 3. Plain body (non-JSON) still containing the token.
+    let err = super::classify_rpc_failure(403, "CODEMAP_ENTITLEMENT_REQUIRED", "join_group");
+    assert_eq!(err.to_string(), friendly);
+
+    // 4. Ordinary 403 stays the generic permission error.
+    let err = super::classify_rpc_failure(
+        403,
+        r#"{"code":"42501","message":"You do not have permission"}"#,
+        "delete_group",
+    );
+    assert_eq!(err, SyncError::PermissionDenied);
+
+    // 5. Protocol-1 direct REST upsert path: same friendly message, never a
+    //    Network("403: ...") wrapper.
+    let err = classify_rest_upsert_failure(
+        403,
+        r#"{"code":"42501","message":"CODEMAP_ENTITLEMENT_REQUIRED"}"#.into(),
+    );
+    assert_eq!(err.to_string(), friendly);
+    assert!(!matches!(err, SyncError::Network(_)));
+
+    //    and it still preserves DuplicateCoding for ordinary conflicts.
+    let err = classify_rest_upsert_failure(
+        409,
+        r#"{"code":"23505","message":"duplicate key value violates unique constraint\"coded_segments_span_unique\""}"#.into(),
+    );
+    assert!(matches!(err, SyncError::DuplicateCoding(_)));
+
+    // 6. Direct project-create classification uses the exact same message.
+    let err = classify_rest_create_failure(
+        403,
+        r#"{"code":"42501","message":"CODEMAP_ENTITLEMENT_REQUIRED","details":"new row violates row-level security policy for table \"projects\""}"#.into(),
+    );
+    assert_eq!(err.to_string(), friendly);
+    assert!(!err.to_string().contains("row-level security"));
+
+    // 7. The raw token and SQL/body details never appear in Display output.
+    assert!(!err.to_string().contains("CODEMAP_ENTITLEMENT_REQUIRED"));
+    assert!(!err.to_string().contains("row-level security"));
+}
+
+#[test]
 fn rpc_body_key_validation() {
     let spec = RpcSpec {
         name: "test_rpc",
