@@ -255,6 +255,11 @@ jobs:
           #   Codemap_universal.app.tar.gz.sig
           #   latest.json
           gh release delete "$TAG" --yes --cleanup-tag=false 2>/dev/null || true
+          # Resolve the version ONCE. Inlining $(node -p \"...\") inside a
+          # double-quoted echo parses on bash 3.2 but is a syntax error on the
+          # runner's bash 5 -- and even where it parsed, node received the
+          # quotes literally and echoed the expression instead of the version.
+          VERSION="$(node -p "require('./package.json').version")"
           {
             echo "**Publisher verification notice**"
             echo ""
@@ -262,8 +267,8 @@ jobs:
             echo ""
             echo "| Your computer | Manual download |"
             echo "| --- | --- |"
-            echo "| macOS (Intel or Apple Silicon) | \`Codemap_$(node -p \"require('./package.json').version\")_universal.dmg\` |"
-            echo "| Windows 11 x64 | \`Codemap_$(node -p \"require('./package.json').version\")_x64-setup.exe\` |"
+            echo "| macOS (Intel or Apple Silicon) | \`Codemap_${VERSION}_universal.dmg\` |"
+            echo "| Windows 11 x64 | \`Codemap_${VERSION}_x64-setup.exe\` |"
             echo ""
             echo "- Official source commit: ${GITHUB_SHA}"
             echo "- Install guide and expected OS warnings: docs/INSTALLING.md"

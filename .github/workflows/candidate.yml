@@ -36,6 +36,10 @@ jobs:
         run: |
           ruby -e 'require "yaml"; %w[.github/workflows/test.yml .github/workflows/test-e2e.yml .github/workflows/candidate.yml .github/workflows/release.yml].each { |f| YAML.load_file(f) }'
 
+      # bash 5 on the runners rejects things macOS bash 3.2 accepts, and a
+      # run block that only fires on a tag is not exercised until release day.
+      - name: Workflow shell syntax (bash 5)
+        run: bash scripts/verify-workflow-shell.sh
       - name: Release-contract assertions (+ negative mutations)
         run: node --test scripts/release-contract.test.mjs
 

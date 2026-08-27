@@ -124,9 +124,17 @@ test("candidate.yml stamps CODEMAP_BUILD_COMMIT from github.sha in both build le
 
 test("negative mutation: candidate that publishes via tauri-action fails", () => {
   const yaml = readWf("candidate") + "\n# probe:uses: tauri-apps/tauri-action@v0\n";
-  assert.throws(() => {
-    assert.doesNotMatch(yaml, /tauri-apps\/tauri-action/);
-  }, /tauri-apps\/tauri-action/);
+  // Assert the DETECTOR fires, not the wording of node's failure message:
+  // assert.throws(fn, /re/) matches the regex against err.message, and node
+  // truncates a large "Input:" dump, so matching the probe there silently
+  // depended on candidate.yml staying under the truncation limit.
+  assert.match(yaml, /tauri-apps\/tauri-action/);
+  assert.throws(
+    () => assert.doesNotMatch(yaml, /tauri-apps\/tauri-action/),
+    (err) => err instanceof assert.AssertionError,
+  );
+  // And the real workflow must still be clean.
+  assert.doesNotMatch(readWf("candidate"), /tauri-apps\/tauri-action/);
 });
 
 // ----------------------
