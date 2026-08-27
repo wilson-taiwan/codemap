@@ -1,5 +1,25 @@
 #![deny(clippy::disallowed_methods)]
 
+// Windows unit-test binaries carry no application manifest: tauri-build embeds
+// one for the app, but `cargo test` links a plain executable. Without the
+// Common-Controls v6 assembly the process loads comctl32 v5 from System32,
+// which does not export TaskDialogIndirect (imported via rfd's Windows
+// dialogs through tauri-plugin-dialog), and dies at load with
+// STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139) before a single test runs.
+//
+// A `.drectve` section is handed to the MSVC linker as command-line
+// directives, so this declares the dependency for whatever binary it is linked
+// into. It is `cfg(test)`, so it exists ONLY in the unit-test executable and
+// can never affect the shipped app or its tauri-generated manifest.
+//
+// `cargo:rustc-link-arg-tests` cannot do this job: it applies only to
+// `[[test]]` integration targets, and this package's tests live in the lib.
+#[cfg(all(test, windows, target_env = "msvc"))]
+#[used]
+#[link_section = ".drectve"]
+static COMMON_CONTROLS_V6_MANIFEST: [u8; 167] =
+    *b" /manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"";
+
 mod app_data;
 mod backup;
 mod commands;
