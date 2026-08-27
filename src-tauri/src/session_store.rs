@@ -34,6 +34,9 @@ pub(crate) fn data_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path().app_data_dir().ok()
 }
 
+/// Only the Unix backend keeps a plain session file; Windows stores a DPAPI
+/// blob instead, so this is unreachable there.
+#[cfg(unix)]
 fn session_path(app: &tauri::AppHandle) -> Option<PathBuf> {
     data_dir(app).map(|d| d.join(SESSION_FILE))
 }
@@ -199,18 +202,6 @@ mod windows_backend {
         }
         // Either way this launch signs in with the legacy token.
         Some(token)
-    }
-
-    /// Test hook mirroring load()'s shared behavior from explicit dirs.
-    pub(super) fn clear_dir(dir: &Path) {
-        clear_at_paths(&dir.join(SESSION_FILE), &dpapi_path(dir));
-    }
-
-    fn clear_at_paths(legacy: &Path, protected: &Path) {
-        let _ = fs::remove_file(legacy);
-        let _ = fs::remove_file(legacy.with_extension("json.tmp"));
-        let _ = fs::remove_file(protected);
-        let _ = fs::remove_file(protected.with_extension("dpapi.tmp"));
     }
 }
 
