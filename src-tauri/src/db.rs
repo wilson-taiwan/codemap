@@ -4697,7 +4697,24 @@ pub fn delete_project_folder_impl(path: &str) -> Result<(), String> {
     let trash_result = trash::delete(p);
 
     if let Err(trash_err) = trash_result {
-        if let Err(perm_err) = std::fs::remove_dir_all(p) {
+        // Windows refuses to unlink a file that still has an open handle, and
+        // a just-written project.db routinely has one for a moment -- an
+        // antivirus/indexer scanning it, or a handle the OS has not released
+        // yet. Unix unlinks regardless, which is why this only ever bites on
+        // Windows. Retry briefly before calling it a failure; the same
+        // transient hits real users deleting a study they just closed.
+        let mut perm_result = std::fs::remove_dir_all(p);
+        for attempt in 1..=5 {
+            match &perm_result {
+                Ok(()) => break,
+                Err(_) if p.exists() => {
+                    std::thread::sleep(std::time::Duration::from_millis(100 * attempt));
+                    perm_result = std::fs::remove_dir_all(p);
+                }
+                Err(_) => break,
+            }
+        }
+        if let Err(perm_err) = perm_result {
             if !p.exists() {
                 return Ok(());
             }

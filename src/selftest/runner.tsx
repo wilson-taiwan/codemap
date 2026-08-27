@@ -490,8 +490,13 @@ export function SelftestRunner() {
             SELFTEST_CODER,
           );
 
-          const html = result.files.find((f) => f.endsWith("/report.html"));
-          const csv = result.files.find((f) => f.endsWith("/coded-segments.csv"));
+          // Match on the file name, not a "/" suffix: the backend returns
+          // native paths, so on Windows these end in "\\report.html" and a
+          // forward-slash endsWith never matches.
+          const named = (name: string) =>
+            result.files.find((f) => f.split(/[\\/]/).pop() === name);
+          const html = named("report.html");
+          const csv = named("coded-segments.csv");
           assert(html, `report.html missing from export files: ${result.files.join(", ")}`);
           assert(csv, `coded-segments.csv missing from export files: ${result.files.join(", ")}`);
           assert(result.coded_segment_count >= 1, "export recorded zero coded segments");
