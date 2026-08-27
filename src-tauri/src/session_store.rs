@@ -180,17 +180,23 @@ mod windows_backend {
         let legacy = dir.join(SESSION_FILE);
 
         if protected.exists() {
-            let token = read_protected(&protected);
             // A corrupt legacy file alongside a good blob must not linger:
             // sign-out/rotation paths below keep this tidy regardless.
-            if token.is_some() {
+            if let Some(token) = read_protected(&protected) {
                 let _ = fs::remove_file(&legacy);
-                return token;
+                return Some(token);
             }
-            return None; // corrupt/wrong-context protected data → no token
+            // Protected data that will not decrypt -- corrupt, half-written,
+            // or produced under another user/machine context -- is not on its
+            // own a reason to sign the user out. The plaintext is deleted only
+            // after a VERIFIED round-trip, so if it is still on disk it is
+            // still valid, and refusing it would sign the user out while that
+            // very file sits there: no security gained, a session lost. Fall
+            // through and retry the migration. With no legacy file the block
+            // below yields None, so a lone corrupt blob still means no token.
         }
 
-        // No protected artifact yet: attempt silent migration from legacy.
+        // No usable protected artifact: attempt silent migration from legacy.
         let token = super::load_legacy_from_path(&legacy)?;
         save_windows(dir, &token);
 
