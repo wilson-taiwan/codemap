@@ -95,10 +95,16 @@ pub fn unprotect(cipher: &[u8]) -> Option<Vec<u8>> {
     }
 }
 
-fn win32_memory_free(ptr: *mut u8) {
+/// Free a DPAPI output blob allocated by Win32.
+///
+/// # Safety
+/// `ptr` must be a non-null pointer that Win32 allocated with `LocalAlloc`
+/// (here, the `pbData` of a DPAPI output blob) and must not be used again
+/// afterwards. Declaring this `unsafe` is what makes the `unsafe` blocks at
+/// the call sites correct rather than redundant.
+unsafe fn win32_memory_free(ptr: *mut u8) {
     // HLOCAL is a plain pointer in windows-sys; free system-allocated blobs.
-    use windows_sys::Win32::System::Memory::LocalFree;
-    unsafe {
-        let _ = LocalFree(ptr as *mut core::ffi::c_void);
-    }
+    // LocalFree lives in Win32::Foundation, not Win32::System::Memory.
+    use windows_sys::Win32::Foundation::LocalFree;
+    let _ = LocalFree(ptr as *mut core::ffi::c_void);
 }
