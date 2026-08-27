@@ -141,10 +141,15 @@ jobs:
 
       - name: Record provenance to summary
         run: |
+          # Resolve the version ONCE. Inlined as $(node -p \"...\") inside a
+          # double-quoted echo this is a hard syntax error on bash 5, and on
+          # the macOS runner's bash 3.2 the substitution failed non-fatally and
+          # wrote a BLANK version -- a provenance record with no version in it.
+          VERSION="$(node -p "require('./package.json').version")"
           {
             echo "### Candidate (macOS)"
             echo "- Source SHA: $CODEMAP_BUILD_COMMIT"
-            echo "- Version: $(node -p \"require('./package.json').version\")"
+            echo "- Version: ${VERSION}"
             echo "- Platform: darwin universal (arm64+x86_64)"
             shasum -a 256 staging/* | sed 's/^/- /'
             echo ""
