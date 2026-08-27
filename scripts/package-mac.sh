@@ -108,19 +108,25 @@ COPIED_VERSION="$VERSION"
 
 cat <<EOF
 
-✓ Ready for teammates — verified $COPIED_NAME $COPIED_VERSION, DMG format $DMG_FORMAT
+✓ Candidate build ready — verified $COPIED_NAME $COPIED_VERSION, DMG format $DMG_FORMAT
 
-  DMG (share via Drive):  releases/$DMG_NAME  ($(du -h "$RELEASE_DIR/$DMG_NAME" | cut -f1))
-  App (double-click):     releases/${PRODUCT_NAME}.app
-  Updater:                releases/${PRODUCT_NAME}-${VERSION}-mac.app.tar.gz[.sig]
+  DMG:          releases/$DMG_NAME  ($(du -h "$RELEASE_DIR/$DMG_NAME" | cut -f1))
+  App:          releases/${PRODUCT_NAME}.app
+  Updater:      releases/${PRODUCT_NAME}-${VERSION}-mac.app.tar.gz[.sig]
 
-Teammate install:
-  1. Download the DMG from Google Drive / Box
-  2. Double-click the DMG
-  3. Drag "$PRODUCT_NAME" into Applications
-  4. Open from Applications or Launchpad
+Canonical distribution is the GitHub Releases page:
+  https://github.com/wilson-taiwan/codemap/releases
+Upload this artifact through a candidate workflow rather than sharing files
+by hand — the release page, exact filename, and version are part of how users
+verify they have the official download.
 
-First launch (unsigned app): if macOS blocks the app, right-click → Open,
-  or System Settings → Privacy & Security → Open Anyway.
+Install flow (public docs: docs/INSTALLING.md):
+  1. Download $DMG_NAME from the official Releases page
+  2. Double-click the DMG and drag "$PRODUCT_NAME" into Applications
+  3. Launch; macOS shows the expected non-notarized warning
+
+First launch warning (the ONLY supported path):
+  System Settings → Privacy & Security → Open Anyway → Open.
+  A "damaged" or malware warning means stop — see the install guide.
 
 EOF

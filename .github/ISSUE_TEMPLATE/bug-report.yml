@@ -1,0 +1,49 @@
+name: "Bug report"
+description: "Something misbehaves inside Codemap after it launches"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not upload transcripts, quotes, participant/study identifiers, project databases, tokens, private URLs, or unredacted crash logs/screenshots.**
+        Install/download problems belong in the install-help form instead.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS 14+
+        - macOS 10.15–13
+        - Windows 11 x64
+        - Other / not listed
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Codemap version + build commit
+      description: "About dialog → Copy build details"
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Were you working locally or collaborating?
+      options:
+        - Local only
+        - Collaborating (hosted sync)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened vs what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Synthetic names only ("Study", "P01") — never your real project labels
+    validations:
+      required: true

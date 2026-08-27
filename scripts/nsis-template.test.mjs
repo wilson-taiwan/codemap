@@ -13,7 +13,8 @@ export function verifyTauriCliPin(pkgJson, pkgLockJson) {
 }
 
 export function verifyWindowsTemplateConfig(windowsConfJson) {
-  const nsisConf = windowsConfJson?.bundle?.windows?.nsis;
+  const windowsBundle = windowsConfJson?.bundle?.windows;
+  const nsisConf = windowsBundle?.nsis;
   if (!nsisConf) {
     throw new Error("Missing bundle.windows.nsis configuration in tauri.windows.conf.json");
   }
@@ -22,6 +23,51 @@ export function verifyWindowsTemplateConfig(windowsConfJson) {
   }
   if (nsisConf.installerHooks !== "nsis-hooks.nsh") {
     throw new Error(`NSIS installerHooks must be 'nsis-hooks.nsh', got: ${nsisConf.installerHooks}`);
+  }
+  if (JSON.stringify(windowsConfJson?.bundle?.targets) !== JSON.stringify(["nsis"])) {
+    throw new Error(`Windows bundle targets must be exactly ["nsis"], got: ${JSON.stringify(windowsConfJson?.bundle?.targets)}`);
+  }
+  if (windowsBundle?.webviewInstallMode?.type !== "skip") {
+    throw new Error("webviewInstallMode must be exactly 'skip' — Codemap never downloads, bundles, or repairs WebView2");
+  }
+  if (nsisConf.installMode !== "currentUser") {
+    throw new Error(`NSIS installMode must be exactly 'currentUser' (no elevation), got: ${nsisConf.installMode}`);
+  }
+}
+
+/**
+ * Security-control tripwire: the shipped installer surface (template + hooks)
+ * must not mutate Defender/SmartScreen/firewall/Cert stores or kill
+ * processes/apps broadly. Matched case-insensitively against instruction
+ * shaped lines only (comments about NOT doing these are fine).
+ */
+export function verifyNoSecurityMutations(nsiText, hooksText = "") {
+  const combined = `${nsiText}\n${hooksText}`;
+  const banned = [
+    /netsh\s+advfirewall/i,
+    /Add-MpPreference|Set-MpPreference|MpCmdRun/i,
+    /add-firewall|netsh.*firewall/i,
+    /certutil|Import-Certificate/i,
+    /DisableObsoleteCipherSuites|SmartScreenDism/i,
+    /taskkill\s+\/f\s+\/im\s+(?!.*(codemap))/i,
+  ];
+  for (const re of banned) {
+    // Strip pure comment lines first so guidance comments don't false-positive.
+    const stripped = combined.replace(/^\s*#.*$/gm, "").replace(/^\s*;.*/gm, "");
+    if (re.test(stripped)) {
+      throw new Error(`Installer surface contains a forbidden security mutation matching ${re}`);
+    }
+  }
+}
+
+export function verifyCurrentUserExecutionBranch(nsiText) {
+  const perMachineAdmin = /!if\s+"\$\{INSTALLMODE\}"\s*==\s*"perMachine"[\s\S]{0,120}?RequestExecutionLevel admin/.test(nsiText);
+  if (!perMachineAdmin) {
+    throw new Error("Template drift expected upstream shape: perMachine branch maps to RequestExecutionLevel admin");
+  }
+  const currentUserUser = /!if\s+"\$\{INSTALLMODE\}"\s*==\s*"currentUser"[\s\S]{0,120}?RequestExecutionLevel user/.test(nsiText);
+  if (!currentUserUser) {
+    throw new Error("currentUser branch must request execution level 'user' — no elevation ever");
   }
 }
 
@@ -68,6 +114,24 @@ test("tauri.windows.conf.json configures custom template installer.nsi", () => {
   verifyWindowsTemplateConfig(winConf);
 });
 
+test("windows package contract: NSIS-only targets, currentUser, WebView skip", () => {
+  const winConf = JSON.parse(readFileSync(`${root}src-tauri/tauri.windows.conf.json`, "utf8"));
+  // Covered implicitly by verifyWindowsTemplateConfig via the config test
+  // above; assert the specific invariants here so a mutation names itself.
+  verifyWindowsTemplateConfig(winConf);
+});
+
+test("installer surface performs no security-control mutations", () => {
+  const hooks = readFileSync(`${root}src-tauri/nsis-hooks.nsh`, "utf8");
+  const nsi = readFileSync(`${root}src-tauri/installer.nsi`, "utf8");
+  verifyNoSecurityMutations(nsi, hooks);
+});
+
+test("execution-level branches map perMachine→admin, currentUser→user", () => {
+  const nsi = readFileSync(`${root}src-tauri/installer.nsi`, "utf8");
+  verifyCurrentUserExecutionBranch(nsi);
+});
+
 test("src-tauri/installer.nsi exists and records upstream 2.11.3 provenance", () => {
   assert.ok(existsSync(`${root}src-tauri/installer.nsi`), "src-tauri/installer.nsi must exist");
   const nsi = readFileSync(`${root}src-tauri/installer.nsi`, "utf8");
@@ -112,5 +176,40 @@ test("negative mutation: retained CheckIfAppIsRunning fails verification", () =>
   assert.throws(
     () => verifyTemplateStagedExtraction("!insertmacro CheckIfAppIsRunning staged"),
     /Custom template must remove upstream CheckIfAppIsRunning/
+  );
+});
+
+test("negative mutation: currentUser→perMachine fails verification", () => {
+  const winConf = JSON.parse(readFileSync(`${root}src-tauri/tauri.windows.conf.json`, "utf8"));
+  const mutated = structuredClone(winConf);
+  mutated.bundle.windows.nsis.installMode = "perMachine";
+  assert.throws(() => verifyWindowsTemplateConfig(mutated), /must be exactly 'currentUser'/);
+});
+
+test("negative mutation: skip→downloadBootstrapper WebView mode fails verification", () => {
+  const winConf = JSON.parse(readFileSync(`${root}src-tauri/tauri.windows.conf.json`, "utf8"));
+  const mutated = structuredClone(winConf);
+  mutated.bundle.windows.webviewInstallMode.type = "downloadBootstrapper";
+  assert.throws(() => verifyWindowsTemplateConfig(mutated), /webviewInstallMode must be exactly 'skip'/);
+});
+
+test("negative mutation: extra MSI target fails verification", () => {
+  const winConf = JSON.parse(readFileSync(`${root}src-tauri/tauri.windows.conf.json`, "utf8"));
+  const mutated = structuredClone(winConf);
+  mutated.bundle.targets = ["nsis", "msi"];
+  assert.throws(() => verifyWindowsTemplateConfig(mutated), /exactly \["nsis"\]/);
+});
+
+test("negative mutation: added Defender exclusion fails security-mutation scan", () => {
+  assert.throws(
+    () => verifyNoSecurityMutations("ExecWait 'powershell -Command Add-MpPreference -ExclusionPath $INSTDIR'", ""),
+    /forbidden security mutation/
+  );
+});
+
+test("negative mutation: firewall allow rule in template fails scan", () => {
+  assert.throws(
+    () => verifyNoSecurityMutations('ExecWait \'netsh advfirewall firewall add rule name="Codemap" dir=in\'', ""),
+    /forbidden security mutation/
   );
 });

@@ -14,7 +14,14 @@ interface UpdateStore {
   downloading: boolean;
   installing: boolean;
   listenerStarted: boolean;
-  checkForUpdate: () => Promise<void>;
+  /**
+   * Origin of the most recent check. A background (startup/interval) check
+   * that fails stays silent — no banner, no dot; only a check the user asked
+   * for shows an actionable failure.
+   */
+  lastCheckInteractive: boolean;
+  manualCheckFailed: boolean;
+  checkForUpdate: (interactive?: boolean) => Promise<void>;
   downloadUpdate: () => Promise<void>;
   cancelDownload: () => Promise<void>;
   installUpdate: () => Promise<void>;
@@ -40,12 +47,16 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
   downloading: false,
   installing: false,
   listenerStarted: false,
+  lastCheckInteractive: true,
+  manualCheckFailed: false,
 
-  checkForUpdate: async () => {
+  checkForUpdate: async (interactive = true) => {
     if (import.meta.env.DEV || get().checking || get().downloading || get().installing) return;
+    set({ lastCheckInteractive: interactive, manualCheckFailed: false });
     try {
       set(stateFromStatus(await api.updateCheck()));
     } catch {
+      if (interactive) set({ manualCheckFailed: true });
       await get().refreshUpdateStatus();
     }
   },

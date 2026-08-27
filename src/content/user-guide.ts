@@ -1,8 +1,13 @@
 import { isMac, shortcut } from "../lib/platform";
+import {
+  DATA_BOUNDARY_SUMMARY,
+  OFFICIAL_URLS,
+} from "./trust-and-permissions";
 
 export type GuideCategory =
   | "getting-started"
   | "sync"
+  | "trust"
   | "shortcuts"
   | "troubleshooting"
   | "reflexive-ta";
@@ -21,6 +26,7 @@ export interface GuideSection {
 export const GUIDE_CATEGORIES: { id: GuideCategory; label: string }[] = [
   { id: "getting-started", label: "Getting started" },
   { id: "sync", label: "How sync works" },
+  { id: "trust", label: "Trust, privacy & permissions" },
   { id: "shortcuts", label: "Keyboard shortcuts" },
   { id: "troubleshooting", label: "Troubleshooting" },
   { id: "reflexive-ta", label: "Reflexive TA" },
@@ -50,19 +56,37 @@ export const USER_GUIDE_SECTIONS: GuideSection[] = [
     title: "How sync works (and what never leaves your computer)",
     whenToUse: "Understanding collaboration, privacy, and data flow in Codemap.",
     steps: [
-      "Only opaque IDs and hashes travel to the sync server (segment hashes, code IDs, coder name, and timestamps).",
-      "Transcripts and free-text memos NEVER leave your computer and are never uploaded to the sync server.",
+      DATA_BOUNDARY_SUMMARY,
+      "Concretely, collaboration shares: your account email; study title and membership; the de-identified study/participant label; interview IDs, segment counts, and content hashes; every codebook field including names, definitions, inclusion/exclusion criteria, examples, colors, and hierarchy; coding attribution and character offsets for each coded passage.",
+      "Transcript files and text, verbatim quotes, filenames/paths, and free-text memos stay on this computer and are never uploaded.",
       "Colleagues load identical transcripts locally; matching segment hashes connect their coding to yours automatically.",
       "Sync runs silently in the background when changes settle and whenever you open a study.",
     ],
     expectedResults: [
       "Both coders see shared coding highlights and attribution without sending files back and forth.",
-      "HIPAA / IRB compliance: raw participant quotes remain strictly local on each machine.",
+      "Study/participant labels and all codebook text are synced word-for-word — author them de-identified. Codemap supports a protocol; it does not certify compliance of any kind.",
     ],
     commonMistakes: [
       "Typing slightly different Participant IDs (e.g. P7 vs P07) — IDs decide interview identity, so ensure they match your protocol exactly.",
     ],
-    relatedSectionIds: ["getting-started", "troubleshooting"],
+    relatedSectionIds: ["trust-privacy-permissions", "getting-started", "troubleshooting"],
+  },
+  {
+    id: "trust-privacy-permissions",
+    category: "trust",
+    title: "Trust, privacy & permissions",
+    whenToUse:
+      "Understanding install warnings, what Codemap accesses, where data lives, and how to verify a build.",
+    steps: [
+      "Open Trust & permissions from Welcome, Settings, About, or this guide to see warning guidance for your operating system, file access explanations, and build details.",
+      "Install warnings: Codemap is unsigned by Apple/Microsoft publisher identities, so the first launch shows an expected warning on each OS. The Trust panel shows exactly which warnings are expected and which mean stop.",
+      "Files & permissions: studies default to ~/Codemap (macOS) or %USERPROFILE%\\Codemap (Windows). Choosing a folder in the native picker is the only permission Codemap asks for; denied access recovers inline without raw error strings.",
+      `Verify a build: check version, filename, and the official release page (${OFFICIAL_URLS.releases}); SHA-256 digests and artifact attestations are available under Advanced verification.`,
+    ],
+    expectedResults: [
+      "One authoritative answer for any trust, privacy, or permission question — no contradictory claims elsewhere in the app.",
+    ],
+    relatedSectionIds: ["sync-with-your-coder", "troubleshooting"],
   },
   {
     id: "shortcuts",
@@ -96,7 +120,7 @@ export const USER_GUIDE_SECTIONS: GuideSection[] = [
       "Offline work: You can code freely while offline. All changes queue locally and reconcile automatically once reconnected.",
     ],
     expectedResults: [
-      "All coding aligns across the team with zero data loss.",
+      "Coding aligns across the team through deterministic content hashes; conflicts surface in the sync sheet instead of silently overwriting anyone's work.",
     ],
     relatedSectionIds: ["sync-with-your-coder", "shortcuts"],
   },

@@ -1,0 +1,27 @@
+# Support
+
+Codemap is maintained by one person, so support runs entirely through GitHub — no email, no chat.
+
+## Install help or bugs
+
+Open a GitHub Issue using the guided forms:
+
+- **Install help:** [New install-help issue](https://github.com/wilson-taiwan/codemap/issues/new?template=install-help.yml)
+- **Bug report:** [New bug-report issue](https://github.com/wilson-taiwan/codemap/issues/new?template=bug-report.yml)
+
+Forms collect OS version/build, Codemap version and build commit (About → Copy build details), the exact filename and download URL, and the exact warning text.
+
+**Before attaching anything:** do not upload transcripts, quotes, participant/study identifiers, project databases, tokens, private URLs, or unredacted crash logs/screenshots. Crash logs may contain file paths — review and redact first.
+
+## Security vulnerabilities
+
+Please report privately through GitHub's **Report a vulnerability** flow on the repository ([security advisories → report](https://github.com/wilson-taiwan/codemap/security)). See [SECURITY.md](SECURITY.md). Do not open public issues for security reports.
+
+## Deployment questions for IT
+
+Start with [docs/IT-DEPLOYMENT.md](docs/IT-DEPLOYMENT.md), then Issues if something remains unclear.
+
+## Documentation
+
+- [Installing](docs/INSTALLING.md) — canonical downloads + expected OS warnings
+- [Privacy and permissions](docs/PRIVACY-AND-PERMISSIONS.md) — exact data boundary

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Codemap",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "identifier": "app.codemap.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -66,10 +66,12 @@
     ],
     "category": "Productivity",
     "shortDescription": "Qualitative coding for reflexive thematic analysis",
-    "longDescription": "Import Zoom transcripts, code passages with a living codebook, and export coded segments. Offline-first; projects sync via Google Drive or Box.",
+    "longDescription": "Offline-first qualitative coding for reflexive thematic analysis. Import transcripts, code passages with a living codebook, memo as you go, and export coded segments. Work fully locally, or collaborate over encrypted hosted sync — transcript text and memos always stay on your computer.",
     "copyright": "Codemap contributors",
     "macOS": {
       "minimumSystemVersion": "10.15",
+      "signingIdentity": "-",
+      "infoPlist": "Info.plist",
       "dmg": {
         "appPosition": {
           "x": 180,

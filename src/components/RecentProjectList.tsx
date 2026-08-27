@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useShallow } from "zustand/react/shallow";
 import { api } from "../lib/api";
 import { basename, formatRelativeTime } from "../lib/format";
+import {
+  fileAccessCopy,
+  parseFileError,
+  recoveryActions,
+  type FileAccessUi,
+} from "../lib/file-access";
 import { fileManagerName } from "../lib/platform";
 import type { RecentProject } from "../lib/types";
 import { useProjectStore } from "../store/project-store";
@@ -10,12 +17,19 @@ import { Icon } from "./ui/Icon";
 import { openContextMenu } from "./ui/ContextMenu";
 
 interface RecentProjectListProps {
-  onOpenError?: (path: string, message: string) => void;
+  /** When provided, "How to fix access" opens it (wired to Trust Center). */
+  onHelp?: () => void;
 }
 
-export function RecentProjectList({ onOpenError }: RecentProjectListProps) {
+interface FailedRow {
+  path: string;
+  ui: FileAccessUi;
+}
+
+export function RecentProjectList({ onHelp }: RecentProjectListProps) {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failedRow, setFailedRow] = useState<FailedRow | null>(null);
   const { openProject, loading: projectLoading } = useProjectStore(
     useShallow((s) => ({ openProject: s.openProject, loading: s.loading })),
   );
@@ -35,11 +49,51 @@ export function RecentProjectList({ onOpenError }: RecentProjectListProps) {
   }, [loadRecents]);
 
   async function handleOpen(recent: RecentProject) {
+    setFailedRow(null);
     try {
       await openProject(recent.path);
     } catch (e) {
-      onOpenError?.(recent.path, String(e));
+      // The row stays visible regardless — a failed open must never cost the
+      // user their place in Recents. Raw errors classify into safe copy.
+      const ui =
+        parseFileError(e) ??
+        ({
+          category: "invalid_project",
+          message: "Could not open this study.",
+          detail: String(e),
+        } satisfies FileAccessUi);
+      setFailedRow({ path: recent.path, ui });
     }
+  }
+
+  /** Locate folder: the user picks where the study moved to; try opening it. */
+  async function locateFailedFolder() {
+    if (!failedRow) return;
+    try {
+      const picked = await openDialog({
+        directory: true,
+        multiple: false,
+        title: `Locate “${basename(failedRow.path)}”`,
+      });
+      if (typeof picked !== "string") return;
+      setFailedRow(null);
+      await openProject(picked);
+    } catch (e) {
+      const ui =
+        parseFileError(e) ??
+        ({
+          category: "invalid_project",
+          message: "Could not open this study.",
+          detail: String(e),
+        } satisfies FileAccessUi);
+      setFailedRow({ path: failedRow.path, ui });
+    }
+  }
+
+  async function removeFailedRow() {
+    if (!failedRow) return;
+    setRecents(await api.removeRecentProject(failedRow.path));
+    setFailedRow(null);
   }
 
   async function removeRecent(path: string) {
@@ -147,9 +201,82 @@ export function RecentProjectList({ onOpenError }: RecentProjectListProps) {
                 <Icon name="close" size={13} />
               </button>
             </div>
+            {failedRow?.path === recent.path && (
+              <FailedOpenCard
+                failedRow={failedRow}
+                onLocate={locateFailedFolder}
+                onDismiss={() => setFailedRow(null)}
+                onRemove={removeFailedRow}
+                onHelp={() => {
+                  setFailedRow(null);
+                  onHelp?.();
+                }}
+              />
+            )}
           </li>
         ))}
       </ul>
     </section>
+  );
+}
+
+/**
+ * Inline recovery state for a recent row whose study could not open. Offers
+ * the four safe paths forward; never renders the raw OS/database error, which
+ * stays inside the failedRow's `detail` for optional diagnostics later.
+ */
+function FailedOpenCard({
+  failedRow,
+  onLocate,
+  onDismiss,
+  onRemove,
+  onHelp,
+}: {
+  failedRow: FailedRow;
+  onLocate: () => void;
+  onDismiss: () => void;
+  onRemove: () => void;
+  onHelp: () => void;
+}) {
+  const { title, recovery } = fileAccessCopy(failedRow.ui);
+  const actions = recoveryActions(failedRow.ui.category);
+  return (
+    <div
+      role="alert"
+      className="notice notice-warn mt-1 mb-2 ml-3 mr-3"
+    >
+      <p className="font-medium">{title}</p>
+      <p className="mt-1 text-[12.5px]">{recovery}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {actions.includes("locate-folder") && (
+          <button type="button" className="btn btn-outline btn-sm" onClick={onLocate}>
+            Locate folder
+          </button>
+        )}
+        {actions.includes("choose-another") && (
+          <button type="button" className="btn btn-outline btn-sm" onClick={onDismiss}>
+            Choose another study
+          </button>
+        )}
+        {actions.includes("remove-recent") && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onRemove}>
+            Remove from recent
+          </button>
+        )}
+        <button type="button" className="btn btn-ghost btn-sm underline" onClick={onHelp}>
+          How to fix access
+        </button>
+      </div>
+      {failedRow.ui.detail && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[11.5px]" style={{ color: "var(--ink-3)" }}>
+            Technical details
+          </summary>
+          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all text-[11px]" style={{ color: "var(--ink-3)" }}>
+            {failedRow.ui.detail}
+          </pre>
+        </details>
+      )}
+    </div>
   );
 }

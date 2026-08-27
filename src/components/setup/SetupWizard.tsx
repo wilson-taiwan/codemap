@@ -284,12 +284,12 @@ export function SetupWizard() {
                           {effectiveFolder}
                           {PROJECT_EXT}
                         </span>{" "}
-                        here. This is your working copy and it stays on this
-                        computer — you share coding by sending a handoff file,
-                        never this folder.
+                        here. This local working folder stays on this computer.
+                        If you collaborate, coding metadata syncs to the team —
+                        transcript text never does.
                       </>
                     ) : (
-                      "Your working copy lives here. Sharing happens later, as a handoff file."
+                      "Your study's local working folder lives here."
                     )}
                   </p>
 
@@ -306,9 +306,15 @@ export function SetupWizard() {
                         mid-session — that is how a project loses its coding.
                       </p>
                       <p className="mt-1.5">
-                        Safer: keep the project on this computer and put the{" "}
-                        <strong>handoff file</strong> in {cloudProvider} instead.
-                        You can set that up on the Save &amp; hand off sheet.
+                        Safer: keep studies in the default local library{" "}
+                        {libraryDir ? (
+                          <strong>{libraryDir}</strong>
+                        ) : (
+                          <strong>under your home folder</strong>
+                        )}
+                        , and use exports/backups for anything you want copied
+                        into {cloudProvider}. Exports are plain files — cloud
+                        folders are a fine home for them.
                       </p>
                       {libraryDir && parentDir !== libraryDir && (
                         <button

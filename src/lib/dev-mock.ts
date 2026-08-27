@@ -23,6 +23,11 @@ import type {
 } from "./types";
 import { CODE_PALETTE } from "./code-colors";
 
+/** Fixture platform for path shapes: Windows-flavoured only under UA spoof. */
+function isWindows(): boolean {
+  return typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent);
+}
+
 function isStressFixture(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -42,6 +47,61 @@ function isSyncNotReadyFixture(): boolean {
     (window.location.search.includes("fixture=sync-not-ready") ||
       window.location.hash.includes("fixture=sync-not-ready"))
   );
+}
+
+// ── Fault-injection fixtures (E2E plan Task 4) ───────────────────────────────
+// Each fixture drives an error/degraded branch of the real UI that the happy
+// path never reaches. Reachable only through the browser preview URL.
+const FAULT_FIXTURES = ["sync-error", "server-conflict", "auth-error", "slow"] as const;
+type FaultFixture = (typeof FAULT_FIXTURES)[number];
+
+function activeFault(): FaultFixture | null {
+  if (typeof window === "undefined") return null;
+  const text = window.location.search + window.location.hash;
+  return FAULT_FIXTURES.find((f) => text.includes(`fixture=${f}`)) ?? null;
+}
+
+/** Commands that reject with a network-style failure under fixture=sync-error. */
+const SYNC_FAULT_CMDS = new Set([
+  "sync_now",
+  "sync_deep_verify",
+  "sync_repair",
+]);
+
+/** Commands that reject with Supabase's invalid-credentials body under fixture=auth-error. */
+const AUTH_FAULT_CMDS = new Set(["sync_sign_in", "sync_sign_up"]);
+
+/** Write-path commands artificially delayed under fixture=slow. */
+const SLOW_CMDS = new Set([
+  "apply_codes",
+  "mutate_coding_edge",
+  "ensure_code_and_apply",
+  "import_segments",
+  "export_with_config",
+  "create_backup",
+  "restore_backup",
+]);
+
+const SLOW_FIXTURE_DELAY_MS = 900;
+
+/**
+ * One unresolved code-name conflict, shaped exactly like the backend's
+ * SyncConflictDetail so the sheet renders its real resolution branch.
+ */
+function fixtureConflicts() {
+  return [
+    {
+      id: "conflict-fixture-1",
+      entity_type: "code" as const,
+      entity_label: "Anticipatory rehearsal",
+      field_name: "name",
+      current_value: "Anticipatory rehearsal",
+      proposed_value: "Anticipatory rehearsing",
+      proposer_label: "Luci Diaz",
+      status: "unresolved" as const,
+      created_at: "2026-08-20T10:00:00Z",
+    },
+  ];
 }
 
 function sha256Sync(str: string): string {
@@ -649,6 +709,12 @@ function mockExport(
 }
 
 function handle(cmd: string, args: Record<string, unknown>): unknown {
+  // fixture=server-conflict keeps the study on protocol 2 so the sheet's
+  // conflict branch (which requires v2) actually renders. Applied lazily
+  // because mockSync is declared below module scope's resetFixture() call.
+  if (activeFault() === "server-conflict" && mockSync.protocol !== 2) {
+    mockSync.protocol = 2;
+  }
   switch (cmd) {
     // --- dialog / opener plugins -----------------------------------------
     case "plugin:dialog|open":
@@ -689,6 +755,8 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
       const activeCoded = codedSegments.filter(
         (coding) => coding.interview_id === activeInterviewId,
       );
+      const fixtureConflictsActive =
+        activeFault() === "server-conflict" ? fixtureConflicts() : [];
       return {
         project: openProject ?? DEMO,
         interviews: [...interviews],
@@ -700,7 +768,7 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
         coded_segments: activeCoded,
         pending_coded_count: 0,
         coded_count: codedSegments.length,
-        conflicts: [],
+        conflicts: fixtureConflictsActive,
         sync_status: {
           protocol: 1,
           generation: null,
@@ -708,7 +776,7 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
           observed_head: 0,
           outbox_count: 0,
           blocked_count: 0,
-          unresolved_conflict_count: 0,
+          unresolved_conflict_count: fixtureConflictsActive.length,
         },
         local_revision: 0,
       };
@@ -1136,7 +1204,9 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
       // empty queue keeps the mount path identical to the real one.
       return [];
     case "get_projects_library_dir":
-      return "/Users/you/Documents/Codemap";
+      // Fixture paths never embed a real username; the separator follows the
+      // harness platform so wizard previews look native on both.
+      return isWindows() ? "C:\\Users\\you\\Codemap" : "/Users/you/Codemap";
     case "library_sync_warning":
       // The default library is local in the demo — the interesting case is
       // reachable by picking a path with a provider name in it.
@@ -1250,12 +1320,15 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
         observedHead: mockSync.protocol === 2 ? mockSync.head : 0,
         outboxCount: mockSync.pending,
         blockedOutboxCount: 0,
-        unresolvedConflictCount: 0,
+        unresolvedConflictCount:
+          activeFault() === "server-conflict" ? fixtureConflicts().length : 0,
         lastRealtimeAt: null,
         lastSuccessAt: mockSync.lastSyncedAt,
         sequenceLagAgeSeconds: null,
         deviceIdSuffix: "00000001",
       };
+    case "is_selftest":
+      return false;
     case "sync_sign_in":
       mockSync.signedIn = true;
       return null;
@@ -1351,7 +1424,7 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
     case "sync_v2_resolve_conflict":
       return null;
     case "list_sync_conflicts":
-      return [];
+      return activeFault() === "server-conflict" ? fixtureConflicts() : [];
     case "sync_reset_group_key":
       mockSync.groupKey = "X7KM-9P2Q";
       return mockSync.groupKey;
@@ -1602,6 +1675,20 @@ export function installDevMock() {
     async invoke(cmd: string, args: Record<string, unknown> = {}) {
       await new Promise((r) => setTimeout(r, 40));
       try {
+        // Fault fixtures intercept BEFORE any handler runs so specs observe
+        // the app's real failure branches, not a mocked response shape.
+        const fault = activeFault();
+        if (fault === "slow" && SLOW_CMDS.has(cmd)) {
+          await new Promise((r) => setTimeout(r, SLOW_FIXTURE_DELAY_MS));
+        }
+        if (fault === "sync-error" && SYNC_FAULT_CMDS.has(cmd)) {
+          throw new Error(
+            "error sending request for url (https://example-project.supabase.co/rest/v1/): connection refused",
+          );
+        }
+        if (fault === "auth-error" && AUTH_FAULT_CMDS.has(cmd)) {
+          throw new Error("Invalid login credentials");
+        }
         const result = await handle(cmd, args ?? {});
         recordIpc(cmd, true);
         return result;

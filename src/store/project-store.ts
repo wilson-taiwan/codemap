@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { appConfirm } from "./confirm-store";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api } from "../lib/api";
 import { parseTranscriptFile } from "../hooks/useVttParser";
@@ -47,10 +47,14 @@ async function confirmHubMemoIfDirty(
   hubMemoDirty: boolean,
 ): Promise<boolean> {
   if (!hubMemoDirty) return true;
-  return confirm(
-    "Interview analytic memo has unsaved changes. Continue without saving?",
-    { title: "Unsaved hub memo", kind: "warning" },
-  );
+  return appConfirm({
+    title: "Unsaved hub memo",
+    body: "The interview analytic memo has unsaved changes. Continue without saving?",
+    confirmLabel: "Discard changes",
+    cancelLabel: "Go back",
+    destructive: true,
+    dedupeKey: "hub-memo-dirty",
+  });
 }
 
 async function rememberIdentity(path: string, coder: string) {
@@ -528,7 +532,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       return;
     }
 
-    const applied = target.existing?.code_ids ?? [];
+    const applied = get().selectedCodeIds;
     const present = !applied.includes(codeId);
     const next = present ? [...applied, codeId] : applied.filter((c) => c !== codeId);
     const codeName = get().codes.find((c) => c.id === codeId)?.name ?? "code";
@@ -1710,10 +1714,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (!activeInterviewId) throw new Error("No interview selected");
 
     if (codedSegments.length > 0) {
-      const ok = await confirm(
-        `This interview has ${codedSegments.length} coded passage(s). Coding on passages whose wording is unchanged will be kept; coding on passages that changed or were removed will go with them. Continue?`,
-        { title: "Re-import transcript", kind: "warning" },
-      );
+      const ok = await appConfirm({
+        title: "Re-import transcript",
+        body: `This interview has ${codedSegments.length} coded passage(s). Coding on passages whose wording is unchanged will be kept; coding on passages that changed or were removed will go with them.`,
+        confirmLabel: "Re-import",
+        cancelLabel: "Cancel import",
+        destructive: true,
+        dedupeKey: `reimport-${activeInterviewId}`,
+      });
       if (!ok) {
         get().showStatus("Import cancelled.", "info");
         return 0;

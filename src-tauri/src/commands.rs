@@ -262,8 +262,18 @@ pub fn create_project(
     input: CreateProjectInput,
 ) -> Result<ProjectInfo, String> {
     state.ensure_update_writable()?;
-    let path = db::create_project(&input).map_err(|e| e.to_string())?;
-    let conn = db::open_project(&path.to_string_lossy()).map_err(|e| e.to_string())?;
+    let path = db::create_project(&input).map_err(|e| {
+        crate::file_error::classified(
+            "Could not create the study folder. If that location is protected or full, choose another location.",
+            &e.to_string(),
+        )
+    })?;
+    let conn = db::open_project(&path.to_string_lossy()).map_err(|e| {
+        crate::file_error::classified(
+            "The study was created but could not be opened. Try reopening it from Recents.",
+            &e.to_string(),
+        )
+    })?;
 
     *state.project_path.lock().map_err(|e| e.to_string())? = Some(path.clone());
     *state.db.lock().map_err(|e| e.to_string())? = Some(conn);
@@ -286,7 +296,12 @@ pub async fn open_project(
         tauri::async_runtime::spawn_blocking(move || db::open_project_snapshot_inner(&path_clone))
             .await
             .map_err(|e| e.to_string())?
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                crate::file_error::classified(
+                    "Could not open this study. It may have moved, be unavailable, or access may be restricted.",
+                    &e.to_string(),
+                )
+            })?;
 
     *state.project_path.lock().map_err(|e| e.to_string())? = Some(PathBuf::from(&path));
     *state.db.lock().map_err(|e| e.to_string())? = Some(conn);
@@ -784,7 +799,12 @@ pub fn export_with_config(
             framework_matrix_csv.as_deref(),
             &coder_name,
         )
-        .map_err(|e| e.to_string())
+        .map_err(|e| {
+            crate::file_error::classified(
+                "Could not write the export there. Choose a different location or free up disk space.",
+                &e.to_string(),
+            )
+        })
     })
 }
 
@@ -952,11 +972,22 @@ pub struct ScannedTranscriptFile {
 pub fn scan_transcript_folder(folder_path: String) -> Result<Vec<ScannedTranscriptFile>, String> {
     let dir = std::path::Path::new(&folder_path);
     if !dir.is_dir() {
-        return Err("Path is not a directory".into());
+        return Err(crate::file_error::wrap_file_error(
+            crate::file_error::FileAccessCategory::PathUnavailable,
+            "That folder is not available. It may have been moved, renamed, or disconnected.",
+            "not a directory: scan_transcript_folder",
+        ));
     }
 
     let mut result = Vec::new();
-    let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        let category = crate::file_error::classify_io(&e);
+        crate::file_error::wrap_file_error(
+            category,
+            "Codemap could not read that folder. If access is restricted, choose another folder.",
+            &e.to_string(),
+        )
+    })?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -1059,13 +1090,38 @@ pub fn set_app_preferences(
     crate::app_data::set_app_preferences(&app, prefs)
 }
 
+/// Pins the build commit into the binary's data section so release verifiers
+/// can find it by byte search (`scripts/verify-mac-bundle.sh`).
+///
+/// `get_app_version` reads the same value through `env!`, which is always
+/// correct at runtime — but at `opt-level=3` a *short* commit string (an
+/// abbreviated SHA) is materialized as instruction immediates rather than a
+/// `.rodata` memcpy source, which dead-strips the literal out of the binary
+/// and makes the verifier fail. A 40-char `github.sha` happens to survive;
+/// anything short does not. `#[used]` forces the marker static to be emitted,
+/// which in turn forces its string data to exist at any length. The commit is
+/// a substring of the marker, so the verifier's plain search still matches.
+#[used]
+static BUILD_COMMIT_MARKER: &str = concat!("codemap-build-commit:", env!("CODEMAP_BUILD_COMMIT"));
+
 #[tauri::command]
 pub fn get_app_version(app: tauri::AppHandle) -> Result<AppVersionInfo, String> {
     let info = app.package_info();
+    // Build commit comes from compile time; candidate/release CI sets
+    // CODEMAP_BUILD_COMMIT to the exact source SHA and the packaged-app
+    // verifier fails if About does not report it. Non-CI builds honestly say
+    // "development".
+    let build_commit = env!("CODEMAP_BUILD_COMMIT").to_string();
     Ok(AppVersionInfo {
         name: info.name.to_string(),
         version: info.version.to_string(),
         copyright: Some("Codemap contributors".into()),
+        build_commit: Some(build_commit),
+        source_url: Some("https://github.com/wilson-taiwan/codemap".into()),
+        release_url: Some("https://github.com/wilson-taiwan/codemap/releases".into()),
+        install_guide_url: Some(
+            "https://github.com/wilson-taiwan/codemap/blob/main/docs/INSTALLING.md".into(),
+        ),
     })
 }
 

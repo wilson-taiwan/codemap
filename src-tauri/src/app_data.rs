@@ -91,15 +91,19 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
 
 pub fn list_recent_projects(app: &tauri::AppHandle) -> Result<Vec<RecentProject>, String> {
     let path = app_data_dir(app)?.join(RECENT_FILE);
-    let mut file: RecentProjectsFile = read_json(&path)?;
-    let before = file.projects.len();
-    file.projects.retain(|p| Path::new(&p.path).exists());
-    if file.projects.len() != before {
-        write_json(&path, &file)?;
-    }
-    file.projects
-        .sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
-    Ok(file.projects)
+    // Deliberately no existence-pruning: an offline volume, cloud placeholder,
+    // revoked permission, or unplugged drive used to silently delete history
+    // the user still wanted. Rows stay until the user removes them; a failed
+    // open surfaces inline recovery instead.
+    let file: RecentProjectsFile = read_json(&path)?;
+    Ok(normalize_recent_projects(file.projects))
+}
+
+/// Sort order + cap partition only. Existence is intentionally irrelevant here.
+pub(crate) fn normalize_recent_projects(mut projects: Vec<RecentProject>) -> Vec<RecentProject> {
+    projects.sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
+    truncate_recents_partition(&mut projects);
+    projects
 }
 
 pub(crate) fn truncate_recents_partition(projects: &mut Vec<RecentProject>) {
@@ -183,20 +187,40 @@ pub fn remove_recent_project(
     Ok(file.projects)
 }
 
-/// The local working library — where incoming handoff files are unpacked.
+/// Drop every recent-projects row. Selftest bootstrap only — the selftest
+/// suites create and dispose throwaway studies on every run, and a stale
+/// entry renders the failed-open recovery card on the home screen of the next
+/// run, which its dark-mode contrast audit then walks.
+pub fn clear_recent_projects_for_selftest(app: &tauri::AppHandle) -> Result<(), String> {
+    let file_path = app_data_dir(app)?.join(RECENT_FILE);
+    let file = RecentProjectsFile::default();
+    write_json(&file_path, &file)
+}
+
+/// The local working library — where new studies are created by default.
 ///
 /// Deliberately **not** configurable. A live project is a directory with an
 /// open SQLite database inside it, and letting a user point this at their Box
 /// or Drive folder would recreate the 0.4.0 WAL data-loss bug exactly: the
 /// sync client would upload the database mid-write, file by file. Only the
-/// *handoff destination* is a setting; the working copy always lives locally.
+/// *export/backup destination* is a setting; the working copy always lives
+/// locally.
+///
+/// Since v1.2 the default lives directly under the home directory
+/// (`~/Codemap` / `%USERPROFILE%\Codemap`) instead of Documents: Documents can
+/// be TCC-protected on macOS and redirected into OneDrive on Windows, which
+/// caused avoidable permission prompts and live-database risk.
+/// Existing projects are never moved — this only changes where *new* studies
+/// propose to live.
+pub fn projects_library_dir_from_home(home: &Path) -> PathBuf {
+    home.join("Codemap")
+}
+
 pub fn projects_library_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let base = app
-        .path()
-        .document_dir()
-        .or_else(|_| app.path().home_dir())
-        .map_err(|e| e.to_string())?;
-    Ok(base.join("Codemap"))
+    let home = app.path().home_dir().map_err(|_| {
+        "Could not find your home folder. Choose a location for your study manually.".to_string()
+    })?;
+    Ok(projects_library_dir_from_home(&home))
 }
 
 /// Which sync service, if any, appears to own this path.
@@ -376,5 +400,56 @@ mod tests {
         assert_eq!(first, second);
         assert!(Uuid::parse_str(&first).is_ok());
         assert_eq!(fs::read_to_string(path).unwrap().trim(), first);
+    }
+
+    #[test]
+    fn library_dir_defaults_under_home_for_both_platform_shapes() {
+        // Comparisons normalize separators because Path::join uses the HOST
+        // separator; only shape matters here.
+        let norm = |p: &Path| p.to_string_lossy().replace('\\', "/");
+
+        // macOS-shaped home
+        let mac_lib = projects_library_dir_from_home(Path::new("/Users/you"));
+        assert_eq!(norm(&mac_lib), "/Users/you/Codemap");
+        assert!(!mac_lib.to_string_lossy().contains("Documents"));
+
+        // Windows-shaped home (backslashes survive as one component on a
+        // Unix host, so normalize and compare shape only)
+        let win_lib = projects_library_dir_from_home(Path::new("C:\\Users\\you"));
+        assert_eq!(norm(&win_lib), "C:/Users/you/Codemap");
+        assert!(!win_lib
+            .to_string_lossy()
+            .to_lowercase()
+            .contains("documents"));
+
+        // Trailing separators are tolerated
+        assert_eq!(
+            norm(&projects_library_dir_from_home(Path::new("/home/you/"))),
+            "/home/you/Codemap"
+        );
+    }
+
+    #[test]
+    fn normalize_recent_projects_never_prunes_missing_paths() {
+        let mk = |path: &str, opened: &str| RecentProject {
+            path: path.into(),
+            title: "Synthetic Study".into(),
+            last_opened_at: opened.into(),
+            group_id: None,
+            group_title: None,
+            coder_name: None,
+        };
+        // Row whose folder does not exist must survive normalization.
+        let projects = vec![
+            mk("/definitely/not/a/real/folder", "2026-08-01T00:00:00Z"),
+            mk("/tmp", "2026-08-02T00:00:00Z"),
+        ];
+        let normalized = normalize_recent_projects(projects);
+        assert_eq!(normalized.len(), 2);
+        assert!(normalized
+            .iter()
+            .any(|p| p.path == "/definitely/not/a/real/folder"));
+        // Newest first
+        assert_eq!(normalized[0].path, "/tmp");
     }
 }

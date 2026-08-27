@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { appConfirm } from "../store/confirm-store";
 import { useShallow } from "zustand/react/shallow";
 import { Modal } from "./ui/Surfaces";
 import { Icon } from "./ui/Icon";
@@ -88,6 +88,9 @@ export function SyncSheet() {
   const [resolvingConflict, setResolvingConflict] = useState<string | null>(null);
   const [editingConflict, setEditingConflict] = useState<string | null>(null);
   const [customResolution, setCustomResolution] = useState("");
+  // Inline failure states (v1.2): conflicts and leave-study no longer alert.
+  const [conflictError, setConflictError] = useState<string | null>(null);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!showSyncSheet) {
@@ -207,6 +210,7 @@ export function SyncSheet() {
   ) {
     if (resolvingConflict) return;
     setResolvingConflict(conflict.id);
+    setConflictError(null);
     try {
       const customValue = resolution === "custom" ? customResolutionValue(conflict) : undefined;
       await api.syncV2ResolveConflict(conflict.id, resolution, customValue);
@@ -214,8 +218,12 @@ export function SyncSheet() {
       setCustomResolution("");
       await syncNow();
       await Promise.all([refreshConflicts(), refreshStatus()]);
-    } catch (e) {
-      alert(`Could not resolve this conflict: ${String(e)}`);
+    } catch {
+      // Non-blocking inline recovery: the sheet stays open with the conflict
+      // row still resolvable; raw transport strings stay out of the UI.
+      setConflictError(
+        "This conflict could not be resolved just now. Check your connection and try again — nothing was lost.",
+      );
     } finally {
       setResolvingConflict(null);
     }
@@ -223,26 +231,36 @@ export function SyncSheet() {
 
   async function confirmRemoveMember(m: GroupMember) {
     if (!m.userId) return;
-    const ok = await confirm(
-      `${m.coderName}'s ${m.codedCount} coded segment${m.codedCount === 1 ? "" : "s"} stay in the study under their name. They lose access to the study.`,
-      { title: `Remove ${m.coderName}?`, kind: "warning" },
-    );
+    const ok = await appConfirm({
+      title: `Remove ${m.coderName}?`,
+      body: `${m.coderName}'s ${m.codedCount} coded segment${m.codedCount === 1 ? "" : "s"} stay in the study under their name. They lose access to the study.`,
+      confirmLabel: `Remove ${m.coderName}`,
+      cancelLabel: "Keep member",
+      destructive: true,
+      dedupeKey: "remove-member",
+    });
     if (!ok) return;
     await removeMember(m.userId);
   }
 
   async function handleLeaveStudy() {
-    const ok = await confirm(
-      "Leave this study? Your coding and membership on the server will be removed. Transcripts on your computer are untouched.",
-      { title: "Leave study?", kind: "warning" },
-    );
+    const ok = await appConfirm({
+      title: "Leave study?",
+      body: "Your coding and membership on the server will be removed. Transcripts on your computer are untouched.",
+      confirmLabel: "Leave study",
+      cancelLabel: "Stay",
+      destructive: true,
+      dedupeKey: "leave-study",
+    });
     if (!ok) return;
     try {
       await api.syncLeaveGroup();
       closeSyncSheet();
       await refreshStatus();
-    } catch (e) {
-      alert(`Could not leave study: ${String(e)}`);
+    } catch {
+      setLeaveError(
+        "Could not leave the study right now. Your work is safe on this computer — try again.",
+      );
     }
   }
 
@@ -309,10 +327,14 @@ export function SyncSheet() {
   }
 
   async function confirmResetKey() {
-    const ok = await confirm(
-      "Mint a fresh study key? The old key will stop working. Coders already in the study stay in.",
-      { title: "Reset study key?", kind: "warning" },
-    );
+    const ok = await appConfirm({
+      title: "Reset study key?",
+      body: "Mint a fresh study key? The old key will stop working. Coders already in the study stay in.",
+      confirmLabel: "Reset key",
+      cancelLabel: "Keep key",
+      destructive: true,
+      dedupeKey: "reset-key",
+    });
     if (!ok) return;
     await resetGroupKey();
   }
@@ -386,7 +408,10 @@ export function SyncSheet() {
           style={{ background: "var(--danger-soft)", color: "var(--danger)" }}
           role="alert"
         >
-          {error}
+          {error.toLowerCase().includes("connection refused") ||
+          error.toLowerCase().includes("error sending request")
+            ? "Could not reach the sync server. Changes are saved locally on this computer; syncing will resume when reconnected."
+            : error}
         </div>
       )}
 
@@ -881,6 +906,18 @@ export function SyncSheet() {
           <p className="hint mb-3">
             The current study value remains in use until someone chooses a resolution.
           </p>
+          {conflictError && (
+            <div role="status" className="notice notice-warn mb-3">
+              {conflictError}
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm ml-2"
+                onClick={() => setConflictError(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           <div className="flex flex-col gap-3">
             {conflicts.map((conflict) => {
               const isEditing = editingConflict === conflict.id;
@@ -1012,6 +1049,18 @@ export function SyncSheet() {
 
       {signedIn && inGroup && !isGroupAdmin && (
         <div className="mt-6 border-t pt-4 text-center">
+          {leaveError && (
+            <div role="status" className="notice notice-warn mb-2">
+              {leaveError}
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm ml-2"
+                onClick={() => setLeaveError(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => void handleLeaveStudy()}

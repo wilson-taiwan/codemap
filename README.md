@@ -13,7 +13,7 @@ Built with **Tauri v2**, **React 19**, **TypeScript**, **Tailwind CSS**, and **S
 - **Offline-First Privacy**: Project data is stored in a local SQLite database (`.codemap`). Transcripts and private memos never leave your local machine without your explicit action.
 - **Span & Whole-Turn Coding**: Drag across words to highlight a specific phrase or click a passage to code the whole turn.
 - **Living Codebook**: Create, merge, split, recode, color-code, and organize codes hierarchically. Click any code to inspect all associated passages.
-- **Collaborative Sync (Optional)**: Connect via self-hosted or managed Supabase using Sync Protocol v2. Coding decisions, codebook structure, and memberships synchronize as opaque references without transmitting transcript content. Sync on the hosted service is **free during the beta**; once the beta ends it will require a subscription, while offline/local coding stays free forever and people who join during the beta keep founder pricing. (Self-hosting your own Supabase is always free.)
+- **Collaborative Sync (Optional)**: Connect via self-hosted or managed Supabase using Sync Protocol v2. Coded spans, codebook structure, memberships, and your de-identified labels sync over encrypted transport; transcript text and memos never do. Sync on the hosted service is **free during the beta**; once the beta ends it will require a subscription, while offline/local coding stays free forever and people who join during the beta keep founder pricing. (Self-hosting your own Supabase is always free.)
 - **Multi-Format Import**: Native parsing for WebVTT, SRT, plain text with speaker labels, Microsoft Word (`.docx`), and CSV transcripts.
 - **Rich Exports**: Export your project to structured CSV datasets, formatted Markdown, standalone HTML summaries, and DOCX reports.
 - **Native Experience**: Native desktop app for macOS (Universal / Apple Silicon & Intel) and Windows 10/11.
@@ -24,10 +24,16 @@ Built with **Tauri v2**, **React 19**, **TypeScript**, **Tailwind CSS**, and **S
 
 ### Installation
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/wilson-taiwan/codemap/releases/latest):
+Downloads live only on the [official Releases page](https://github.com/wilson-taiwan/codemap/releases/latest). Full step-by-step guidance — including the **expected first-launch warnings** for unsigned-but-official builds and the "stop here" signals — lives in [docs/INSTALLING.md](docs/INSTALLING.md):
 
-- **macOS**: Download `Codemap-*-mac.dmg`, open the disk image, and drag **Codemap** into your **Applications** folder.
-- **Windows**: Download `Codemap_*_x64-setup.exe` and run the installer.
+> Codemap is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at `https://github.com/wilson-taiwan/codemap/releases`. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.
+
+| Platform | File |
+| --- | --- |
+| macOS (Intel + Apple Silicon) | `Codemap_1.2.0_universal.dmg` |
+| Windows 11 x64 | `Codemap_1.2.0_x64-setup.exe` |
+
+New studies default to a local working library (`~/Codemap` / `%USERPROFILE%\Codemap`). Windows installs per-user with no administrator prompt; macOS uses System Settings → Privacy & Security → Open Anyway once.
 
 For detailed usage instructions and workflow tips, see the [User Guide](docs/USER-GUIDE.md).
 
@@ -55,8 +61,9 @@ Project Folder (my-study.codemap/)
 └── exports/           # Generated CSV, Markdown, HTML, and DOCX exports
 ```
 
-- **Local-First Boundary**: Transcripts, participant identifiers, and personal memos reside solely in local storage.
-- **Sync Protocol v2**: When cloud synchronization is enabled, only deterministic segment hashes, code definitions, and coder attribution timestamps cross the wire.
+- **Local-First Boundary**: Transcript files/text, verbatim quotes, filenames, and all memos stay on this computer. Always.
+- **Sync Protocol v2**: Collaboration syncs account email + study/codebook/coding metadata over encrypted HTTPS/WSS — including codebook definitions, criteria, and examples and your de-identified study/participant labels. Author them de-identified from the start. The exact field table lives in [docs/PRIVACY-AND-PERMISSIONS.md](docs/PRIVACY-AND-PERMISSIONS.md).
+- **No compliance promises**: Codemap can support a protocol; it does not certify anything.
 
 ---
 

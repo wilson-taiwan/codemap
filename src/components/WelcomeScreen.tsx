@@ -3,7 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { pickProjectPath } from "../lib/open-project";
 import { useGuideStore } from "../store/guide-store";
-import { useAppStore } from "../store/app-store";
+import { useAppStore, onboardingChoiceSeen } from "../store/app-store";
 import { useProjectStore } from "../store/project-store";
 import { useSyncStore } from "../store/sync-store";
 import { api } from "../lib/api";
@@ -15,6 +15,7 @@ import { Icon, type IconName } from "./ui/Icon";
 import { Modal } from "./ui/Surfaces";
 import { ContextMenuHost, openContextMenu } from "./ui/ContextMenu";
 import { AccountForm } from "./AccountForm";
+import { CollaborationDisclosure } from "./CollaborationDisclosure";
 import { UpdateAction } from "./UpdateAction";
 
 export function WelcomeScreen() {
@@ -37,6 +38,19 @@ export function WelcomeScreen() {
   const initialized = useAppStore((s) => s.initialized);
   const preferences = useAppStore((s) => s.preferences);
   const setSigninPromptSeen = useAppStore((s) => s.setSigninPromptSeen);
+  const setOnboardingChoiceSeen = useAppStore((s) => s.setOnboardingChoiceSeen);
+
+  // First-run UI waits for BOTH app preferences and the silent session
+  // restore; deciding earlier flashes the choice at returning signed-in users.
+  const sessionRestoreComplete = useSyncStore((s) => s.sessionRestoreComplete);
+
+  /**
+   * Intent-first onboarding (v1.2): local-first or collaborate. `step`
+   * advances only inside the collaboration path; Back returns to cards.
+   */
+  const [onboardingStep, setOnboardingStep] = useState<
+    "choice" | "disclosure" | "account"
+  >("choice");
 
   const signedIn = useSyncStore((s) => s.status?.signedIn ?? false);
   const signedInEmail = useSyncStore((s) => s.status?.signedInEmail);
@@ -237,11 +251,15 @@ export function WelcomeScreen() {
     }
   }
 
-  // First-run sign-in gate (Task 6)
-  const showFirstRunSignIn =
-    initialized && !preferences.signin_prompt_seen && !signedIn;
+  // First-run intent choice (v1.2). Migration truth table lives in
+  // app-store.ts (`onboardingChoiceSeen`) so it is unit-testable.
+  const showFirstRunChoice =
+    initialized &&
+    sessionRestoreComplete &&
+    !onboardingChoiceSeen(preferences) &&
+    !signedIn;
 
-  if (showFirstRunSignIn) {
+  if (showFirstRunChoice) {
     return (
       <div className="flex h-screen flex-col">
         {/* The only thing that moves the window on this screen. macOS hides the
@@ -260,27 +278,109 @@ export function WelcomeScreen() {
             <header className="anim-rise flex flex-col items-center text-center">
               <Mark />
               <h1 className="wordmark mt-4 text-[28px]">Welcome to Codemap</h1>
-              <p className="hint mt-2 text-[13px]">
-                Sign in to see and sync your collaborative studies.
+              <p className="hint mt-2 max-w-sm text-[13px]">
+                How do you want to work? You can change your mind at any time.
               </p>
             </header>
-            <div className="anim-rise mt-6 w-full rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
-              <AccountForm
-                idPrefix="firstrun"
-                autoFocus
-                onSignedIn={() => {
-                  void setSigninPromptSeen(true);
-                  void loadData();
-                }}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => void setSigninPromptSeen(true)}
-              className="btn btn-ghost mt-4 text-[13px]"
-            >
-              Use Codemap on my own
-            </button>
+
+            {onboardingStep === "choice" && (
+              <div className="anim-rise mt-8 flex w-full flex-col gap-4">
+                {/* Work locally — recommended, primary, one choice, no account. */}
+                <button
+                  type="button"
+                  onClick={() => void setOnboardingChoiceSeen(true)}
+                  disabled={loading}
+                  className="w-full rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-5 text-left shadow-sm transition-colors hover:bg-[var(--fill)]"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Icon name="layers" size={18} />
+                    <span className="text-[15px] font-semibold">Work locally</span>
+                    <span
+                      className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-medium"
+                      style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+                    >
+                      Recommended
+                    </span>
+                  </span>
+                  <span className="mt-2 block text-[13px]" style={{ color: "var(--ink-2)" }}>
+                    No account. Create, code, memo, and export on this computer.
+                    Codemap checks GitHub for updates unless you turn that off.
+                  </span>
+                </button>
+
+                {/* Collaborate — secondary; account UI only after the disclosure. */}
+                <button
+                  type="button"
+                  onClick={() => setOnboardingStep("disclosure")}
+                  className="w-full rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-5 text-left transition-colors hover:bg-[var(--fill)]"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Icon name="people" size={18} />
+                    <span className="text-[15px] font-semibold">
+                      Collaborate with a team
+                    </span>
+                  </span>
+                  <span className="mt-2 block text-[13px]" style={{ color: "var(--ink-2)" }}>
+                    Sign in to see and sync shared studies with colleagues.
+                  </span>
+                </button>
+
+                {/* Non-blocking trust link: the user already passed the OS
+                    warning, so no full warning repeat lives here. */}
+                <button
+                  type="button"
+                  onClick={() => useAppStore.getState().openTrustCenter()}
+                  className="btn btn-ghost mt-2 self-center gap-1.5 text-[12.5px]"
+                >
+                  <Icon name="shield" size={13} />
+                  Trust, privacy &amp; permissions
+                </button>
+              </div>
+            )}
+
+            {onboardingStep === "disclosure" && (
+              <div className="anim-rise mt-8 w-full rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
+                <h2 className="text-[15px] font-semibold">Collaborate with a team</h2>
+                <CollaborationDisclosure className="mt-3" />
+                <div className="mt-4 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingStep("account")}
+                    className="btn btn-primary"
+                  >
+                    Continue to account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingStep("choice")}
+                    className="btn btn-ghost"
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === "account" && (
+              <div className="anim-rise mt-8 w-full rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
+                <AccountForm
+                  idPrefix="firstrun"
+                  autoFocus
+                  onSignedIn={() => {
+                    void setOnboardingChoiceSeen(true);
+                    void setSigninPromptSeen(true);
+                    void loadData();
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setOnboardingStep("choice")}
+                  className="btn btn-ghost mt-3"
+                >
+                  Back
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -339,6 +439,15 @@ export function WelcomeScreen() {
         )}
         <button
           type="button"
+          onClick={() => useAppStore.getState().openTrustCenter()}
+          className="btn btn-ghost btn-sm"
+          aria-label="Trust & permissions"
+          title="Trust & permissions"
+        >
+          <Icon name="shield" size={14} />
+        </button>
+        <button
+          type="button"
           onClick={openSettings}
           className="btn btn-ghost btn-sm"
           aria-label="Settings"
@@ -387,45 +496,31 @@ export function WelcomeScreen() {
           )}
 
           {isEmpty ? (
-            /* Empty state: full-size cards with join first and primary (Task 8 & 7) */
+            /* Empty state: intent-first ordering — local start is primary,
+               join is secondary, open remains third. */
             <div className="anim-rise mt-8 flex w-full flex-col gap-2.5">
-              {["join", "new", "open"].map((card) => {
-                if (card === "new") {
-                  return (
-                    <HomeCard
-                      key="new"
-                      icon="plus"
-                      disabled={loading}
-                      onClick={() => openSetup()}
-                      title="Set up a new study"
-                      subtitle="Only if you are the one starting it — if a colleague sent you a code, join above"
-                    />
-                  );
-                }
-                if (card === "open") {
-                  return (
-                    <HomeCard
-                      key="open"
-                      icon="folder"
-                      disabled={loading}
-                      onClick={handleOpen}
-                      title={loading ? "Opening…" : "Open an existing study"}
-                      subtitle="A .codemap or .qcproj folder on this computer"
-                    />
-                  );
-                }
-                return (
-                  <HomeCard
-                    key="join"
-                    icon="people"
-                    primary
-                    disabled={loading}
-                    onClick={openJoinStudy}
-                    title="Join a study"
-                    subtitle="A colleague started one and sent you its key"
-                  />
-                );
-              })}
+              <HomeCard
+                icon="plus"
+                primary
+                disabled={loading}
+                onClick={() => openSetup()}
+                title="Start a local study"
+                subtitle="No account needed — you can collaborate later"
+              />
+              <HomeCard
+                icon="people"
+                disabled={loading}
+                onClick={openJoinStudy}
+                title="Join a collaborative study"
+                subtitle="A colleague started one and sent you its key"
+              />
+              <HomeCard
+                icon="folder"
+                disabled={loading}
+                onClick={handleOpen}
+                title="Open an existing study"
+                subtitle="A .codemap or .qcproj folder on this computer"
+              />
             </div>
           ) : (
             /* Non-empty state: Compact actions row + single unified Studies section (Task 12) */

@@ -78,11 +78,11 @@ On a grouped project the toolbar shows the name you confirmed when you joined �
 2. You both create the interview with **the same study label** and import that same file.
 3. Sync runs when coding pauses, on window blur, and on a slow pull cycle. **Sync now** in **Group & sync…** forces a run.
 
-What crosses the network: which passage, which codes, which coder — as opaque ids. **No transcript text, no memos, no participant labels.** Passage ids are derived from transcript content, so two people importing the same file independently produce identical ids.
+What crosses the network when you collaborate: which passage, which codes, which coder — coded-span references plus your de-identified study/participant label, interview segment counts, and content hashes. **No transcript text, no memos, no file paths.** Segment hashes are derived from transcript content, so two people importing the same file independently produce identical hashes.
 
 Two people coding the same passage produce two records. In reflexive TA that divergence is data. There is no lock and no taking turns. One person on two machines merges; it does not 409 forever.
 
-Code names, definitions, colours, and retire/restore decisions sync. Inclusion and exclusion criteria, examples, and all memos stay local. Coding *decisions* travel as opaque ids; transcripts never do.
+Every codebook field syncs word-for-word: names, definitions, colours, inclusion/exclusion criteria, examples, hierarchy, retire/restore state. Memos stay local. Because criteria and examples are synced verbatim, author them de-identified from the start. Coding *decisions* travel as coded-span references; transcript text never does.
 
 **Forgot password?** Settings (or Join a group if unsigned) → **I already have one** → **Forgot password?** Type the short code from the email.
 
@@ -123,7 +123,8 @@ Code names, definitions, colours, and retire/restore decisions sync. Inclusion a
 | Problem | What to do |
 |---------|------------|
 | macOS blocks the app | System Settings → Privacy & Security → Open Anyway (first time) |
-| Windows SmartScreen | Properties → Unblock on the installer, or More info → Run anyway |
+| Windows SmartScreen | Confirm you downloaded from the official releases page, then **More info** → **Run anyway**. Never use file Properties to unblock anything |
+| macOS says “damaged” or malware | Stop — that is not the ordinary warning. Delete and re-download from the official page; file an install issue if it repeats |
 | Forgot password | Settings → I already have one → Forgot password? Type the short code from the email |
 | Teammate's codes missing | Open **Group & sync…** → **Sync now**. You must be signed in. |
 | Chip says "3 to send" | Coding is already saved here; that count has not reached the group yet |

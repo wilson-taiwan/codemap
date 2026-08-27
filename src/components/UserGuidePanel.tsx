@@ -5,6 +5,7 @@ import {
   type GuideSection,
 } from "../content/user-guide";
 import { useGuideStore } from "../store/guide-store";
+import { useAppStore } from "../store/app-store";
 import { SideSheet } from "./ui/Surfaces";
 import { Icon } from "./ui/Icon";
 
@@ -62,6 +63,17 @@ export function UserGuidePanel() {
             className="field pl-8"
           />
         </label>
+        <button
+          type="button"
+          onClick={() => {
+            closeGuide();
+            useAppStore.getState().openTrustCenter();
+          }}
+          className="btn btn-outline btn-sm mt-2.5 w-full gap-1.5"
+        >
+          <Icon name="shield" size={13} />
+          Trust &amp; permissions
+        </button>
       </div>
 
       <div className="flex min-h-0 flex-1">

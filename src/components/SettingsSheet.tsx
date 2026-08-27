@@ -4,6 +4,8 @@ import { useSyncStore } from "../store/sync-store";
 import { SideSheet } from "./ui/Surfaces";
 import { AccountForm } from "./AccountForm";
 import { api } from "../lib/api";
+import { isMac } from "../lib/platform";
+import { STORED_SIGN_IN, CRASH_LOG_CAUTION, OFFICIAL_URLS } from "../content/trust-and-permissions";
 import { UpdateStatus } from "./UpdateAction";
 
 const THEMES: { value: ThemePreference; label: string }[] = [
@@ -28,10 +30,17 @@ export function SettingsSheet() {
     (s) => s.preferences.merge_same_speaker,
   );
   const coachDismissed = useAppStore((s) => s.preferences.coach_dismissed);
+  const automaticUpdateChecks =
+    useAppStore((s) => s.preferences.automatic_update_checks) !== false;
   const setTheme = useAppStore((s) => s.setTheme);
   const setReopenLast = useAppStore((s) => s.setReopenLastProject);
   const setMergeSameSpeaker = useAppStore((s) => s.setMergeSameSpeaker);
   const setCoachDismissed = useAppStore((s) => s.setCoachDismissed);
+  const setAutomaticUpdateChecks = useAppStore(
+    (s) => s.setAutomaticUpdateChecks,
+  );
+  const openTrustCenterSection = useAppStore((s) => s.openTrustCenter);
+  const closeSettingsSheet = useAppStore((s) => s.closeSettings);
   const inGroup = useSyncStore((s) => s.status?.inGroup ?? false);
   const signedIn = useSyncStore((s) => s.status?.signedIn ?? false);
   const signedInEmail = useSyncStore((s) => s.status?.signedInEmail);
@@ -85,6 +94,11 @@ export function SettingsSheet() {
                 . A sign-in token stays in this machine's keychain so you do
                 not re-enter the password every launch. The password itself is
                 never stored.
+              </p>
+              <p className="hint mt-2">
+                {isMac
+                  ? STORED_SIGN_IN.macos
+                  : STORED_SIGN_IN.windows}
               </p>
               <button
                 type="button"
@@ -143,8 +157,8 @@ export function SettingsSheet() {
             })}
           </div>
           <p className="hint mt-2">
-            System follows macOS. Light is the default — transcripts are
-            long-form reading.
+            System follows your operating system. Light is the default —
+            transcripts are long-form reading.
           </p>
         </section>
 
@@ -214,9 +228,28 @@ export function SettingsSheet() {
 
         <UpdateStatus />
 
+        {/* Quiet-update toggle: turning it off stops startup and interval
+            checks entirely. Manual checks always remain available. */}
         <section>
-          <h3 className="eyebrow">Support & Diagnostics</h3>
-          <div className="mt-3 flex items-center gap-3">
+          <h3 className="eyebrow">Update checks</h3>
+          <label className="mt-3 flex items-start gap-3 text-[13px]">
+            <input
+              type="checkbox"
+              checked={automaticUpdateChecks}
+              onChange={(e) => void setAutomaticUpdateChecks(e.target.checked)}
+            />
+            <span>
+              Automatically check GitHub for updates
+              <span className="hint mt-1 block">
+                Checks quietly. Codemap asks before downloading or installing.
+              </span>
+            </span>
+          </label>
+        </section>
+
+        <section>
+          <h3 className="eyebrow">Support &amp; Diagnostics</h3>
+          <div className="mt-3 flex items-center gap-2">
             <button
               type="button"
               className="btn btn-outline btn-sm"
@@ -230,8 +263,23 @@ export function SettingsSheet() {
               </span>
             )}
           </div>
+          <p className="hint mt-2">{CRASH_LOG_CAUTION}</p>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm mt-3 gap-1.5"
+            onClick={() => {
+              closeSettingsSheet();
+              openTrustCenterSection();
+            }}
+          >
+            Trust &amp; permissions
+          </button>
           <p className="hint mt-2">
-            Crash logs are stored locally on this machine and contain no participant data or credentials.
+            Install trouble, security questions, or reporting a vulnerability:{" "}
+            <a href={OFFICIAL_URLS.support} target="_blank" rel="noreferrer" className="underline">
+              support &amp; security channels
+            </a>
+            .
           </p>
         </section>
       </div>

@@ -47,8 +47,16 @@ export function useAppInit() {
 
   useEffect(() => {
     if (import.meta.env.DEV) return;
-    void checkForUpdate();
-    const timer = window.setInterval(() => void checkForUpdate(), UPDATE_CHECK_INTERVAL_MS);
+    // Quiet checks (default on) run at startup and every 4h. They are
+    // silent in both success and failure — an available update stays
+    // visible; nothing else surfaces. Manual failure is the actionable one.
+    const autoChecksEnabled = () =>
+      useAppStore.getState().preferences.automatic_update_checks !== false;
+    if (!autoChecksEnabled()) return;
+    void checkForUpdate(false);
+    const timer = window.setInterval(() => {
+      if (autoChecksEnabled()) void checkForUpdate(false);
+    }, UPDATE_CHECK_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [checkForUpdate]);
 

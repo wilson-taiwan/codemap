@@ -1,4 +1,3 @@
-import { useShallow } from "zustand/react/shallow";
 import { formatBytes, formatRelativeTime } from "../lib/format";
 import type { UpdateCoordinatorStatus } from "../lib/types";
 import { useUpdateStore } from "../store/update-store";
@@ -89,6 +88,25 @@ export function describeUpdateAction(
   }
 }
 
+/**
+ * Background checks stay silent: a `failed` phase reached without the user
+ * asking renders as ordinary idle instead of an error banner/dot. Any later
+ * interactive action re-arms visibility for real.
+ */
+function useEffectiveUpdateStatus(): UpdateCoordinatorStatus | null {
+  const status = useUpdateStore((s) => s.status);
+  const lastCheckInteractive = useUpdateStore((s) => s.lastCheckInteractive);
+  const manualCheckFailed = useUpdateStore((s) => s.manualCheckFailed);
+  if (
+    status?.phase === "failed" &&
+    !lastCheckInteractive &&
+    !manualCheckFailed
+  ) {
+    return null;
+  }
+  return status;
+}
+
 interface UpdateActionProps {
   /** Keep an icon affordance in narrow top chrome while hiding only its text. */
   compact?: boolean;
@@ -96,12 +114,8 @@ interface UpdateActionProps {
 }
 
 export function UpdateAction({ compact = false, className = "" }: UpdateActionProps) {
-  const { status, runPrimaryAction } = useUpdateStore(
-    useShallow((state) => ({
-      status: state.status,
-      runPrimaryAction: state.runPrimaryAction,
-    })),
-  );
+  const runPrimaryAction = useUpdateStore((s) => s.runPrimaryAction);
+  const status = useEffectiveUpdateStatus();
   const copy = describeUpdateAction(status);
 
   return (
@@ -133,12 +147,8 @@ export function UpdateAction({ compact = false, className = "" }: UpdateActionPr
 
 /** Full updater detail for Settings, where version/recovery context matters. */
 export function UpdateStatus() {
-  const { status, runPrimaryAction } = useUpdateStore(
-    useShallow((state) => ({
-      status: state.status,
-      runPrimaryAction: state.runPrimaryAction,
-    })),
-  );
+  const runPrimaryAction = useUpdateStore((s) => s.runPrimaryAction);
+  const status = useEffectiveUpdateStatus();
   const copy = describeUpdateAction(status);
   const progress = status?.phase === "downloading" && status.totalBytes
     ? `${formatBytes(status.downloadedBytes)} of ${formatBytes(status.totalBytes)}`

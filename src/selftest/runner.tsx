@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { api } from "../lib/api";
 import { auditContrast } from "../lib/contrast-audit";
+import type { SegmentInput } from "../lib/types";
+import { useProjectStore } from "../store/project-store";
 
 interface SuiteResult {
   suite: string;
@@ -9,6 +11,29 @@ interface SuiteResult {
   status?: "passed" | "failed" | "skipped";
   error?: string;
   duration_ms?: number;
+}
+
+/** Every synthetic study files under this coder, mirroring selftest_seed. */
+const SELFTEST_CODER = "Ada Lovelace";
+
+/** Close the study, then remove its folder so no fixture data survives. */
+async function disposeStudy(path: string): Promise<void> {
+  try {
+    await api.closeProject();
+  } catch {
+    // Already closed is fine — the deletion below is what matters.
+  }
+  await api.deleteProjectFolder(path);
+}
+
+/** Seed a pristine disposable study (temp dir, seeded codes/interview/passage). */
+async function seedFreshStudy(suite: string): Promise<string> {
+  const res = await invoke<{ project_path: string }>("selftest_seed", { suite });
+  return res.project_path;
+}
+
+function assert(cond: unknown, message: string): asserts cond {
+  if (!cond) throw new Error(message);
 }
 
 export function SelftestRunner() {
@@ -126,12 +151,34 @@ export function SelftestRunner() {
       });
 
       // Suite 5: dark-mode-contrast
+      // The audit must own its input state. As shipped, the app inherits the
+      // shared profile: `data-theme="system"` follows the OS (which flips at
+      // dusk on macOS), and a crashed prior run can leave the onboarding
+      // wizard mounted. Measuring unsettled theme tokens — dark --ink on a
+      // light-painted ground still transitioning — reports 1.1:1 garbage that
+      // clears itself. Force dark, let two paints plus the token transitions
+      // finish, then measure; restore whatever was there afterwards.
       await runSuite("dark-mode-contrast", async () => {
-        const findings = auditContrast(document);
-        if (findings.length > 0) {
-          throw new Error(
-            `Found ${findings.length} contrast violations (expected 0): ${findings[0]?.selector}`,
+        const root = document.documentElement;
+        const priorTheme = root.getAttribute("data-theme");
+        root.setAttribute("data-theme", "dark");
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              setTimeout(() => resolve(), 150),
+            ),
           );
+        });
+        try {
+          const findings = auditContrast(document);
+          if (findings.length > 0) {
+            throw new Error(
+              `Found ${findings.length} contrast violations (expected 0): ${JSON.stringify(findings)}`,
+            );
+          }
+        } finally {
+          if (priorTheme == null) root.removeAttribute("data-theme");
+          else root.setAttribute("data-theme", priorTheme);
         }
       });
 
@@ -241,6 +288,293 @@ export function SelftestRunner() {
         },
         { allowSkip: true },
       );
+
+      // ── Core coding workflow coverage (E2E plan Task 2) ──────────────────
+      // Five suites drive the real backend through a complete coder journey
+      // against disposable seeded studies. Every suite cleans up in `finally`
+      // so a failure never leaves a "Selftest Study" folder behind.
+
+      // Suite 9: study-lifecycle
+      await runSuite("study-lifecycle", async () => {
+        const seedPath = await seedFreshStudy("study-lifecycle");
+        await disposeStudy(seedPath); // keep only this suite's own fixture
+        const parentDir = seedPath.replace(/[\\/][^\\/]+$/, "");
+        let projectPath = "";
+        try {
+          const created = await api.createProject({
+            parent_dir: parentDir,
+            project_name: `codemap_selftest_lc_${Date.now()}`,
+            title: "Selftest Study",
+            coders: [SELFTEST_CODER],
+          });
+          projectPath = created.path;
+
+          await api.openProject(projectPath);
+          await api.createInterview({
+            participant_label: "P01",
+            interviewers: [],
+          });
+          await api.closeProject();
+
+          // Persistence: what was written survives close/reopen.
+          const reopened = await api.openProject(projectPath);
+          assert(
+            reopened.project.title === "Selftest Study",
+            `reopen lost title: ${reopened.project.title}`,
+          );
+          assert(
+            reopened.interviews.some((i) => i.participant_label === "P01"),
+            "interview P01 did not survive close/reopen",
+          );
+        } finally {
+          if (projectPath) {
+            await disposeStudy(projectPath);
+          }
+          try {
+            await api.readTextFile(`${projectPath}/project.db`);
+            throw new Error("study folder still exists after delete");
+          } catch (e) {
+            if (e instanceof Error && e.message.includes("still exists")) throw e;
+          }
+        }
+      });
+
+      // Suite 10: transcript-import
+      await runSuite("transcript-import", async () => {
+        const path = await seedFreshStudy("transcript-import");
+        try {
+          await api.openProject(path);
+          const iv = await api.createInterview({
+            participant_label: "P02",
+            interviewers: [],
+          });
+          const segs: SegmentInput[] = [
+            {
+              speaker: "Participant",
+              timestamp_start: "00:00:01.000",
+              timestamp_end: "00:00:09.000",
+              text: "First synthetic passage about daily routines.",
+              section_tag: null,
+            },
+            {
+              speaker: "Interviewer",
+              timestamp_start: "00:00:10.000",
+              timestamp_end: null,
+              text: "Can you say more about the routines?",
+              section_tag: null,
+            },
+            {
+              speaker: "Participant",
+              timestamp_start: "00:00:12.000",
+              timestamp_end: "00:00:20.000",
+              text: "Second passage describing support networks.",
+              section_tag: null,
+            },
+          ];
+          await api.importSegments({ interview_id: iv.id, segments: segs });
+          const first = await api.getSegments(iv.id);
+          assert(first.length === segs.length, `expected ${segs.length} passages, got ${first.length}`);
+
+          // Content-derived ids: re-importing identical content must upsert to
+          // the SAME ids, not duplicate rows.
+          await api.importSegments({ interview_id: iv.id, segments: segs });
+          const second = await api.getSegments(iv.id);
+          assert(second.length === first.length, `re-import duplicated rows (${first.length} → ${second.length})`);
+          const idsMatch = first.map((s) => s.id).join(",") === second.map((s) => s.id).join(",");
+          assert(idsMatch, "passage ids changed across an identical re-import");
+          assert(second[0].speaker === segs[0].speaker, "speaker not persisted on import");
+        } finally {
+          await disposeStudy(path);
+        }
+      });
+
+      // Suite 11: coding-roundtrip (drives the STORE apply path so undo is real)
+      await runSuite("coding-roundtrip", async () => {
+        const path = await seedFreshStudy("coding-roundtrip");
+        try {
+          const store = useProjectStore.getState();
+          await store.openProject(path);
+
+          const seededSeg = useProjectStore.getState().segments.find((s) => s.id === "seg1");
+          assert(seededSeg, "seeded passage seg1 missing after open");
+
+          const spanText = "sample qualitative transcript";
+          const start = seededSeg.text.indexOf(spanText);
+          assert(start >= 0, `span phrase not found in seeded passage: ${seededSeg.text}`);
+          const end = start + spanText.length;
+
+          // Drive the real store action (not raw API): hydrate opened snapshot,
+          // point at the passage + span selection, then toggle the code on.
+          useProjectStore.setState({
+            activeInterviewId: "iv1",
+            selectedSegmentId: "seg1",
+            pendingSelection: { segmentId: "seg1", start, end, text: spanText },
+          });
+
+          const code = await api.createCode({ name: "Roundtrip Code", color: "#ef4444" });
+          useProjectStore.setState({ codes: [...useProjectStore.getState().codes, code] });
+
+          await useProjectStore.getState().toggleCodeOnTarget(code.id);
+
+          const applied = await api.listCodedSegments();
+          const row = applied.find(
+            (c) => c.segment_id === "seg1" && c.code_ids.includes(code.id),
+          );
+          assert(row, "applied code row not persisted");
+          assert(row.char_start === start && row.char_end === end, "span offsets not persisted verbatim");
+          assert(row.quote_text === spanText, `quote_text should be the span, got "${row.quote_text}"`);
+
+          await useProjectStore.getState().undoLastCoding();
+
+          const afterUndo = (await api.listCodedSegments()).filter(
+            (c) => c.segment_id === "seg1" && c.coder_name === SELFTEST_CODER,
+          );
+          assert(
+            !afterUndo.some((c) => c.code_ids.includes(code.id)),
+            "undo left the code applied",
+          );
+        } finally {
+          await disposeStudy(path);
+        }
+      });
+
+      // Suite 12: export-artifacts
+      await runSuite("export-artifacts", async () => {
+        const path = await seedFreshStudy("export-artifacts");
+        try {
+          await api.openProject(path);
+
+          // A crafted interview whose ALPHA span is coded while OMEGA stays
+          // uncoded — the export must carry the phrase, never the whole turn.
+          const iv = await api.createInterview({
+            participant_label: "P03",
+            interviewers: [],
+          });
+          const omegaTail = "Omega trailing words that must never surface alone.";
+          const alphaSpan = "Alpha probe phrase";
+          await api.importSegments({
+            interview_id: iv.id,
+            segments: [
+              {
+                speaker: "Participant",
+                timestamp_start: "00:00:01.000",
+                timestamp_end: "00:00:05.000",
+                text: `${alphaSpan} sits inside this turn. ${omegaTail}`,
+                section_tag: null,
+              },
+            ],
+          });
+          const imported = await api.getSegments(iv.id);
+          const start = imported[0].text.indexOf(alphaSpan);
+          const end = start + alphaSpan.length;
+          await api.ensureCodeAndApply({
+            name: "Export Probe Code",
+            color: "#0ea5e9",
+            interview_id: iv.id,
+            segment_id: imported[0].id,
+            coder_name: SELFTEST_CODER,
+            char_start: start,
+            char_end: end,
+          });
+
+          const result = await api.exportWithConfig(
+            path,
+            {
+              preset: "custom",
+              items: ["report-html", "coded-segments"],
+              includeParticipantScope: "all",
+              includeCoderScope: "all",
+            },
+            "<!DOCTYPE html><html><body><h1>Selftest Export Report</h1></body></html>",
+            null,
+            SELFTEST_CODER,
+          );
+
+          const html = result.files.find((f) => f.endsWith("/report.html"));
+          const csv = result.files.find((f) => f.endsWith("/coded-segments.csv"));
+          assert(html, `report.html missing from export files: ${result.files.join(", ")}`);
+          assert(csv, `coded-segments.csv missing from export files: ${result.files.join(", ")}`);
+          assert(result.coded_segment_count >= 1, "export recorded zero coded segments");
+
+          const htmlBody = await api.readTextFile(html);
+          assert(htmlBody.includes("Selftest Export Report"), "report.html is empty/wrong");
+          const csvBody = await api.readTextFile(csv);
+          assert(csvBody.includes(alphaSpan), "csv quote cell does not carry the coded phrase");
+          assert(!csvBody.includes("Omega trailing"), "csv leaked whole-turn text instead of the span");
+        } finally {
+          await disposeStudy(path);
+        }
+      });
+
+      // Suite 13: backup-restore
+      await runSuite("backup-restore", async () => {
+        const path = await seedFreshStudy("backup-restore");
+        try {
+          await api.openProject(path);
+          const iv = await api.createInterview({
+            participant_label: "P04",
+            interviewers: [],
+          });
+          await api.importSegments({
+            interview_id: iv.id,
+            segments: [
+              {
+                speaker: "Participant",
+                timestamp_start: "00:00:01.000",
+                timestamp_end: null,
+                text: "Baseline passage captured before any coding.",
+                section_tag: null,
+              },
+            ],
+          });
+          const seg = (await api.getSegments(iv.id))[0];
+          const baseline = await api.ensureCodeAndApply({
+            name: "Backup Baseline Code",
+            color: "#22c55e",
+            interview_id: iv.id,
+            segment_id: seg.id,
+            coder_name: SELFTEST_CODER,
+          });
+
+          const info = await api.createBackup("selftest backup-restore");
+          assert(info.reason === "manual", `backup reason: ${info.reason}`);
+
+          // Mutate AFTER the snapshot. A distinct span (not whole-segment)
+          // guarantees a second row rather than an upsert of the baseline.
+          const text = seg.text;
+          await api.ensureCodeAndApply({
+            name: "Post-Backup Mutation Code",
+            color: "#f97316",
+            interview_id: iv.id,
+            segment_id: seg.id,
+            coder_name: SELFTEST_CODER,
+            char_start: 0,
+            char_end: Math.min(8, text.length),
+          });
+          const mutated = await api.listCodedSegments();
+          assert(mutated.length >= 2, "mutation before restore did not add a row");
+
+          const outcome = await api.restoreBackup(info.path);
+          assert(outcome.restored.coded_segments >= 1, "restored snapshot reports no coded segments");
+          assert(!!outcome.safety_backup_path, "pre-restore safety snapshot missing");
+
+          // Everything the store held is stale after restore — reload cold.
+          await api.openProject(path);
+          const restoredRows = await api.listCodedSegments();
+          assert(restoredRows.length === 1, `expected exactly the baseline row after restore, got ${restoredRows.length}`);
+          assert(
+            restoredRows[0].code_ids.includes(baseline.coded_segment.code_ids[0]),
+            "baseline code id changed across restore",
+          );
+
+          await api.deleteBackup(outcome.safety_backup_path);
+        } finally {
+          // Backups live inside the project folder, so disposing the study
+          // removes the snapshot, the pre-restore safety copy, and the export
+          // directories together.
+          await disposeStudy(path);
+        }
+      });
 
       setDone(true);
 

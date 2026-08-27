@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useProjectStore } from "../store/project-store";
 import { useAppStore } from "../store/app-store";
+import { appConfirm } from "../store/confirm-store";
 import { formatTimestampDisplay } from "../lib/vtt-parser";
 import { basename } from "../lib/format";
 import { NewInterviewModal } from "./NewInterviewModal";
@@ -460,9 +461,16 @@ export function TranscriptPanel() {
             parts.push(`${impact.coded_segment_count} coded`);
           if (impact.has_hub_memo) parts.push("analytic memo");
           const summary = parts.length > 0 ? ` (${parts.join(", ")})` : "";
-          const ok = window.confirm(
-            `Delete "${interview.participant_label}"${summary}? This cannot be undone.`,
-          );
+          const ok = await appConfirm({
+            title: `Delete “${interview.participant_label}”?`,
+            body: summary
+              ? `This removes ${summary.replace(/^\(|\)$/g, "")} from this study. This cannot be undone.`
+              : "This interview will be removed from this study. This cannot be undone.",
+            confirmLabel: "Delete interview",
+            cancelLabel: "Keep interview",
+            destructive: true,
+            dedupeKey: `delete-interview-${interview.id}`,
+          });
           if (ok) {
             await deleteInterview(interview.id);
             showStatus(`Deleted "${interview.participant_label}".`);

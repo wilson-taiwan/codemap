@@ -182,7 +182,15 @@ pub fn create(
     // Placed inside the backups folder rather than a temp dir so the copy never
     // crosses a filesystem boundary — a cross-device rename would fail, and a
     // study database on an external disk is an ordinary setup.
-    let staged_db = dir.join(format!(".staging-{stamp}.db"));
+    //
+    // The uuid suffix makes the staging name unique per invocation. Opening a
+    // project spawns an automatic backup on a detached thread (commands.rs),
+    // so two creates can legitimately run at once; a seconds-only stamp let
+    // one thread's cleanup delete the other's snapshot mid-write.
+    let staged_db = dir.join(format!(
+        ".staging-{stamp}-{}.db",
+        uuid::Uuid::new_v4().simple()
+    ));
     let _ = fs::remove_file(&staged_db);
 
     conn.execute("VACUUM INTO ?1", [staged_db.to_string_lossy().as_ref()])

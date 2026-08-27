@@ -5,9 +5,13 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: macos-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -27,8 +31,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Fail closed: a tag push is the only trigger, but prove the ref is a
-      # version tag and matches the manifest version before any build runs.
+      # Fail closed: prove the ref is a version tag matching the manifest.
       - name: Refuse non-tag refs
         run: |
           test "${{ github.ref }}" = "refs/tags/${{ github.ref_name }}" \
@@ -42,13 +45,18 @@ jobs:
 
       - name: Validate workflow YAML syntax
         run: |
-          ruby -e 'require "yaml"; YAML.load_file(ARGV.fetch(0))' .github/workflows/test.yml
-          ruby -e 'require "yaml"; YAML.load_file(ARGV.fetch(0))' .github/workflows/release.yml
+          ruby -e 'require "yaml"; %w[.github/workflows/test.yml .github/workflows/test-e2e.yml .github/workflows/candidate.yml .github/workflows/release.yml].each { |f| YAML.load_file(f) }'
+
+      - name: Release-contract assertions (+ negative mutations)
+        run: node --test scripts/release-contract.test.mjs
+
+      - name: Pre-tag smoke state
+        run: node scripts/verify-release-smoke.mjs --pre-tag RELEASE-SMOKE.md
 
       - name: Static migration gate
         run: bash scripts/verify-supabase-migrations.sh
 
-      - name: Migration verifier self-check (negative fixtures)
+      - name: Migration verifier self-check
         run: bash scripts/verify-supabase-migrations.test.sh
 
       - name: TypeScript typecheck
@@ -60,6 +68,11 @@ jobs:
       - name: Frontend build
         run: npm run build
 
+      - name: Playwright suite
+        run: |
+          npx playwright install chromium --with-deps
+          npm run test:e2e
+
       - name: Rust format
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 
@@ -69,14 +82,8 @@ jobs:
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      # This job performs no database mutation of any kind: database push,
-      # migration repair, bootstrap, or similar are forbidden on the release
-      # path. Production schema changes are applied manually and reviewed.
-
-  release:
+  build-draft-assets:
     needs: validate
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -86,6 +93,13 @@ jobs:
           - platform: "windows-latest"
             target: "x86_64-pc-windows-msvc"
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 50
+    env:
+      CODEMAP_BUILD_COMMIT: ${{ github.sha }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      CODEMAP_SYNC_URL: ${{ secrets.CODEMAP_SYNC_URL }}
+      CODEMAP_SYNC_ANON_KEY: ${{ secrets.CODEMAP_SYNC_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -105,19 +119,278 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and Release Tauri Application
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          CODEMAP_SYNC_URL: ${{ secrets.CODEMAP_SYNC_URL }}
-          CODEMAP_SYNC_ANON_KEY: ${{ secrets.CODEMAP_SYNC_ANON_KEY }}
+      - name: Build (${{ matrix.target }})
+        shell: bash
+        run: |
+          if [ "${{ matrix.target }}" = "universal-apple-darwin" ]; then
+            npm run tauri build -- --target universal-apple-darwin
+          else
+            npm run tauri build
+          fi
+
+      # ── Real packaged-app selftest — FAIL-CLOSED ──────────────────────────
+      # Must pass before ANY byte is attached to the draft release.
+      - name: Packaged-app selftest (real backend)
+        if: matrix.target == 'universal-apple-darwin'
+        shell: bash
+        run: |
+          bash scripts/run-selftest-with-crash-check.sh \
+            --binary \
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/Codemap.app/Contents/MacOS/Codemap
+
+      - name: Packaged-app selftest (real backend)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        shell: pwsh
+        run: node scripts/run-selftest.mjs
+
+      - name: Verify macOS whole-bundle seal + DMG artifact
+        if: matrix.target == 'universal-apple-darwin'
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          bash scripts/verify-mac-artifact.sh \
+            "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Codemap_${VERSION}_universal.dmg" \
+            "$VERSION" "$CODEMAP_BUILD_COMMIT"
+
+      - name: Stage canonical artifacts (macOS)
+        if: matrix.target == 'universal-apple-darwin'
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          B="src-tauri/target/universal-apple-darwin/release/bundle"
+          mkdir staging
+          cp -f "$B/dmg/Codemap_${VERSION}_universal.dmg" staging/
+          cp -f "$B/macos/Codemap.app.tar.gz" staging/Codemap_universal.app.tar.gz
+          cp -f "$B/macos/Codemap.app.tar.gz.sig" staging/Codemap_universal.app.tar.gz.sig
+          find staging -type f | sort
+
+      - name: Stage canonical artifacts (Windows)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path staging -Force | Out-Null
+          Copy-Item 'src-tauri/target/release/bundle/nsis/*-setup.exe' staging/
+          Copy-Item 'src-tauri/target/release/bundle/nsis/*.sig' staging/
+          Get-ChildItem staging | Format-Table Name,Length
+
+      - uses: actions/upload-artifact@v4
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Codemap ${{ github.ref_name }}"
-          releaseBody: "See [CHANGELOG.md](CHANGELOG.md) for release notes."
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: true
-          args: ${{ matrix.target == 'universal-apple-darwin' && '--target universal-apple-darwin' || '' }}
+          name: release-${{ matrix.target }}-${{ github.sha }}
+          path: staging/*
+          if-no-files-found: error
+          retention-days: 7
+
+  finalize-draft:
+    needs: build-draft-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: release-*-${{ github.sha }}
+          merge-multiple: true
+
+      - name: Assemble asset directory
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          mkdir -p assets
+          mv "artifacts/Codemap_${VERSION}_universal.dmg" assets/
+          mv "artifacts/Codemap_${VERSION}_x64-setup.exe" assets/
+          mv "artifacts/Codemap_${VERSION}_x64-setup.exe.sig" assets/
+          mv artifacts/Codemap_universal.app.tar.gz assets/
+          mv artifacts/Codemap_universal.app.tar.gz.sig assets/
+          find assets -type f | sort
+          EXPECTED=5
+          COUNT=$(find assets -type f | wc -l)
+          test "$COUNT" = "$EXPECTED" || { echo "expected $EXPECTED staged files before latest.json, got $COUNT"; exit 1; }
+
+      - name: Generate updater manifest (latest.json)
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          BASE="https://github.com/wilson-taiwan/codemap/releases/download/${TAG}"
+          MAC_SIG="$(cat assets/Codemap_universal.app.tar.gz.sig)"
+          WIN_SIG="$(cat assets/Codemap_${VERSION}_x64-setup.exe.sig)"
+          PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat > assets/latest.json <<JSON
+          {
+            "version": "${VERSION}",
+            "notes": "See https://github.com/wilson-taiwan/codemap/blob/main/CHANGELOG.md for release notes.",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "darwin-aarch64": { "signature": "${MAC_SIG}", "url": "${BASE}/Codemap_universal.app.tar.gz" },
+              "darwin-x86_64": { "signature": "${MAC_SIG}", "url": "${BASE}/Codemap_universal.app.tar.gz" },
+              "windows-x86_64": { "signature": "${WIN_SIG}", "url": "${BASE}/Codemap_${VERSION}_x64-setup.exe" }
+            }
+          }
+          JSON
+          node -e 'const j=require("./assets/latest.json"); if(j.version!==process.argv[1]) process.exit(1)' "$VERSION"
+          echo "latest.json generated for v$VERSION"
+
+      - name: Create DRAFT release and attach exact assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Draft-only, always: the human presses publish after re-verification.
+          # Equivalent to tauri-action's `releaseDraft: true` — CI must never flip it.
+          # Exact v1.2.0 asset inventory attached below (see docs/INSTALLING.md):
+          #   Codemap_1.2.0_universal.dmg
+          #   Codemap_1.2.0_x64-setup.exe
+          #   Codemap_1.2.0_x64-setup.exe.sig
+          #   Codemap_universal.app.tar.gz
+          #   Codemap_universal.app.tar.gz.sig
+          #   latest.json
+          gh release delete "$TAG" --yes --cleanup-tag=false 2>/dev/null || true
+          {
+            echo "**Publisher verification notice**"
+            echo ""
+            echo "> Codemap is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at \`https://github.com/wilson-taiwan/codemap/releases\`. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop."
+            echo ""
+            echo "| Your computer | Manual download |"
+            echo "| --- | --- |"
+            echo "| macOS (Intel or Apple Silicon) | \`Codemap_$(node -p \"require('./package.json').version\")_universal.dmg\` |"
+            echo "| Windows 11 x64 | \`Codemap_$(node -p \"require('./package.json').version\")_x64-setup.exe\` |"
+            echo ""
+            echo "- Official source commit: ${GITHUB_SHA}"
+            echo "- Install guide and expected OS warnings: docs/INSTALLING.md"
+            echo "- Exact privacy disclosure: docs/PRIVACY-AND-PERMISSIONS.md"
+            echo "- Support: SUPPORT.md · Security: SECURITY.md"
+            echo "- Changelog: CHANGELOG.md"
+            echo ""
+            echo "**Updater infrastructure — do not download manually:** \`Codemap_universal.app.tar.gz\`, \`.sig\` files, \`latest.json\`, \`SHA256SUMS.txt\`."
+          } > body.md
+          gh release create "$TAG" --draft --title "Codemap $TAG" --notes-file body.md
+          gh release upload "$TAG" \
+            "assets/latest.json" \
+            "$(echo assets/*.dmg)" \
+            "$(echo assets/*-setup.exe)" \
+            "$(echo assets/*-setup.exe.sig)" \
+            "$(echo assets/*.app.tar.gz)" \
+            "$(echo assets/*.app.tar.gz.sig)" \
+            --clobber
+
+  provenance:
+    needs:
+      - finalize-draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: release-*-${{ github.sha }}
+          merge-multiple: true
+
+      - name: Staging copy for checksums
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          mkdir verify
+          mv "artifacts/Codemap_${VERSION}_universal.dmg" verify/
+          mv "artifacts/Codemap_${VERSION}_x64-setup.exe" verify/
+          mv "artifacts/Codemap_${VERSION}_x64-setup.exe.sig" verify/
+          mv artifacts/Codemap_universal.app.tar.gz verify/
+          mv artifacts/Codemap_universal.app.tar.gz.sig verify/
+
+      # The six-asset inventory is fail-closed after both platform uploads.
+      - name: Validate exact draft inventory + drafts stay drafts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          EXPECTED="Codemap_${VERSION}_universal.dmg Codemap_${VERSION}_x64-setup.exe Codemap_${VERSION}_x64-setup.exe.sig Codemap_universal.app.tar.gz Codemap_universal.app.tar.gz.sig latest.json"
+          VIEW="$(gh release view "$TAG" --repo wilson-taiwan/codemap --json isDraft,isPrerelease,targetCommitish)"
+          echo "$VIEW" | grep -q '"isDraft":true' || { echo "release must be a draft"; exit 1; }
+          echo "$VIEW" | grep -q '"isPrerelease":false' || { echo "must not be a prerelease"; exit 1; }
+          NAMES="$(gh api "repos/wilson-taiwan/codemap/releases/tags/$TAG" --jq '.assets[].name' | tr '\n' ' ')"
+          for want in $EXPECTED; do
+            grep -qw "$want" <<<"$NAMES" || { echo "missing asset: $want"; exit 1; }
+          done
+          echo "exact six-asset inventory present on the draft"
+
+      - name: Validate latest.json content
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          gh api "repos/wilson-taiwan/codemap/releases/tags/$TAG" --jq '.assets[]|select(.name=="latest.json")|.url' | head -1 >/dev/null
+          gh release download "$TAG" --repo wilson-taiwan/codemap --pattern 'latest.json' --dir _lj --clobber
+          node -e '
+            const fs=require("fs");
+            const j=JSON.parse(fs.readFileSync("_lj/latest.json","utf8"));
+            const v=process.argv[1];
+            const tag=process.argv[2];
+            if(j.version!==v) throw new Error("latest.json version "+j.version);
+            const plat=["darwin-aarch64","darwin-x86_64","windows-x86_64"];
+            for(const p of plat){ if(!j.platforms[p]) throw new Error("missing platform "+p); }
+            for(const p of Object.values(j.platforms)){
+              if(!p.url.startsWith(`https://github.com/wilson-taiwan/codemap/releases/download/${tag}/`)) throw new Error("bad url "+p.url);
+              if(typeof p.signature!=="string"||p.signature.length<40) throw new Error("bad signature");
+            }
+            console.log("latest.json OK");
+          ' "$VERSION" "$TAG"
+
+      - name: Generate sorted SHA256SUMS.txt for the six assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          cd verify
+          for f in "Codemap_${VERSION}_universal.dmg" \
+                   "Codemap_universal.app.tar.gz" \
+                   "Codemap_universal.app.tar.gz.sig" \
+                   "Codemap_${VERSION}_x64-setup.exe" \
+                   "Codemap_${VERSION}_x64-setup.exe.sig"; do
+            test -f "$f" || { echo "missing local copy: $f"; exit 1; }
+            shasum -a 256 "$f"
+          done > SHA256SUMS.raw.txt
+          gh release download "$TAG" --repo wilson-taiwan/codemap --pattern 'latest.json' --dir . --clobber
+          shasum -a 256 latest.json >> SHA256SUMS.raw.txt
+          LC_ALL=C sort -k2 SHA256SUMS.raw.txt -o SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Attest the exact asset checksums
+        uses: actions/attest@v4
+        with:
+          subject-checksums: verify/SHA256SUMS.txt
+
+      - name: Attach SHA256SUMS.txt without replacing existing assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$TAG" verify/SHA256SUMS.txt --clobber
+          STILL_DRAFT="$(gh release view "$TAG" --repo wilson-taiwan/codemap --json isDraft --jq .isDraft)"
+          test "$STILL_DRAFT" = "true" || { echo "refusing: release left draft state"; exit 1; }
+          echo "✓ checksums attested + attached; release remains a DRAFT — no automation publishes it"

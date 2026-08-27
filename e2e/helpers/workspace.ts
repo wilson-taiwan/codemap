@@ -32,15 +32,20 @@ export async function openWorkspace(page: Page) {
   // this keeps the test on the same public opening flow rather than reaching
   // into the store or mock internals.
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    const workLocally = page.getByRole("button", { name: /Work locally/i });
+    if (await workLocally.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await clickAndObserveWorkspace(workLocally);
+    }
+
     const recent = page.getByRole("button", {
       name: /Sample Study/,
-    });
+    }).first();
     if (await recent.isVisible({ timeout: 5000 }).catch(() => false)) {
       await clickAndObserveWorkspace(recent);
     } else {
       const openBtn = page.getByRole("button", {
         name: /Open a folder|Open an existing study/i,
-      });
+      }).first();
       if (await openBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
         await clickAndObserveWorkspace(openBtn);
       } else {

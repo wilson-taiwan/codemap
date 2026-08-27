@@ -3,6 +3,11 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Modal } from "./ui/Surfaces";
 import { Icon } from "./ui/Icon";
 import { api } from "../lib/api";
+import {
+  fileAccessCopy,
+  parseFileError,
+  type FileAccessUi,
+} from "../lib/file-access";
 import { matchFolderToRoster, type MatchMap, type CandidateFile } from "../lib/transcript-match";
 import { resolveInterviewForImport } from "./JoinStudyModal";
 import { useProjectStore } from "../store/project-store";
@@ -35,6 +40,7 @@ export function TranscriptLinkPanel({
   const [importingAll, setImportingAll] = useState(false);
   const [imported, setImported] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [scanFailure, setScanFailure] = useState<FileAccessUi | null>(null);
 
   // Derive the target roster
   const unlinkedInterviews = interviews.filter((i) => i.segment_count === 0);
@@ -50,7 +56,7 @@ export function TranscriptLinkPanel({
   }));
 
   async function handlePickFolder() {
-    setError(null);
+    setScanFailure(null);
     try {
       const picked = await openDialog({
         directory: true,
@@ -74,7 +80,16 @@ export function TranscriptLinkPanel({
       });
       setMatchMap(matches);
     } catch (e) {
-      setError(`Error scanning folder: ${e instanceof Error ? e.message : String(e)}`);
+      // Classified failure → neutral recovery card; raw strings stay out of
+      // the panel and never look like the app is blaming the user's setup.
+      const ui =
+        parseFileError(e) ??
+        ({
+          category: "permission_denied",
+          message: "Codemap could not read that folder.",
+          detail: e instanceof Error ? e.message : String(e),
+        } satisfies FileAccessUi);
+      setScanFailure(ui);
     } finally {
       setScanning(false);
     }
@@ -182,6 +197,15 @@ export function TranscriptLinkPanel({
           Linking simply means pointing Codemap at the <code>.docx</code> or <code>.vtt</code> transcript file on this computer that corresponds to each Participant ID.
         </p>
 
+        {/* Persistent disclosure — visible before the picker opens, no modal,
+            no extra confirmation. The picker itself is the consent. */}
+        <p className="text-[12px] leading-relaxed" style={{ color: "var(--ink-2)" }}>
+          Codemap reads supported transcript files directly inside the folder
+          you choose (not subfolders) to match labels and content hashes.
+          Files are processed on this computer; transcript text is not
+          uploaded.
+        </p>
+
         {/* Top Folder Scan Bar */}
         <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
           <div className="min-w-0 flex-1 pr-2">
@@ -202,6 +226,32 @@ export function TranscriptLinkPanel({
             {scanning ? "Scanning…" : "Choose folder…"}
           </button>
         </div>
+
+        {scanFailure && (
+          <div role="alert" className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+            <p className="text-[12.5px] font-medium">{fileAccessCopy(scanFailure).title}</p>
+            <p className="mt-1 text-[12px]" style={{ color: "var(--ink-2)" }}>
+              {fileAccessCopy(scanFailure).recovery}
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={handlePickFolder}
+              >
+                Choose another folder
+              </button>
+              <a
+                href="https://github.com/wilson-taiwan/codemap/blob/main/docs/INSTALLING.md#troubleshooting-file-access"
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-ghost btn-sm underline"
+              >
+                How to fix access
+              </a>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/10 p-2.5 text-[12.5px] text-[var(--danger)]">

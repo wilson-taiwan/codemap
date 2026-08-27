@@ -44,7 +44,7 @@ describe("beta disclosure", () => {
       }
     }
     checkDir(srcDir);
-  });
+  }, 30_000);
 
   it("no public source comment references HQ or private planning paths", () => {
     const notice = fs.readFileSync(

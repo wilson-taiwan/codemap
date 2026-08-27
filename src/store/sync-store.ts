@@ -39,6 +39,13 @@ interface SyncStore {
 
   refreshStatus: () => Promise<void>;
   restoreSession: () => Promise<void>;
+  /**
+   * True once the silent sign-in restore attempt has finished (success,
+   * failure, or nothing to restore). First-run UI must not be decided before
+   * this settles, or a returning signed-in user sees the onboarding choice
+   * flash for a frame.
+   */
+  sessionRestoreComplete: boolean;
   /** Fetch the group's key and roster. Silent on failure — the sheet shows
    *  what it last knew, and the status pills already say when sync is down. */
   refreshGroup: () => Promise<void>;
@@ -113,6 +120,7 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
   autoActivatingV2: false,
   group: null,
   groupLoaded: false,
+  sessionRestoreComplete: false,
 
   refreshGroup: async () => {
     try {
@@ -223,11 +231,15 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
    */
   restoreSession: async () => {
     try {
+      set({ sessionRestoreComplete: false });
       await api.syncRestoreSession();
     } catch {
       // Sign in by hand instead.
+    } finally {
+      await get().refreshStatus();
+      // Decision point for first-run UI, whatever the outcome was.
+      set({ sessionRestoreComplete: true });
     }
-    await get().refreshStatus();
   },
 
   refreshStatus: async () => {

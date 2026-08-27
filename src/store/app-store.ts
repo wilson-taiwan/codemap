@@ -27,12 +27,22 @@ export function applyTheme(theme: ThemePreference) {
   document.documentElement.dataset.theme = theme;
 }
 
-export function shouldShowFirstRunSignIn(
-  initialized: boolean,
-  signinPromptSeen: boolean | undefined,
-  signedIn: boolean,
-): boolean {
-  return initialized && !signinPromptSeen && !signedIn;
+/**
+ * Migration truth table for intent-first onboarding (v1.2).
+ *
+ * Seen when either marker is set:
+ *   - fresh install              → both undefined → not seen
+ *   - old signin_prompt_seen=T   → seen (never re-onboard a v1.1 user)
+ *   - old signin_prompt_seen=F   → not seen
+ *   - explicit new marker true   → seen
+ * A restored signed-in session bypasses the choice entirely — handled at the
+ * call site with the signedIn flag, not here.
+ */
+export function onboardingChoiceSeen(prefs: {
+  onboarding_choice_seen?: boolean;
+  signin_prompt_seen?: boolean;
+}): boolean {
+  return Boolean(prefs.onboarding_choice_seen || prefs.signin_prompt_seen);
 }
 
 interface AppStore {
@@ -44,19 +54,23 @@ interface AppStore {
   showJoinStudy: boolean;
   joinStudyMembership: MembershipSummary | null;
   showSettings: boolean;
+  /** Trust & permissions SideSheet. `trustSection` opens a focused section. */
+  showTrustCenter: boolean;
+  trustSection: "build" | "warnings" | "files" | "data" | "network" | "signin" | "support" | null;
   intent: UiIntent | null;
   setIntent: (intent: UiIntent | null) => void;
   loadPreferences: () => Promise<void>;
   setReopenLastProject: (value: boolean) => Promise<void>;
   setSigninPromptSeen: (value: boolean) => Promise<void>;
+  setOnboardingChoiceSeen: (value: boolean) => Promise<void>;
   setPanelWidths: (codebook: number, memos: number) => Promise<void>;
   setCoachDismissed: (value: boolean) => Promise<void>;
   setMergeSameSpeaker: (value: boolean) => Promise<void>;
   setTheme: (theme: ThemePreference) => Promise<void>;
   setSyncServer: (url: string, anonKey: string) => Promise<void>;
+  setAutomaticUpdateChecks: (value: boolean) => Promise<void>;
   clearAutoOpenFailed: () => void;
-  openAbout: () => void;
-  closeAbout: () => void;
+  openAbout: () => void;  closeAbout: () => void;
   openSetup: () => void;
   closeSetup: () => void;
   openJoinStudy: () => void;
@@ -64,11 +78,16 @@ interface AppStore {
   closeJoinStudy: () => void;
   openSettings: () => void;
   closeSettings: () => void;
+  openTrustCenter: (
+    section?: NonNullable<AppStore["trustSection"]>,
+  ) => void;
+  closeTrustCenter: () => void;
 }
-
 const defaultPrefs: AppPreferences = {
   reopen_last_project: false,
   signin_prompt_seen: false,
+  onboarding_choice_seen: false,
+  automatic_update_checks: true,
   last_guide_section_id: null,
   panel_widths: null,
   coach_dismissed: false,
@@ -112,6 +131,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setSigninPromptSeen: async (value) => {
     const prefs = { ...get().preferences, signin_prompt_seen: value };
+    set({ preferences: prefs });
+    try {
+      const saved = await api.setAppPreferences(prefs);
+      set({ preferences: saved });
+    } catch {
+      // Cosmetic / preference fallback
+    }
+  },
+
+  setOnboardingChoiceSeen: async (value) => {
+    const prefs = { ...get().preferences, onboarding_choice_seen: value };
     set({ preferences: prefs });
     try {
       const saved = await api.setAppPreferences(prefs);
@@ -177,6 +207,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ preferences: saved });
   },
 
+  setAutomaticUpdateChecks: async (value) => {
+    const prefs = { ...get().preferences, automatic_update_checks: value };
+    set({ preferences: prefs });
+    try {
+      const saved = await api.setAppPreferences(prefs);
+      set({ preferences: saved });
+    } catch {
+      // Cosmetic / preference fallback
+    }
+  },
+
   clearAutoOpenFailed: () => set({ autoOpenFailed: null }),
 
   openAbout: () => set({ showAbout: true }),
@@ -190,4 +231,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ showJoinStudy: false, joinStudyMembership: null }),
   openSettings: () => set({ showSettings: true }),
   closeSettings: () => set({ showSettings: false }),
+  showTrustCenter: false,
+  trustSection: null,
+  openTrustCenter: (section) =>
+    // Switching panels cleanly: anything already focus-trapped closes first
+    // so two traps can never stack.
+    set({
+      showTrustCenter: true,
+      trustSection: section ?? null,
+      showSettings: false,
+      showAbout: false,
+    }),
+  closeTrustCenter: () => set({ showTrustCenter: false, trustSection: null }),
 }));

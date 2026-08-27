@@ -389,6 +389,10 @@ export interface PresenceUser {
 export interface AppPreferences {
   reopen_last_project: boolean;
   signin_prompt_seen?: boolean;
+  /** v1.2 intent-first onboarding choice; migrates over signin_prompt_seen. */
+  onboarding_choice_seen?: boolean;
+  /** Quiet update checks (default true). False stops startup+interval checks. */
+  automatic_update_checks?: boolean;
   last_guide_section_id: string | null;
   panel_widths: PanelWidths | null;
   coach_dismissed: boolean;
@@ -413,6 +417,11 @@ export interface AppVersionInfo {
   name: string;
   version: string;
   copyright: string | null;
+  /** Full source SHA, or the literal "development" for local builds. */
+  build_commit?: string | null;
+  source_url?: string | null;
+  release_url?: string | null;
+  install_guide_url?: string | null;
 }
 
 export interface ProjectFileEntry {

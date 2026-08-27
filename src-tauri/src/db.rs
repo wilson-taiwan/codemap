@@ -2010,21 +2010,45 @@ pub fn salvage_legacy_v1_state_for_v2(conn: &Connection) -> rusqlite::Result<usi
                 "char_end": char_end,
             })
         };
-        let adds = current.difference(&base).map(edge).collect::<Vec<_>>();
-        let removes = base.difference(&current).map(edge).collect::<Vec<_>>();
-        if !adds.is_empty() || !removes.is_empty() {
+        let adds = current.difference(&base).collect::<Vec<_>>();
+        let removes = base.difference(&current).collect::<Vec<_>>();
+        // Normal v2 edits key one coding entity PER CODE —
+        // `{interview}:{segment}:{span}:{code_id}` (see mutate_coding_edge).
+        // Salvage must emit the exact same per-code entities: merging two codes
+        // on one span into a single span-keyed entity diverges from what any
+        // normal edit would ever produce and resists reset/repair.
+        for code_id in &adds {
             let entity_id = format!(
-                "{}:{}:{}",
+                "{}:{}:{}:{}",
                 interview_id,
                 segment_id,
-                assignment_span_key(char_start, char_end)
+                assignment_span_key(char_start, char_end),
+                code_id,
             );
             enqueue_v2_operation(
                 &tx,
                 "coding",
                 &entity_id,
                 "coding.patch",
-                serde_json::json!({ "adds": adds, "removes": removes }),
+                serde_json::json!({ "adds": [edge(code_id)], "removes": [] }),
+                &timestamp,
+            )?;
+            salvaged += 1;
+        }
+        for code_id in &removes {
+            let entity_id = format!(
+                "{}:{}:{}:{}",
+                interview_id,
+                segment_id,
+                assignment_span_key(char_start, char_end),
+                code_id,
+            );
+            enqueue_v2_operation(
+                &tx,
+                "coding",
+                &entity_id,
+                "coding.patch",
+                serde_json::json!({ "adds": [], "removes": [edge(code_id)] }),
                 &timestamp,
             )?;
             salvaged += 1;
@@ -6871,6 +6895,99 @@ mod tests {
             },
         )
         .expect("second call must succeed — connection must not be stuck mid-transaction");
+    }
+
+    #[test]
+    fn salvage_keys_coding_per_code_like_normal_edits() {
+        let (_dir, _path, conn) = make_project();
+
+        // Activate v2 exactly as sync_v2_activate does.
+        set_sync_state_value(&conn, "project_id", "project").unwrap();
+        set_sync_state_value(
+            &conn,
+            "sync_device_id",
+            "00000000-0000-4000-8000-0000000000aa",
+        )
+        .unwrap();
+        set_sync_state_value(&conn, "sync_protocol", "2").unwrap();
+        set_sync_state_value(
+            &conn,
+            "sync_generation",
+            "00000000-0000-4000-8000-0000000000bb",
+        )
+        .unwrap();
+
+        let now = now_iso();
+        conn.execute(
+            "INSERT INTO codebook (id, name, definition, color, sort_order, is_retired, created_at, updated_at)
+             VALUES ('cA', 'Alpha', NULL, '#111111', 0, 0, ?1, ?1),
+                    ('cB', 'Beta',  NULL, '#222222', 1, 0, ?1, ?1)",
+            [&now],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO interviews (id, participant_label, created_at, updated_at)
+             VALUES ('ivS', 'P01', ?1, ?1)",
+            [&now],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO transcript_segments (id, interview_id, segment_index, speaker, timestamp_start, text)
+             VALUES ('segS', 'ivS', 0, 'Participant', '00:00:00.000', 'A shared span carrying two codes.')",
+            [],
+        )
+        .unwrap();
+        // One legacy dirty row holding TWO distinct codes on the SAME span —
+        // the exact shape that historically collapsed into one mis-keyed
+        // span-only entity.
+        conn.execute(
+            "INSERT INTO coded_segments (id, interview_id, segment_id, code_ids, coder_name,
+                                         char_start, char_end, created_at, updated_at)
+             VALUES ('csS', 'ivS', 'segS', '[\"cA\",\"cB\"]', 'Ada Lovelace',
+                     2, 20, ?1, ?1)",
+            [&now],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE coded_segments SET sync_dirty = 1 WHERE id = 'csS'",
+            [],
+        )
+        .unwrap();
+        // Fresh-project rows default dirty; scope the salvage to the one
+        // coding row so this test asserts on coding keying alone.
+        conn.execute("UPDATE codebook SET sync_dirty = 0", [])
+            .unwrap();
+        conn.execute("UPDATE interviews SET sync_dirty = 0", [])
+            .unwrap();
+
+        let salvaged = salvage_legacy_v1_state_for_v2(&conn).unwrap();
+
+        let mut entities: Vec<(String, String)> = conn
+            .prepare("SELECT entity_id, payload_json FROM sync_outbox WHERE entity_type = 'coding'")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+
+        assert_eq!(salvaged, 2, "two codes on one span must emit two ops");
+        assert_eq!(entities.len(), 2);
+        entities.sort();
+        assert_eq!(
+            entities.iter().map(|(e, _)| e.as_str()).collect::<Vec<_>>(),
+            vec!["ivS:segS:span:2:20:cA", "ivS:segS:span:2:20:cB"],
+            "salvaged coding must be keyed per code, matching normal edits"
+        );
+        for (entity_id, payload) in &entities {
+            let json: serde_json::Value = serde_json::from_str(payload).unwrap();
+            assert!(
+                entity_id.ends_with(":cA") || entity_id.ends_with(":cB"),
+                "unexpected entity {entity_id}"
+            );
+            let adds = json["adds"].as_array().unwrap();
+            assert_eq!(adds.len(), 1, "{entity_id} must carry exactly one add");
+            assert_eq!(adds[0]["code_id"], entity_id.rsplit(':').next().unwrap());
+        }
     }
 
     #[test]

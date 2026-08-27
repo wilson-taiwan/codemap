@@ -320,6 +320,15 @@ pub struct AppPreferences {
     pub reopen_last_project: bool,
     #[serde(default)]
     pub signin_prompt_seen: bool,
+    /// v1.2 intent-first onboarding: the user answered the local-vs-
+    /// collaboration choice. `signin_prompt_seen` is kept only as a migration
+    /// input — anyone who saw the old credential gate never gets re-onboarded.
+    #[serde(default)]
+    pub onboarding_choice_seen: bool,
+    /// Quiet update checks. Default ON for fresh installs and for preference
+    /// files written before this field existed; explicitly opt-out only.
+    #[serde(default = "default_automatic_update_checks")]
+    pub automatic_update_checks: bool,
     pub last_guide_section_id: Option<String>,
     pub panel_widths: Option<PanelWidths>,
     /// Whether the workspace next-step coach has been dismissed for good.
@@ -369,6 +378,10 @@ fn default_merge_same_speaker() -> bool {
     true
 }
 
+fn default_automatic_update_checks() -> bool {
+    true
+}
+
 /// Hand-written rather than derived: the derive would give
 /// `merge_same_speaker: false`, contradicting the serde default above for the
 /// no-preferences-file case. Every other field's falsey default is intended.
@@ -377,6 +390,8 @@ impl Default for AppPreferences {
         Self {
             reopen_last_project: false,
             signin_prompt_seen: false,
+            onboarding_choice_seen: false,
+            automatic_update_checks: true,
             last_guide_section_id: None,
             panel_widths: None,
             coach_dismissed: false,
@@ -394,6 +409,16 @@ pub struct AppVersionInfo {
     pub name: String,
     pub version: String,
     pub copyright: Option<String>,
+    /// Full commit this binary was built from. "development" is the explicit
+    /// fallback in non-CI builds — never a fake SHA.
+    #[serde(default)]
+    pub build_commit: Option<String>,
+    #[serde(default)]
+    pub source_url: Option<String>,
+    #[serde(default)]
+    pub release_url: Option<String>,
+    #[serde(default)]
+    pub install_guide_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

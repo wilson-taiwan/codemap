@@ -24,14 +24,15 @@ jobs:
             exit 1
           fi
 
-  verify-migrations:
+  verify-migrations-and-workflows:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Validate workflow YAML syntax
         run: |
-          ruby -e 'require "yaml"; YAML.load_file(ARGV.fetch(0))' .github/workflows/test.yml
-          ruby -e 'require "yaml"; YAML.load_file(ARGV.fetch(0))' .github/workflows/release.yml
+          ruby -e 'require "yaml"; %w[.github/workflows/test.yml .github/workflows/test-e2e.yml .github/workflows/candidate.yml .github/workflows/release.yml].each { |f| YAML.load_file(f) }'
+      - name: Release-contract assertions (+ negative mutations)
+        run: node --test scripts/release-contract.test.mjs
       - name: Static migration gate
         run: bash scripts/verify-supabase-migrations.sh
       - name: Migration verifier self-check (negative fixtures)
@@ -55,13 +56,15 @@ jobs:
         run: npm run build
 
   test-rust:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    env:
+      CODEMAP_BUILD_COMMIT: ci-test-${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -70,7 +73,9 @@ jobs:
           workspaces: "src-tauri -> target"
       - name: Install dependencies
         run: npm ci
+      # Windows legs compile + run the DPAPI source and its real-API tests on
+      # every push; both platforms get the full clippy gate.
       - name: Cargo clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: Cargo test
         run: cargo test --manifest-path src-tauri/Cargo.toml

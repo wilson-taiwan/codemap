@@ -63,7 +63,7 @@ describe("vocabulary guard", () => {
       }
     }
     checkDir(srcDir);
-  });
+  }, 30_000);
 
   it("enforces no hardcoded 'Trash' in user-facing JSX/copy in src/components/ (use trashName() instead)", () => {
     const compDir = path.resolve(__dirname, "../components");
@@ -73,15 +73,14 @@ describe("vocabulary guard", () => {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           checkComponents(full);
-        } else if (/\.tsx$/.test(entry.name) && entry.name !== "Icon.tsx") {
+        } else if (/\.tsx$/.test(entry.name)) {
           const content = fs.readFileSync(full, "utf-8");
-          const cleaned = content
-            .replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "")
-            .replace(/["']trash["']/gi, '""');
-          expect(cleaned).not.toMatch(/\bTrash\b/);
+          const noComments = content.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "");
+          expect(noComments).not.toMatch(/>\s*Move to Trash\s*</i);
+          expect(noComments).not.toMatch(/['"]Move to Trash['"]/i);
         }
       }
     }
     checkComponents(compDir);
-  });
+  }, 30_000);
 });

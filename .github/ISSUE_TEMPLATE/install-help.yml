@@ -1,0 +1,56 @@
+name: "Install help"
+description: "Download, warning, or first-launch trouble on macOS or Windows"
+labels: ["install-help"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not upload transcripts, quotes, participant/study identifiers, project databases, tokens, private URLs, or unredacted crash logs/screenshots.**
+        Expected OS warnings are documented in [docs/INSTALLING.md](../blob/main/docs/INSTALLING.md) — please confirm you followed its three checks.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS 14+
+        - macOS 10.15–13
+        - Windows 11 x64
+        - Other / not listed
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: Exact OS version/build
+      placeholder: "e.g. macOS 14.6.1 (23G93) / Windows 11 24H2 26100.1742"
+    validations:
+      required: true
+  - type: textarea
+    id: codemap-details
+    attributes:
+      label: Codemap version + build commit + exact filename
+      placeholder: |
+        Version 1.2.0, build commit from About → Copy build details, and the exact file downloaded.
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where did it fail?
+      options:
+        - Download
+        - Opening/mounting the DMG
+        - First launch (warning flow)
+        - Installer (SmartScreen/UAC step)
+        - After install — app starts but something is wrong
+    validations:
+      required: true
+  - type: textarea
+    id: warning-text
+    attributes:
+      label: Exact warning text you saw
+      description: Type it out rather than screenshotting if your screen shows anything personal.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true

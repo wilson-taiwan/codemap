@@ -1,0 +1,265 @@
+name: Candidate build
+
+# A non-public rehearsal. Produces tested installers/updater artifacts as
+# workflow artifacts ONLY — this workflow never pushes, tags, creates or edits
+# a GitHub Release, changes repository settings, or touches Supabase.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate workflow YAML syntax
+        run: |
+          ruby -e 'require "yaml"; %w[.github/workflows/test.yml .github/workflows/test-e2e.yml .github/workflows/candidate.yml .github/workflows/release.yml].each { |f| YAML.load_file(f) }'
+
+      - name: Release-contract assertions (+ negative mutations)
+        run: node --test scripts/release-contract.test.mjs
+
+      - name: Static migration gate
+        run: bash scripts/verify-supabase-migrations.sh
+
+      - name: Migration verifier self-check
+        run: bash scripts/verify-supabase-migrations.test.sh
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      - name: Frontend unit tests
+        run: npm test
+
+      - name: Frontend build
+        run: npm run build
+
+      - name: Playwright suite
+        run: |
+          npx playwright install chromium --with-deps
+          npm run test:e2e
+
+      - name: Rust format
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Rust clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Pre-tag smoke state
+        run: node scripts/verify-release-smoke.mjs --pre-tag RELEASE-SMOKE.md
+
+  build-macos:
+    needs: validate
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      CODEMAP_BUILD_COMMIT: ${{ github.sha }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      CODEMAP_SYNC_URL: ${{ secrets.CODEMAP_SYNC_URL }}
+      CODEMAP_SYNC_ANON_KEY: ${{ secrets.CODEMAP_SYNC_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build universal app
+        run: npm run tauri build -- --target universal-apple-darwin
+
+      # ── Real packaged-app selftest — FAIL-CLOSED ──────────────────────────
+      # Boots the actual bundle binary against the real backend on a CI
+      # runner's interactive session. A non-zero exit fails this job.
+      - name: Packaged-app selftest (real backend)
+        run: |
+          bash scripts/run-selftest-with-crash-check.sh \
+            --binary \
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/Codemap.app/Contents/MacOS/Codemap
+
+      - name: Verify whole-bundle seal + DMG artifact
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          bash scripts/verify-mac-artifact.sh \
+            "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Codemap_${VERSION}_universal.dmg" \
+            "$VERSION" "$CODEMAP_BUILD_COMMIT"
+
+      - name: Stage canonical artifacts
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          STAGE="staging"
+          mkdir -p "$STAGE"
+          B="src-tauri/target/universal-apple-darwin/release/bundle"
+          cp -f "$B/dmg/Codemap_${VERSION}_universal.dmg" "$STAGE/"
+          cp -f "$B/macos/Codemap.app.tar.gz" "$STAGE/Codemap_universal.app.tar.gz"
+          cp -f "$B/macos/Codemap.app.tar.gz.sig" "$STAGE/Codemap_universal.app.tar.gz.sig"
+          find "$STAGE" -type f | sort
+
+      - name: SHA-256 inventory
+        run: |
+          cd staging
+          shasum -a 256 * | tee SHA256SUMS.partial.txt
+
+      - name: Record provenance to summary
+        run: |
+          {
+            echo "### Candidate (macOS)"
+            echo "- Source SHA: $CODEMAP_BUILD_COMMIT"
+            echo "- Version: $(node -p \"require('./package.json').version\")"
+            echo "- Platform: darwin universal (arm64+x86_64)"
+            shasum -a 256 staging/* | sed 's/^/- /'
+            echo ""
+            echo "**Candidates are not public releases.** GitHub Actions wraps downloads in an artifact ZIP."
+            echo "A candidate proves behavior but not the exact final release download; draft assets are retested before publication."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-macos-${{ github.sha }}
+          path: staging/*
+          if-no-files-found: error
+          retention-days: 14
+
+  build-windows:
+    needs: validate
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      # Canonical release target triplet for this leg (x64 user-scope NSIS).
+      CODEMAP_RUST_TARGET: x86_64-pc-windows-msvc
+      CODEMAP_BUILD_COMMIT: ${{ github.sha }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      CODEMAP_SYNC_URL: ${{ secrets.CODEMAP_SYNC_URL }}
+      CODEMAP_SYNC_ANON_KEY: ${{ secrets.CODEMAP_SYNC_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Packaging guards
+        run: |
+          node scripts/nsis-template.test.mjs
+          node scripts/windows-update-guard.test.mjs
+
+      - name: Build x64 app + NSIS installer
+        run: npm run tauri build
+
+      # ── Real packaged-app selftest — FAIL-CLOSED ──────────────────────────
+      - name: Packaged-app selftest (real backend)
+        run: node scripts/run-selftest.mjs
+
+      - name: Download canonical v1.1.0 installer for upgrade matrix
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path _prev -Force | Out-Null
+          Invoke-WebRequest `
+            -Uri 'https://github.com/wilson-taiwan/codemap/releases/download/v1.1.0/Codemap_1.1.0_x64-setup.exe' `
+            -OutFile '_prev/Codemap_1.1.0_x64-setup.exe'
+          Get-FileHash '_prev/Codemap_1.1.0_x64-setup.exe' -Algorithm SHA256 | Format-List
+
+      - name: Installer matrix (upgrade / clean / rollback)
+        shell: pwsh
+        run: |
+          $candidate = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
+          powershell -ExecutionPolicy Bypass -File scripts/test-windows-installer.ps1 `
+            -CandidateInstaller $candidate.FullName `
+            -PreviousInstaller '_prev/Codemap_1.1.0_x64-setup.exe' `
+            -OutputDirectory '_installer-evidence'
+
+      - name: Stage canonical artifacts
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          New-Item -ItemType Directory -Path staging -Force | Out-Null
+          Copy-Item 'src-tauri/target/release/bundle/nsis/*-setup.exe' 'staging/tmp-setup.exe'
+          Move-Item 'staging/tmp-setup.exe' "staging/Codemap_${version}_x64-setup.exe" -Force
+          Copy-Item 'src-tauri/target/release/bundle/nsis/*.sig' staging/
+          # Canonical v1.2.0 names staged here match docs/INSTALLING.md:
+          #   Codemap_1.2.0_universal.dmg (macOS leg)
+          #   Codemap_1.2.0_x64-setup.exe (+ .sig)
+          Get-ChildItem staging | Format-Table Name,Length
+
+      - name: SHA-256 inventory
+        shell: pwsh
+        run: |
+          $out = Get-ChildItem staging | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$h  $($_.Name)"
+          }
+          Set-Content -Path 'staging/SHA256SUMS.partial.txt' -Value $out
+          Get-Content 'staging/SHA256SUMS.partial.txt'
+
+      - name: Record provenance to summary
+        shell: pwsh
+        run: |
+          $body = @(
+            "### Candidate (Windows)"
+            "- Source SHA: $env:CODEMAP_BUILD_COMMIT"
+            "- Platform: windows x64 NSIS current-user"
+          )
+          foreach ($line in (Get-Content 'staging/SHA256SUMS.partial.txt')) { $body += "- $line" }
+          $body += ""
+          $body += "**Candidates are not public releases.** A candidate proves behavior but not the exact final release download."
+          Add-Content $env:GITHUB_STEP_SUMMARY ($body -join [Environment]::NewLine)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-windows-${{ github.sha }}
+          path: staging/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-installer-evidence-${{ github.sha }}
+          path: _installer-evidence/
+          if-no-files-found: ignore
+          retention-days: 14

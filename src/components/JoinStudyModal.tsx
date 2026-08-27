@@ -16,6 +16,7 @@ import {
   joinRailSteps,
 } from "../lib/join-flow";
 import type { Interview, MembershipSummary, MissingTranscript } from "../lib/types";
+import { CollaborationDisclosure } from "./CollaborationDisclosure";
 
 /**
  * Resolve an interview against SQLite directly, matching normalized labels.
@@ -462,11 +463,17 @@ export function JoinStudyModal() {
                 }
               >
                 {!signedIn && (
-                  <AccountForm
-                    idPrefix="join"
-                    autoFocus
-                    onSignedIn={() => void refreshStatus()}
-                  />
+                  <>
+                    {/* Truth before credentials: what collaboration shares and
+                        keeps local, stated once above the form. No second
+                        confirmation is demanded of the user afterwards. */}
+                    <CollaborationDisclosure />
+                    <AccountForm
+                      idPrefix="join"
+                      autoFocus
+                      onSignedIn={() => void refreshStatus()}
+                    />
+                  </>
                 )}
 
                 {hideServer ? (

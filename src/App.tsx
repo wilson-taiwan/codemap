@@ -11,6 +11,8 @@ import { SyncSheet } from "./components/SyncSheet";
 import { CoderIdentityModal } from "./components/CoderIdentityModal";
 import { JoinStudyModal } from "./components/JoinStudyModal";
 import { SettingsSheet } from "./components/SettingsSheet";
+import { TrustCenterPanel } from "./components/TrustCenterPanel";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import { OpeningOverlay } from "./components/OpeningOverlay";
 import { UpdatePreparationOverlay } from "./components/UpdateAction";
 import { SelftestRunner } from "./selftest/runner";
@@ -79,6 +81,8 @@ function App() {
       <CoderIdentityModal />
       <JoinStudyModal />
       <SettingsSheet />
+      <TrustCenterPanel />
+      <ConfirmDialog />
       <UpdatePreparationOverlay />
       <ToastStack />
       {loading && <OpeningOverlay path={openingPath} />}

@@ -6,6 +6,7 @@ mod commands;
 pub mod crash_report;
 mod db;
 mod docx;
+mod file_error;
 mod ids;
 #[cfg(test)]
 mod lifecycle_harness;
@@ -19,6 +20,9 @@ mod schema_lint;
 pub mod selftest;
 mod session_store;
 mod sync;
+
+#[cfg(windows)]
+pub mod dpapi;
 mod sync_coordinator;
 mod sync_defaults;
 #[cfg(test)]
@@ -102,6 +106,10 @@ pub fn run() {
 
             let menu = menu::build_menu(app.handle())?;
             app.set_menu(menu)?;
+
+            if crate::selftest::is_selftest_active() {
+                let _ = app_data::clear_recent_projects_for_selftest(app.handle());
+            }
 
             if let Ok(app_dir) = app_data::app_data_dir(app.handle()) {
                 crash_report::init_crash_handler(app_dir.clone());

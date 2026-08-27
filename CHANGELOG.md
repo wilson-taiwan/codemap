@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-08-27
+
+### Added
+
+- **Trust & permissions center** in-app: Files & permissions, Local vs collaboration, build provenance, and system warning disclosure in one reachable surface.
+- **Collaboration disclosure** on onboarding's collaborate card, Join Study, and account creation: names exactly what leaves the machine — account email plus study, codebook, and coding records — with a link to the privacy guide; transcript text and memos always stay local.
+- **Quiet update controls**: an automatic-checks toggle in settings; automatic up-to-date/failure outcomes are silent, manual failure and available updates stay visible.
+- **Intent-first local onboarding**: create and code in a local study with no account; credentials and collaboration only enter once you choose collaboration.
+- **Windows DPAPI storage** for the refresh token (`session.dpapi`, current-user DPAPI); legacy plaintext `session.json` migrates silently then deletes.
+- **Public trust documentation**: nontechnical install guidance (`docs/INSTALLING.md`), exact privacy and permission disclosure (`docs/PRIVACY-AND-PERMISSIONS.md`), Support, Security, and IT-deployment guides for managed machines, signing activation notes, and install/bug-report issue templates.
+
+### Changed
+
+- **New projects default to a personal library** (`~/Codemap` on macOS, `%USERPROFILE%\Codemap` on Windows) instead of the protected Documents folder; existing paths are preserved and unavailable recents stay visible.
+- **Folder access is consent at use**: native file/folder pickers are the consent; a denied picker shows a truthful inline choose-another-folder / how-to-fix state instead of retrying; the folder-scan disclosure appears before the scan; no Full Disk Access recommendation.
+- **One restrained confirmation system** replaces scattered browser and app-owned prompts for destructive or destination choices.
+- **macOS bundle** is sealed as a complete bundle with explicit ad-hoc signing and truthful file-purpose strings — Codemap is ad-hoc signed and un-notarized (no Apple Developer ID), so first launch legitimately triggers Gatekeeper with documented Open Anyway guidance.
+- **Windows installer contract** is documented and machine-checked: current-user install, no elevation/prompt, SmartScreen / Unknown publisher / Controlled Folder Access / WebView2 / Mark-of-the-Web behavior in plain language.
+
+### Infrastructure
+
+- Rust CI now runs on `macos-latest` **and** `windows-latest`. A release-contract suite (49 tests) pins packaging and trust invariants, including fail-closed presence of the real-app selftest in every platform job with a negative fixture.
+- New manual **candidate pipeline** (`candidate.yml`, non-publishing); the release workflow is draft-only with a provenance/attestation job and exact-asset inventory.
+- The packaged real-app `--selftest` now runs in every candidate and release platform job and fails the run on any failure. The in-app selftest gained five suites — study lifecycle, transcript import, coding roundtrip, export artifacts, backup-restore — for 11 pass / 1 skip.
+- Playwright E2E now triggers on **every push to `main`**; four deviant-path specs and a seeded monkey pass were added, and the dev mock gained `sync-error`, `server-conflict`, `auth-error`, and `slow` fault fixtures.
+- Rust: `salvage_legacy_v1_state_for_v2` now keys salvaged coding per code (a migrated Protocol-1 span carrying two codes produces two correct entities), and backup staging filenames are UUID-suffixed so concurrent snapshots cannot collide.
+- Server migration verification scripts (static + negative-fixture self-check) are restored as CI gates; this version makes no server or schema change (schema stays at 10).
+
 ## [1.1.0] - 2026-08-26
 
 ### Added

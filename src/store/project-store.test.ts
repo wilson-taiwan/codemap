@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./confirm-store", () => ({
+  appConfirm: vi.fn().mockResolvedValue(true),
+}));
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   confirm: vi.fn(),
 }));
@@ -53,7 +56,8 @@ vi.mock("../lib/api", () => ({
   },
 }));
 
-import { confirm } from "@tauri-apps/plugin-dialog";
+// The app-owned confirm system replaced the native dialog plugin in stores.
+import { appConfirm } from "./confirm-store";
 import { api } from "../lib/api";
 import { useProjectStore } from "./project-store";
 import { computeInterviewCodedCount } from "../lib/store-helpers";
@@ -628,7 +632,7 @@ describe("F3 — importVtt re-import confirmation", () => {
       },
     ];
     resetStore({ activeInterviewId: "iv1", codedSegments: coded });
-    vi.mocked(confirm).mockResolvedValueOnce(false);
+    vi.mocked(appConfirm).mockResolvedValueOnce(false);
 
     const count = await useProjectStore.getState().importVtt("/tmp/foo.vtt");
 
