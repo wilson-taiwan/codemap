@@ -77,23 +77,5 @@ jobs:
       # every push; both platforms get the full clippy gate.
       - name: Cargo clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-      # The lib test executable links WebView2Loader.dll (via tauri -> wry ->
-      # webview2-com-sys). Tauri copies that DLL next to the PACKAGED app, but
-      # nothing puts it next to target/debug/deps, so the harness resolves a
-      # stale loader off PATH and dies at load with STATUS_ENTRYPOINT_NOT_FOUND
-      # (0xc0000139) before a single test runs. Build first, place the matching
-      # DLL beside the test binaries, then run.
-      - name: Stage WebView2Loader beside the test binaries (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          cargo test --manifest-path src-tauri/Cargo.toml --no-run
-          dll="$(find src-tauri/target/debug/build -path '*x64*' -name 'WebView2Loader.dll' | head -1)"
-          if [ -z "$dll" ]; then
-            echo "::error::WebView2Loader.dll not found under src-tauri/target/debug/build"
-            exit 1
-          fi
-          echo "staging $dll"
-          cp -f "$dll" src-tauri/target/debug/deps/
       - name: Cargo test
         run: cargo test --manifest-path src-tauri/Cargo.toml
