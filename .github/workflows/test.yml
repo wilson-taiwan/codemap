@@ -95,5 +95,55 @@ jobs:
           fi
           echo "staging $dll"
           cp -f "$dll" src-tauri/target/debug/deps/
+      - name: DIAGNOSTIC - find the unresolved import (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src-tauri/target/debug/deps -Filter 'qualitative_coding_app_lib-*.exe' |
+                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          Write-Host "TEST EXE: $($exe.FullName)"
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue |
+                     Where-Object { $_.FullName -match 'Hostx64.x64' } | Select-Object -First 1
+          Write-Host "DUMPBIN: $($dumpbin.FullName)"
+
+          $lines = & $dumpbin.FullName /imports $exe.FullName
+          $current = $null
+          $map = @{}
+          foreach ($line in $lines) {
+            if ($line -match '^\s{4}(\S+\.[Dd][Ll][Ll])\s*$') {
+              $current = $Matches[1]; $map[$current] = New-Object System.Collections.Generic.List[string]; continue
+            }
+            if ($current -and $line -match '^\s+[0-9A-Fa-f]+\s+([A-Za-z_][A-Za-z0-9_@\?\$]*)\s*$') {
+              $map[$current].Add($Matches[1])
+            }
+          }
+          Write-Host "=== IMPORTED DLLS ($($map.Keys.Count)) ==="
+          $map.Keys | Sort-Object | ForEach-Object { Write-Host ("  {0}  ({1} symbols)" -f $_, $map[$_].Count) }
+
+          Write-Host "=== RESOLVING EACH IMPORT ==="
+          $missing = 0
+          foreach ($dll in ($map.Keys | Sort-Object)) {
+            $path = (Get-Command $dll -ErrorAction SilentlyContinue).Source
+            if (-not $path) { $path = Join-Path $env:SystemRoot "System32\$dll" }
+            if (-not (Test-Path $path)) {
+              $local = Join-Path $exe.DirectoryName $dll
+              if (Test-Path $local) { $path = $local } else { Write-Host "  !! DLL NOT FOUND: $dll"; $missing++; continue }
+            }
+            $ex = & $dumpbin.FullName /exports $path
+            $names = @{}
+            foreach ($l in $ex) {
+              if ($l -match '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+([^\s=]+)') { $names[$Matches[1]] = $true }
+              elseif ($l -match '^\s+\d+\s+[0-9A-Fa-f]+\s+([^\s=]+)\s*$') { $names[$Matches[1]] = $true }
+            }
+            foreach ($sym in $map[$dll]) {
+              if (-not $names.ContainsKey($sym)) { Write-Host "  !! MISSING ENTRYPOINT: $dll -> $sym"; $missing++ }
+            }
+          }
+          Write-Host "=== TOTAL UNRESOLVED: $missing ==="
+
       - name: Cargo test
         run: cargo test --manifest-path src-tauri/Cargo.toml
