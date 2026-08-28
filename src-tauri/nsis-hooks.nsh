@@ -133,78 +133,91 @@ Function FleuronWaitForRelease
   Abort
 FunctionEnd
 
-; Recognize and safely repair every known v0.27.0 malformed backup state
-; v0.27.0 legacy repair. The `$INSTDIR\Codemap.exe` literals below are
-; DELIBERATE and must not be renamed: this repairs a broken state the
-; v0.27.0 installer left on disk, and that state carries the old name.
+; Recognize and safely repair every known v0.27.0 malformed backup state.
+;
+; These probes target `$INSTDIR\Fleuron.exe` — the executable THIS installer
+; manages. The 2.0.0 rename plan said to keep the old `Codemap.exe` literals
+; because "the state carries the old name". That was wrong, and the Windows
+; installer matrix caught it (`poison_directory_repaired`, 1 of 4 cases failed):
+;
+;   * `productName` changed, so 2.0.0 installs into the Fleuron INSTDIR. A
+;     v0.27.0-poisoned install sits in a DIFFERENT directory that this installer
+;     never visits, which made the old literals unreachable dead probes.
+;   * Meanwhile the live path this function exists to protect — `Fleuron.exe`
+;     becoming a directory instead of a file — was left entirely unguarded.
+;     That is the exact failure mode of v0.27.0.
+;
+; Probing the wrong path is worse than not probing at all: it builds clean, it
+; passes every static NSIS text assertion, and it only misbehaves during an
+; upgrade, on a platform no macOS gate exercises.
 Function FleuronRepairLegacyV027State
   ; Check live path kind
-  StrCpy $0 "$INSTDIR\Codemap.exe"
+  StrCpy $0 "$INSTDIR\Fleuron.exe"
   Call FleuronGetPathKind
   Pop $R0 ; 0 = absent, 1 = file, 2 = directory
 
   ; Check legacy backup path kind
-  StrCpy $0 "$INSTDIR\Codemap.exe.update-backup"
+  StrCpy $0 "$INSTDIR\Fleuron.exe.update-backup"
   Call FleuronGetPathKind
   Pop $R1 ; 0 = absent, 1 = file, 2 = directory
 
-  ; State A: live path is a directory (Codemap.exe\Codemap.exe)
+  ; State A: live path is a directory (Fleuron.exe\Fleuron.exe)
   ${If} $R0 == 2
-    StrCpy $0 "$INSTDIR\Codemap.exe\Codemap.exe"
+    StrCpy $0 "$INSTDIR\Fleuron.exe\Fleuron.exe"
     Call FleuronGetPathKind
     Pop $R2
     ${If} $R2 == 1
       ; Rescue nested executable through $PLUGINSDIR
       InitPluginsDir
-      Delete "$PLUGINSDIR\Codemap.exe"
-      Rename "$INSTDIR\Codemap.exe\Codemap.exe" "$PLUGINSDIR\Codemap.exe"
-      RMDir "$INSTDIR\Codemap.exe"
-      Rename "$PLUGINSDIR\Codemap.exe" "$INSTDIR\Codemap.exe"
+      Delete "$PLUGINSDIR\Fleuron.exe"
+      Rename "$INSTDIR\Fleuron.exe\Fleuron.exe" "$PLUGINSDIR\Fleuron.exe"
+      RMDir "$INSTDIR\Fleuron.exe"
+      Rename "$PLUGINSDIR\Fleuron.exe" "$INSTDIR\Fleuron.exe"
     ${Else}
       ${IfNot} ${Silent}
-        MessageBox MB_OK|MB_ICONEXCLAMATION "Fleuron detected an unrecognised directory at $INSTDIR\Codemap.exe. Update cancelled to protect files."
+        MessageBox MB_OK|MB_ICONEXCLAMATION "Fleuron detected an unrecognised directory at $INSTDIR\Fleuron.exe. Update cancelled to protect files."
       ${EndIf}
       Abort
     ${EndIf}
   ${EndIf}
 
-  ; State B: legacy backup is a directory (Codemap.exe.update-backup\Codemap.exe)
+  ; State B: legacy backup is a directory (Fleuron.exe.update-backup\Fleuron.exe)
   ${If} $R1 == 2
-    StrCpy $0 "$INSTDIR\Codemap.exe\Codemap.exe.update-backup\Codemap.exe"
-    StrCpy $0 "$INSTDIR\Codemap.exe.update-backup\Codemap.exe"
+    StrCpy $0 "$INSTDIR\Fleuron.exe\Fleuron.exe.update-backup\Fleuron.exe"
+    StrCpy $0 "$INSTDIR\Fleuron.exe.update-backup\Fleuron.exe"
     Call FleuronGetPathKind
     Pop $R2
     ${If} $R2 == 1
       ; Re-check live path kind
-      StrCpy $0 "$INSTDIR\Codemap.exe"
+      StrCpy $0 "$INSTDIR\Fleuron.exe"
       Call FleuronGetPathKind
       Pop $R0
       ${If} $R0 == 1
         ; Live file is healthy; remove nested backup
-        Delete "$INSTDIR\Codemap.exe.update-backup\Codemap.exe"
-        RMDir "$INSTDIR\Codemap.exe.update-backup"
+        Delete "$INSTDIR\Fleuron.exe.update-backup\Fleuron.exe"
+        RMDir "$INSTDIR\Fleuron.exe.update-backup"
       ${ElseIf} $R0 == 0
         ; Live is missing; rescue nested backup to live
         InitPluginsDir
-        Delete "$PLUGINSDIR\Codemap.exe"
-        Rename "$INSTDIR\Codemap.exe.update-backup\Codemap.exe" "$PLUGINSDIR\Codemap.exe"
-        RMDir "$INSTDIR\Codemap.exe.update-backup"
-        Rename "$PLUGINSDIR\Codemap.exe" "$INSTDIR\Codemap.exe"
+        Delete "$PLUGINSDIR\Fleuron.exe"
+        Rename "$INSTDIR\Fleuron.exe.update-backup\Fleuron.exe" "$PLUGINSDIR\Fleuron.exe"
+        RMDir "$INSTDIR\Fleuron.exe.update-backup"
+        Rename "$PLUGINSDIR\Fleuron.exe" "$INSTDIR\Fleuron.exe"
       ${EndIf}
     ${Else}
-      RMDir "$INSTDIR\Codemap.exe.update-backup"
+      RMDir "$INSTDIR\Fleuron.exe.update-backup"
     ${EndIf}
   ${EndIf}
 
   ; State C: legacy backup is a regular file
   ${If} $R1 == 1
-    StrCpy $0 "$INSTDIR\Codemap.exe"
+    StrCpy $0 "$INSTDIR\Fleuron.exe"
     Call FleuronGetPathKind
     Pop $R0
     ${If} $R0 == 1
-      Delete "$INSTDIR\Codemap.exe.update-backup"
+      Delete "$INSTDIR\Fleuron.exe.update-backup"
     ${ElseIf} $R0 == 0
-      Rename "$INSTDIR\Codemap.exe.update-backup" "$INSTDIR\Codemap.exe"
+      Rename "$INSTDIR\Fleuron.exe.update-backup" "$INSTDIR\Fleuron.exe"
     ${EndIf}
   ${EndIf}
 FunctionEnd
