@@ -2201,7 +2201,8 @@ pub fn open_project(path: &str) -> rusqlite::Result<Connection> {
     let project_path = Path::new(path);
     if !is_project_path(project_path) {
         return Err(rusqlite::Error::InvalidParameterName(
-            "Not a Fleuron project. Choose a folder ending in .fleuron (or .codemap / .qcproj).".into(),
+            "Not a Fleuron project. Choose a folder ending in .fleuron (or .codemap / .qcproj)."
+                .into(),
         ));
     }
     let db_path = project_path.join("project.db");
@@ -2223,7 +2224,8 @@ pub fn open_project_snapshot_inner(
     let project_path = Path::new(path);
     if !is_project_path(project_path) {
         return Err(rusqlite::Error::InvalidParameterName(
-            "Not a Fleuron project. Choose a folder ending in .fleuron (or .codemap / .qcproj).".into(),
+            "Not a Fleuron project. Choose a folder ending in .fleuron (or .codemap / .qcproj)."
+                .into(),
         ));
     }
     let db_path = project_path.join("project.db");

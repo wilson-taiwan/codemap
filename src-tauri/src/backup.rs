@@ -761,7 +761,10 @@ mod tests {
         fs::rename(&made.path, &legacy).unwrap();
 
         assert_eq!(list(&path).len(), 1, "a .codemapbak must still be listed");
-        assert!(inspect(&legacy).is_ok(), "a .codemapbak must still be readable");
+        assert!(
+            inspect(&legacy).is_ok(),
+            "a .codemapbak must still be readable"
+        );
 
         // Imported from elsewhere, it is rewritten under the new extension.
         let (_dir2, other, conn2) = make_project();
@@ -773,7 +776,10 @@ mod tests {
             brought_in.file_name
         );
 
-        assert!(delete(&legacy).is_ok(), "a .codemapbak must still be deletable");
+        assert!(
+            delete(&legacy).is_ok(),
+            "a .codemapbak must still be deletable"
+        );
     }
 
     /// One unreadable file must not hide the good snapshots beside it.
