@@ -453,7 +453,7 @@ export function JoinStudyModal() {
 
             {stage === "connect" && (
               <Section
-                heading={signedIn ? "Join a shared study" : "Your Codemap account"}
+                heading={signedIn ? "Join a shared study" : "Your Fleuron account"}
                 lede={
                   signedIn
                     ? hideServer
@@ -512,7 +512,7 @@ export function JoinStudyModal() {
                       autoFocus={signedIn}
                     />
                     <p className="hint mt-1">
-                      Paste the whole block — Codemap works out which line is which.
+                      Paste the whole block — Fleuron works out which line is which.
                     </p>
                   </div>
                 )}
@@ -576,7 +576,7 @@ export function JoinStudyModal() {
             {stage === "pick" && (
               <Section
                 heading="Which group is this machine joining?"
-                lede="These are the groups your account already belongs to. Codemap sets up your copy — you do not need a project file from anybody."
+                lede="These are the groups your account already belongs to. Fleuron sets up your copy — you do not need a project file from anybody."
               >
                 <div className="flex flex-col gap-2">
                   {memberships.map((m) => (
@@ -618,7 +618,7 @@ export function JoinStudyModal() {
                     onSelect={() => setCopyChoice("new")}
                     icon="plus"
                     title="Create a new copy"
-                    blurb="Codemap makes a project folder on this computer and pulls the codebook. You then link the transcripts from Box."
+                    blurb="Fleuron makes a project folder on this computer and pulls the codebook. You then link the transcripts from Box."
                   />
                   <OptionCard
                     selected={copyChoice === "existing"}
@@ -741,7 +741,7 @@ export function JoinStudyModal() {
                     app — it decides the interview's identity — and there is no
                     reason to ask anybody to do it by hand. */}
                 <p className="hint mt-3 text-[12px]">
-                  Codemap fills in the participant ID for you, so your copy lines
+                  Fleuron fills in the participant ID for you, so your copy lines
                   up with your colleague's exactly.
                 </p>
                 {importError && (

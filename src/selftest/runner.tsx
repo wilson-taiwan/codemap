@@ -199,7 +199,7 @@ export function SelftestRunner() {
           const isOnlineAvailable = await invoke<boolean>("selftest_online_status");
           if (!isOnlineAvailable) {
             throw new Error(
-              "SKIP: Missing CODEMAP_STAGING_* environment variables for online lifecycle suite",
+              "SKIP: Missing FLEURON_STAGING_* environment variables for online lifecycle suite",
             );
           }
 
@@ -303,7 +303,7 @@ export function SelftestRunner() {
         try {
           const created = await api.createProject({
             parent_dir: parentDir,
-            project_name: `codemap_selftest_lc_${Date.now()}`,
+            project_name: `fleuron_selftest_lc_${Date.now()}`,
             title: "Selftest Study",
             coders: [SELFTEST_CODER],
           });
@@ -612,7 +612,7 @@ export function SelftestRunner() {
             className="text-base font-bold"
             style={{ color: "rgb(255, 255, 255)", backgroundColor: "rgb(10, 10, 10)" }}
           >
-            CODEMAP SELFTEST RUNNER
+            FLEURON SELFTEST RUNNER
           </h1>
           <p
             className="mt-1"

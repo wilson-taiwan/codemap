@@ -277,7 +277,7 @@ export function WelcomeScreen() {
           <div className="mx-auto my-auto flex w-full max-w-md flex-col items-center py-6">
             <header className="anim-rise flex flex-col items-center text-center">
               <Mark />
-              <h1 className="wordmark mt-4 text-[28px]">Welcome to Codemap</h1>
+              <h1 className="wordmark mt-4 text-[28px]">Welcome to Fleuron</h1>
               <p className="hint mt-2 max-w-sm text-[13px]">
                 How do you want to work? You can change your mind at any time.
               </p>
@@ -304,7 +304,7 @@ export function WelcomeScreen() {
                   </span>
                   <span className="mt-2 block text-[13px]" style={{ color: "var(--ink-2)" }}>
                     No account. Create, code, memo, and export on this computer.
-                    Codemap checks GitHub for updates unless you turn that off.
+                    Fleuron checks GitHub for updates unless you turn that off.
                   </span>
                 </button>
 
@@ -458,7 +458,7 @@ export function WelcomeScreen() {
           type="button"
           onClick={openAbout}
           className="btn btn-ghost btn-sm"
-          aria-label="About Codemap"
+          aria-label="About Fleuron"
         >
           <Icon name="help" size={14} />
         </button>
@@ -468,7 +468,7 @@ export function WelcomeScreen() {
         <div className="mx-auto my-auto flex w-full max-w-lg flex-col items-center py-6">
           <header className="anim-rise flex flex-col items-center text-center">
             <Mark />
-            <h1 className="wordmark mt-4 text-[32px]">Codemap</h1>
+            <h1 className="wordmark mt-4 text-[32px]">Fleuron</h1>
             <p className="hint mt-2 max-w-sm text-[13px]">
               Code interview transcripts with a living codebook, and export
               coded segments for writing up.
@@ -519,7 +519,7 @@ export function WelcomeScreen() {
                 disabled={loading}
                 onClick={handleOpen}
                 title="Open an existing study"
-                subtitle="A .codemap or .qcproj folder on this computer"
+                subtitle="A .fleuron or .qcproj folder on this computer"
               />
             </div>
           ) : (
@@ -1204,7 +1204,7 @@ export function WelcomeScreen() {
             className="btn btn-ghost btn-sm mt-10"
           >
             <Icon name="book" size={14} />
-            How coding works in Codemap
+            How coding works in Fleuron
           </button>
         </div>
       </div>

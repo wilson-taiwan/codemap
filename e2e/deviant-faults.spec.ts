@@ -108,7 +108,7 @@ test("fixture=auth-error shows actionable copy and never advances", async ({
   await expect(settingsContainer).toBeVisible();
 
   const signOut = settingsContainer.getByRole("button", {
-    name: "Sign out of Codemap",
+    name: "Sign out of Fleuron",
   });
   if (await signOut.isVisible({ timeout: 2000 }).catch(() => false)) {
     await signOut.click();

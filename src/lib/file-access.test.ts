@@ -18,7 +18,7 @@ describe("parseFileError", () => {
     const ui = parseFileError(
       wrapped(
         "permission_denied",
-        "Codemap does not have permission to use that location.",
+        "Fleuron does not have permission to use that location.",
         "/Users/x/secret (os error 5)",
       ),
     );

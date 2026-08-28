@@ -4,7 +4,7 @@ import { parseVtt } from "./vtt-parser";
 /**
  * Reading transcripts from whatever produced them.
  *
- * Codemap started as a Zoom tool and accepted WebVTT only, which quietly
+ * Fleuron started as a Zoom tool and accepted WebVTT only, which quietly
  * decided who could use it: interviews recorded on a phone, transcribed by a
  * service, or typed up by hand were all locked out. The corpus is the one thing
  * that must reach both coders intact, so the import step should be the least

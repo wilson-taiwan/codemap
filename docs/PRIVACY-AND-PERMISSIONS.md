@@ -18,25 +18,25 @@ Three consequences worth saying plainly:
 
 - Study/participant labels and every codebook text field sync word-for-word. Write them de-identified from the start.
 - HTTPS/WSS encrypts transport. That protects data on the wire; it does not make synced contents unknowable to the service operator.
-- Codemap supports a research protocol; it cannot certify compliance of any kind.
+- Fleuron supports a research protocol; it cannot certify compliance of any kind.
 
 ## Where files live
 
-- New studies default to a local working library: `~/Codemap` on macOS, `%USERPROFILE%\Codemap` on Windows. Cloud-synced Documents/Desktop folders are avoided on purpose.
+- New studies default to a local working library: `~/Fleuron` on macOS, `%USERPROFILE%\Fleuron` on Windows. Cloud-synced Documents/Desktop folders are avoided on purpose.
 - Existing projects are never moved by an update.
 - Exports and backups are written where you choose.
 
 ## Permissions model
 
-Choosing a file or folder with your OS's own picker is the entire permission ask — no pre-prompts, no permission wizard. macOS may show one truthful prompt when you pick inside protected locations (Documents/Desktop/Downloads/network/removable volumes); Windows may enforce Controlled Folder Access there. Denial recovery is in-app and offers choose-another-folder paths; Codemap never asks for Full Disk Access and never suggests disabling ransomware protection.
+Choosing a file or folder with your OS's own picker is the entire permission ask — no pre-prompts, no permission wizard. macOS may show one truthful prompt when you pick inside protected locations (Documents/Desktop/Downloads/network/removable volumes); Windows may enforce Controlled Folder Access there. Denial recovery is in-app and offers choose-another-folder paths; Fleuron never asks for Full Disk Access and never suggests disabling ransomware protection.
 
-Capabilities Codemap **does not request**: camera, microphone, screen recording, Accessibility, location, contacts, calendar, notifications, Bluetooth, local-network discovery, Full Disk Access, inbound network listener/firewall exception.
+Capabilities Fleuron **does not request**: camera, microphone, screen recording, Accessibility, location, contacts, calendar, notifications, Bluetooth, local-network discovery, Full Disk Access, inbound network listener/firewall exception.
 
 ## Network behavior
 
 | Purpose | Endpoint | Protocol | Default |
 | --- | --- | --- | --- |
-| Update checks | api.github.com (wilson-taiwan/codemap releases) | Outbound HTTPS | On; disable in Settings → Update checks |
+| Update checks | api.github.com (wilson-taiwan/fleuron releases) | Outbound HTTPS | On; disable in Settings → Update checks |
 | Update download/install after you approve | github.com releases | Outbound HTTPS | Only on your action |
 | Collaboration sync (account + study/codebook/coding metadata) | Configured Supabase service | Outbound HTTPS/WSS | Only when collaborating |
 

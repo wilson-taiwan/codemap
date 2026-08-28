@@ -10,7 +10,7 @@ describe("webview preconditions", () => {
     const mainWindow = config?.app?.windows?.[0];
     expect(
       mainWindow?.dragDropEnabled,
-      "dragDropEnabled must stay false. Tauri's drag-drop handler returns true for every drag event, so wry never forwards dragover/drop to the webview and ALL HTML5 drag-and-drop in the app dies silently. See plans/archive/codemap-v0.24-*.md task 1.",
+      "dragDropEnabled must stay false. Tauri's drag-drop handler returns true for every drag event, so wry never forwards dragover/drop to the webview and ALL HTML5 drag-and-drop in the app dies silently. See plans/archive/fleuron-v0.24-*.md task 1.",
     ).toBe(false);
   });
 

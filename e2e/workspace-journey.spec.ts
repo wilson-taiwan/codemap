@@ -13,8 +13,8 @@ test.beforeEach(async ({ page }) => {
   consoleLines = watchPageDiagnostics(page);
   await gotoApp(page);
   await page.evaluate(() => {
-    const w = window as unknown as { __CODEMAP_CLEAR_IPC_LOG__?: () => void };
-    w.__CODEMAP_CLEAR_IPC_LOG__?.();
+    const w = window as unknown as { __FLEURON_CLEAR_IPC_LOG__?: () => void };
+    w.__FLEURON_CLEAR_IPC_LOG__?.();
   });
 });
 
@@ -24,8 +24,8 @@ test.afterEach(async ({ page }, testInfo) => {
 
 async function ipcCount(page: import("@playwright/test").Page, cmd: string) {
   return page.evaluate((command) => {
-    const log = (window as unknown as { __CODEMAP_IPC_LOG__?: { cmd: string; ok: boolean }[] })
-      .__CODEMAP_IPC_LOG__;
+    const log = (window as unknown as { __FLEURON_IPC_LOG__?: { cmd: string; ok: boolean }[] })
+      .__FLEURON_IPC_LOG__;
     return (log ?? []).filter((e) => e.cmd === command && e.ok).length;
   }, cmd);
 }

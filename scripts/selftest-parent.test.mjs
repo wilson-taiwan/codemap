@@ -1,17 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findCodemapBinary, runSelftest, rootDir } from "./selftest-parent.mjs";
+import { findFleuronBinary, runSelftest, rootDir } from "./selftest-parent.mjs";
 import { resolve } from "node:path";
 
-test("findCodemapBinary returns null for empty directory", () => {
-  const res = findCodemapBinary(resolve(rootDir, "non_existent_dir_123"));
+test("findFleuronBinary returns null for empty directory", () => {
+  const res = findFleuronBinary(resolve(rootDir, "non_existent_dir_123"));
   assert.equal(res, null);
 });
 
 test("runSelftest rejects when binary is missing", async () => {
   await assert.rejects(
-    () => runSelftest({ binaryPath: "/non/existent/codemap/binary" }),
-    /Could not find Codemap binary/,
+    () => runSelftest({ binaryPath: "/non/existent/fleuron/binary" }),
+    /Could not find Fleuron binary/,
   );
 });
 

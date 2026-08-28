@@ -49,14 +49,14 @@ export function parseFileError(raw: unknown): FileAccessUi | null {
 
 const COPY: Record<FileAccessCategory, { message: string; recovery: string }> = {
   permission_denied: {
-    message: "Codemap does not have permission to use that location.",
+    message: "Fleuron does not have permission to use that location.",
     recovery:
       "Choose another folder, or grant access when your system asks again. On macOS you can revisit this under System Settings → Privacy & Security → Files and Folders.",
   },
   path_unavailable: {
     message: "That folder isn't reachable right now.",
     recovery:
-      "It may have been moved, renamed, or disconnected — like an unplugged drive or an offline cloud folder. Use Locate folder to point Codemap at its new place.",
+      "It may have been moved, renamed, or disconnected — like an unplugged drive or an offline cloud folder. Use Locate folder to point Fleuron at its new place.",
   },
   storage_full: {
     message: "There isn't enough space to complete that.",

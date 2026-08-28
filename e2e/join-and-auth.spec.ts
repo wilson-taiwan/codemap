@@ -52,7 +52,7 @@ test("forgot-password flow accepts a short code paste", async ({ page }) => {
 
   const settingsContainer = page.getByLabel("Settings", { exact: true });
 
-  const signOut = settingsContainer.getByRole("button", { name: "Sign out of Codemap" });
+  const signOut = settingsContainer.getByRole("button", { name: "Sign out of Fleuron" });
   const alreadyHaveOne = settingsContainer.getByRole("button", { name: "I already have one" });
 
   await expect(signOut.or(alreadyHaveOne)).toBeVisible();

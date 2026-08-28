@@ -36,7 +36,7 @@ if (-not (Test-Path $OutputDirectory)) {
 }
 
 $CandidateHash = (Get-FileHash -Path $CandidateInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
-Write-Host "=== Codemap Candidate Installer Test Matrix ==="
+Write-Host "=== Fleuron Candidate Installer Test Matrix ==="
 Write-Host "Candidate: $CandidateInstaller (SHA-256: $CandidateHash)"
 Write-Host "Output Directory: $OutputDirectory"
 
@@ -128,10 +128,10 @@ function Stop-ProcessTreeById {
 # Kill any lingering installer processes left from a prior case so cross-case
 # contention (an orphaned installer still holding the install dir) does not turn
 # an independent case into a false timeout. Targets the versioned installer
-# process only, not the installed Codemap app.
+# process only, not the installed Fleuron app.
 function Reset-InstallerProcesses {
     try {
-        Get-Process -Name "Codemap_*" -ErrorAction SilentlyContinue | ForEach-Object {
+        Get-Process -Name "Fleuron_*" -ErrorAction SilentlyContinue | ForEach-Object {
             Stop-ProcessTreeById -ProcessId $_.Id
         }
     } catch {}
@@ -175,9 +175,9 @@ $LocalAppData = [Environment]::GetFolderPath("LocalApplicationData")
 $AppData = [Environment]::GetFolderPath("ApplicationData")
 $UserProfile = [Environment]::GetFolderPath("UserProfile")
 
-$CanaryDirApp = Join-Path $AppData "app.codemap.desktop"
-$CanaryDirDocs = Join-Path $UserProfile "Documents\Codemap-test-canary"
-$CanaryDirLocal = Join-Path $LocalAppData "Codemap-unrelated-sibling"
+$CanaryDirApp = Join-Path $AppData "study.fleuron.desktop"
+$CanaryDirDocs = Join-Path $UserProfile "Documents\Fleuron-test-canary"
+$CanaryDirLocal = Join-Path $LocalAppData "Fleuron-unrelated-sibling"
 
 New-Item -ItemType Directory -Path $CanaryDirApp -Force | Out-Null
 New-Item -ItemType Directory -Path $CanaryDirDocs -Force | Out-Null
@@ -206,16 +206,16 @@ function Verify-Canaries {
 }
 
 # 2. Execute Test Cases
-$InstallDir = Join-Path $LocalAppData "Codemap"
-$installedExe = Join-Path $InstallDir "Codemap.exe"
+$InstallDir = Join-Path $LocalAppData "Fleuron"
+$installedExe = Join-Path $InstallDir "Fleuron.exe"
 
 # Case A: Fresh manual installation without custom arguments (silent /S)
 if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
-Remove-Item -Path "HKCU:\Software\Codemap\Codemap" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Codemap" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "HKCU:\Software\Fleuron\Fleuron" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Fleuron" -Recurse -Force -ErrorAction SilentlyContinue
 $res = Invoke-InstallerWithTimeout -InstallerPath $CandidateInstaller -Arguments "/S"
 Verify-Canaries
-if (-not $res.TimedOut -and (Test-Path $installedExe) -and -not (Test-Path (Join-Path $InstallDir ".codemap-update"))) {
+if (-not $res.TimedOut -and (Test-Path $installedExe) -and -not (Test-Path (Join-Path $InstallDir ".fleuron-update"))) {
     Add-TestCaseResult -Name "fresh_manual_install" -Status "PASS" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Fresh manual installation succeeded cleanly." -Diagnostics $res.Diagnostics
 } else {
     Add-TestCaseResult -Name "fresh_manual_install" -Status "FAIL" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Missing installed executable or leftover transaction residue." -Diagnostics $res.Diagnostics
@@ -230,8 +230,8 @@ if (-not $res.TimedOut -and (Test-Path $installedExe)) {
     Add-TestCaseResult -Name "v0261_updater_flags" -Status "FAIL" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Updater flags failed." -Diagnostics $res.Diagnostics
 }
 
-# Case C: v0.27.0 updater semantics with legacy /CODEMAP_TARGET_VERSION_FILE argument
-$res = Invoke-InstallerWithTimeout -InstallerPath $CandidateInstaller -Arguments "/S /P /UPDATE /CODEMAP_TARGET_VERSION_FILE=`"dummy.txt`""
+# Case C: v0.27.0 updater semantics with legacy /FLEURON_TARGET_VERSION_FILE argument
+$res = Invoke-InstallerWithTimeout -InstallerPath $CandidateInstaller -Arguments "/S /P /UPDATE /FLEURON_TARGET_VERSION_FILE=`"dummy.txt`""
 Verify-Canaries
 if (-not $res.TimedOut -and (Test-Path $installedExe)) {
     Add-TestCaseResult -Name "v0270_legacy_arg_ignored" -Status "PASS" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Legacy target version argument safely ignored." -Diagnostics $res.Diagnostics
@@ -239,10 +239,10 @@ if (-not $res.TimedOut -and (Test-Path $installedExe)) {
     Add-TestCaseResult -Name "v0270_legacy_arg_ignored" -Status "FAIL" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Installer failed on legacy argument." -Diagnostics $res.Diagnostics
 }
 
-# Case D: Residue repair — poisoned nested directory Codemap.exe\Codemap.exe
+# Case D: Residue repair — poisoned nested directory Fleuron.exe\Fleuron.exe
 Remove-Item -Recurse -Force $InstallDir
-New-Item -ItemType Directory -Path (Join-Path $InstallDir "Codemap.exe") -Force | Out-Null
-Set-Content -Path (Join-Path $InstallDir "Codemap.exe\Codemap.exe") -Value "DUMMY_BINARY_DATA"
+New-Item -ItemType Directory -Path (Join-Path $InstallDir "Fleuron.exe") -Force | Out-Null
+Set-Content -Path (Join-Path $InstallDir "Fleuron.exe\Fleuron.exe") -Value "DUMMY_BINARY_DATA"
 $res = Invoke-InstallerWithTimeout -InstallerPath $CandidateInstaller -Arguments "/S"
 Verify-Canaries
 $isDir = $false

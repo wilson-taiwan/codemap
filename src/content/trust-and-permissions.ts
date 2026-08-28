@@ -1,6 +1,6 @@
 /**
  * The single typed source for every public trust, warning, privacy, and
- * permission claim Codemap makes.
+ * permission claim Fleuron makes.
  *
  * Why one module: v1.1 drifted — README, the external guide, the in-app
  * guide, About, and setup copy disagreed about sync fields and made claims
@@ -24,7 +24,7 @@ import { isMac } from "../lib/platform";
 // Official URLs
 // ---------------------------------------------------------------------------
 
-const REPO = "https://github.com/wilson-taiwan/codemap";
+const REPO = "https://github.com/wilson-taiwan/fleuron";
 
 export const OFFICIAL_URLS = {
   repository: REPO,
@@ -40,8 +40,8 @@ export const OFFICIAL_URLS = {
 
 /** The two manual downloads that will ever exist. Anything else is updater infrastructure. */
 export const CANONICAL_ASSETS = {
-  macos: "Codemap_1.2.0_universal.dmg",
-  windows: "Codemap_1.2.0_x64-setup.exe",
+  macos: "Fleuron_2.0.0_universal.dmg",
+  windows: "Fleuron_2.0.0_x64-setup.exe",
 } as const;
 
 /**
@@ -49,9 +49,9 @@ export const CANONICAL_ASSETS = {
  * updater archive + signatures + manifest.
  */
 export const UPDATER_INFRASTRUCTURE_ASSETS = [
-  "Codemap_universal.app.tar.gz",
-  "Codemap_universal.app.tar.gz.sig",
-  "Codemap_1.2.0_x64-setup.exe.sig",
+  "Fleuron_universal.app.tar.gz",
+  "Fleuron_universal.app.tar.gz.sig",
+  "Fleuron_2.0.0_x64-setup.exe.sig",
   "latest.json",
 ] as const;
 
@@ -65,7 +65,7 @@ export const UPDATER_INFRASTRUCTURE_ASSETS = [
  * wraps itself at render time.
  */
 export const PUBLISHER_VERIFICATION_NOTICE =
-  "Codemap is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at https://github.com/wilson-taiwan/codemap/releases. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.";
+  "Fleuron is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at https://github.com/wilson-taiwan/fleuron/releases. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.";
 
 /**
  * What each provenance signal actually proves — and what it does not. None of
@@ -144,7 +144,7 @@ export interface WarningCard {
   /** Short label shown in UI, e.g. "Apple cannot verify the developer". */
   signal: string;
   meaning: WarningMeaning;
-  /** What this warning actually means for Codemap. Never "harmless". */
+  /** What this warning actually means for Fleuron. Never "harmless". */
   explanation: string;
   /** What we tell the user to do. Empty string for stop conditions where the action is simply "stop". */
   userAction: string;
@@ -157,7 +157,7 @@ export const MACOS_WARNING_CARDS: WarningCard[] = [
     explanation:
       "Expected for the official non-notarized, ad-hoc signed build. macOS is saying it cannot verify the publisher — not that it found malware.",
     userAction:
-      "Confirm you downloaded from github.com/wilson-taiwan/codemap/releases, then System Settings \u2192 Privacy & Security \u2192 Open Anyway, authenticate, and Open. No Terminal steps are needed.",
+      "Confirm you downloaded from github.com/wilson-taiwan/fleuron/releases, then System Settings \u2192 Privacy & Security \u2192 Open Anyway, authenticate, and Open. No Terminal steps are needed.",
   },
   {
     signal: "\u201cWill damage your computer\u201d / malware alert / \u201cdamaged and cannot be opened\u201d",
@@ -173,7 +173,7 @@ export const MACOS_WARNING_CARDS: WarningCard[] = [
     explanation:
       "macOS asks when an app touches Documents, Desktop, Downloads, network volumes, or removable drives because you selected one of those locations.",
     userAction:
-      "Allow, or cancel and choose a different folder inside Codemap's picker. Denial is fine — Codemap offers inline recovery and never requests Full Disk Access.",
+      "Allow, or cancel and choose a different folder inside Fleuron's picker. Denial is fine — Fleuron offers inline recovery and never requests Full Disk Access.",
   },
 ];
 
@@ -198,7 +198,7 @@ export const WINDOWS_WARNING_CARDS: WarningCard[] = [
     signal: "User Account Control asks for administrator credentials to install",
     meaning: "stop",
     explanation:
-      "Unexpected: Codemap installs per-user with no elevation. An admin prompt means something is off with the installer or your machine's policy.",
+      "Unexpected: Fleuron installs per-user with no elevation. An admin prompt means something is off with the installer or your machine's policy.",
     userAction:
       "Cancel. Do not enter credentials. File an install issue.",
   },
@@ -208,15 +208,15 @@ export const WINDOWS_WARNING_CARDS: WarningCard[] = [
     explanation:
       "Smart App Control has no per-app override; unblocking would mean weakening it.",
     userAction:
-      "Stop. Do not disable Smart App Control to run Codemap.",
+      "Stop. Do not disable Smart App Control to run Fleuron.",
   },
   {
     signal: "Windows S mode blocks installation",
     meaning: "stop",
     explanation:
-      "S mode only runs Store apps; Codemap is not distributed through the Store.",
+      "S mode only runs Store apps; Fleuron is not distributed through the Store.",
     userAction:
-      "Stop. Codemap is unsupported in S mode. Do not switch out of S mode for this.",
+      "Stop. Fleuron is unsupported in S mode. Do not switch out of S mode for this.",
   },
   {
     signal: "WDAC / App Control / AppLocker / managed SmartScreen blocks the app",
@@ -231,28 +231,28 @@ export const WINDOWS_WARNING_CARDS: WarningCard[] = [
     explanation:
       "Ransomware protection blocked a write into a folder you had protected. Nothing malicious happened.",
     userAction:
-      "Choose another folder (the default %USERPROFILE%\\Codemap avoids protected folders). After verifying the source, you or IT may allow-list Codemap under your own policy.",
+      "Choose another folder (the default %USERPROFILE%\\Fleuron avoids protected folders). After verifying the source, you or IT may allow-list Fleuron under your own policy.",
   },
   {
-    signal: "Windows Settings \u2192 Privacy \u2192 File system does not list Codemap",
+    signal: "Windows Settings \u2192 Privacy \u2192 File system does not list Fleuron",
     meaning: "expected",
     explanation:
       "Desktop applications are governed differently from Store apps there. Absence from that panel is normal.",
-    userAction: "Nothing — do not look for Codemap in that panel.",
+    userAction: "Nothing — do not look for Fleuron in that panel.",
   },
   {
     signal: "WebView2 missing or damaged",
     meaning: "expected",
     explanation:
-      "Rare: Windows 11 normally includes the Evergreen WebView2 Runtime. Codemap never downloads, bundles, or repairs it silently.",
+      "Rare: Windows 11 normally includes the Evergreen WebView2 Runtime. Fleuron never downloads, bundles, or repairs it silently.",
     userAction:
       "Use Microsoft's official WebView2 repair/install page, or contact IT on managed devices.",
   },
   {
-    signal: "An inbound firewall prompt appears for Codemap",
+    signal: "An inbound firewall prompt appears for Fleuron",
     meaning: "stop",
     explanation:
-      "Codemap only initiates outbound HTTPS/WSS on port 443. It never listens for inbound connections, so an inbound prompt should not happen.",
+      "Fleuron only initiates outbound HTTPS/WSS on port 443. It never listens for inbound connections, so an inbound prompt should not happen.",
     userAction: "Deny it and report it via an install issue.",
   },
 ];
@@ -269,22 +269,22 @@ export const FILE_ACCESS_NOTES = [
   {
     title: "Where projects live by default",
     detail:
-      "New studies are created in a local working library: ~/Codemap on macOS, %USERPROFILE%\\Codemap on Windows. These locations avoid Documents/Desktop, which both operating systems protect and which cloud sync (OneDrive/iCloud) can redirect. Existing projects are never moved; their recorded paths stay in Recents until you remove them.",
+      "New studies are created in a local working library: ~/Fleuron on macOS, %USERPROFILE%\\Fleuron on Windows. These locations avoid Documents/Desktop, which both operating systems protect and which cloud sync (OneDrive/iCloud) can redirect. Existing projects are never moved; their recorded paths stay in Recents until you remove them.",
   },
   {
     title: "Choosing files or folders yourself is the consent",
     detail:
-      "Codemap uses your operating system's native open/save pickers. When you pick a transcript, study folder, or export destination, that choice IS the permission grant — Codemap shows no extra pre-prompt before the picker and asks nothing beyond it.",
+      "Fleuron uses your operating system's native open/save pickers. When you pick a transcript, study folder, or export destination, that choice IS the permission grant — Fleuron shows no extra pre-prompt before the picker and asks nothing beyond it.",
   },
   {
     title: "Folder scans read the folder you chose, only immediately inside it",
     detail:
-      "When linking transcripts from a folder, Codemap reads supported files (.vtt, .srt, .txt, .md, .csv, .tsv, .docx) directly inside that folder — not subfolders — to match participant labels and content hashes. Processing happens on this computer; transcript text is not uploaded.",
+      "When linking transcripts from a folder, Fleuron reads supported files (.vtt, .srt, .txt, .md, .csv, .tsv, .docx) directly inside that folder — not subfolders — to match participant labels and content hashes. Processing happens on this computer; transcript text is not uploaded.",
   },
   {
     title: "If access is denied",
     detail:
-      "Offline volumes, revoked permissions (macOS Files & Folders, Windows Controlled Folder Access), and full disks surface as readable explanations inside Codemap, with actions like Locate folder, Choose another folder, or Remove from recent. Raw operating-system error strings stay out of the main interface.",
+      "Offline volumes, revoked permissions (macOS Files & Folders, Windows Controlled Folder Access), and full disks surface as readable explanations inside Fleuron, with actions like Locate folder, Choose another folder, or Remove from recent. Raw operating-system error strings stay out of the main interface.",
   },
 ] as const;
 
@@ -392,13 +392,13 @@ export interface NetworkBehavior {
 export const NETWORK_BEHAVIOR: NetworkBehavior[] = [
   {
     purpose: "Update checks (is a newer release published?)",
-    endpoint: "api.github.com — wilson-taiwan/codemap releases",
+    endpoint: "api.github.com — wilson-taiwan/fleuron releases",
     protocol: "Outbound HTTPS",
     enabledByDefault: true,
   },
   {
     purpose: "Downloading and installing an update after you approve it",
-    endpoint: "github.com/wilson-taiwan/codemap/releases",
+    endpoint: "github.com/wilson-taiwan/fleuron/releases",
     protocol: "Outbound HTTPS",
     enabledByDefault: false,
   },
@@ -412,7 +412,7 @@ export const NETWORK_BEHAVIOR: NetworkBehavior[] = [
 
 export const NETWORK_NOTES = [
   "Working locally makes no Supabase connection — only the quiet GitHub update check runs (and you can turn that off in Settings).",
-  "Codemap opens no inbound port and needs no firewall exception. Outbound-only traffic is how desktop apps normally behave.",
+  "Fleuron opens no inbound port and needs no firewall exception. Outbound-only traffic is how desktop apps normally behave.",
   "HTTPS/WSS encrypts data in transit. That protects it on the wire; it does not make the contents unknowable to the service operator hosting collaboration sync.",
 ] as const;
 
@@ -430,7 +430,7 @@ export const STORED_SIGN_IN = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Capabilities Codemap does NOT request
+// Capabilities Fleuron does NOT request
 // ---------------------------------------------------------------------------
 
 export const NOT_REQUESTED_CAPABILITIES = [

@@ -1,4 +1,4 @@
-# Codemap
+# Fleuron
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -10,7 +10,7 @@ Built with **Tauri v2**, **React 19**, **TypeScript**, **Tailwind CSS**, and **S
 
 ## Key Features
 
-- **Offline-First Privacy**: Project data is stored in a local SQLite database (`.codemap`). Transcripts and private memos never leave your local machine without your explicit action.
+- **Offline-First Privacy**: Project data is stored in a local SQLite database (`.fleuron`). Transcripts and private memos never leave your local machine without your explicit action.
 - **Span & Whole-Turn Coding**: Drag across words to highlight a specific phrase or click a passage to code the whole turn.
 - **Living Codebook**: Create, merge, split, recode, color-code, and organize codes hierarchically. Click any code to inspect all associated passages.
 - **Collaborative Sync (Optional)**: Connect via self-hosted or managed Supabase using Sync Protocol v2. Coded spans, codebook structure, memberships, and your de-identified labels sync over encrypted transport; transcript text and memos never do. Sync on the hosted service is **free during the beta**; once the beta ends it will require a subscription, while offline/local coding stays free forever and people who join during the beta keep founder pricing. (Self-hosting your own Supabase is always free.)
@@ -24,16 +24,16 @@ Built with **Tauri v2**, **React 19**, **TypeScript**, **Tailwind CSS**, and **S
 
 ### Installation
 
-Downloads live only on the [official Releases page](https://github.com/wilson-taiwan/codemap/releases/latest). Full step-by-step guidance — including the **expected first-launch warnings** for unsigned-but-official builds and the "stop here" signals — lives in [docs/INSTALLING.md](docs/INSTALLING.md):
+Downloads live only on the [official Releases page](https://github.com/wilson-taiwan/fleuron/releases/latest). Full step-by-step guidance — including the **expected first-launch warnings** for unsigned-but-official builds and the "stop here" signals — lives in [docs/INSTALLING.md](docs/INSTALLING.md):
 
-> Codemap is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at `https://github.com/wilson-taiwan/codemap/releases`. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.
+> Fleuron is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at `https://github.com/wilson-taiwan/fleuron/releases`. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.
 
 | Platform | File |
 | --- | --- |
-| macOS (Intel + Apple Silicon) | `Codemap_1.2.0_universal.dmg` |
-| Windows 11 x64 | `Codemap_1.2.0_x64-setup.exe` |
+| macOS (Intel + Apple Silicon) | `Fleuron_2.0.0_universal.dmg` |
+| Windows 11 x64 | `Fleuron_2.0.0_x64-setup.exe` |
 
-New studies default to a local working library (`~/Codemap` / `%USERPROFILE%\Codemap`). Windows installs per-user with no administrator prompt; macOS uses System Settings → Privacy & Security → Open Anyway once.
+New studies default to a local working library (`~/Fleuron` / `%USERPROFILE%\Fleuron`). Windows installs per-user with no administrator prompt; macOS uses System Settings → Privacy & Security → Open Anyway once.
 
 For detailed usage instructions and workflow tips, see the [User Guide](docs/USER-GUIDE.md).
 
@@ -51,10 +51,10 @@ For detailed usage instructions and workflow tips, see the [User Guide](docs/USE
 
 ## Architecture & Privacy Model
 
-Codemap separates **local research data** from **collaborative synchronization metadata**:
+Fleuron separates **local research data** from **collaborative synchronization metadata**:
 
 ```
-Project Folder (my-study.codemap/)
+Project Folder (my-study.fleuron/)
 ├── project.json       # Project configuration and metadata
 ├── project.db         # Local SQLite database (transcripts, segments, codes, memos, sync log)
 ├── interviews/        # Raw source transcripts (stored locally)
@@ -63,7 +63,7 @@ Project Folder (my-study.codemap/)
 
 - **Local-First Boundary**: Transcript files/text, verbatim quotes, filenames, and all memos stay on this computer. Always.
 - **Sync Protocol v2**: Collaboration syncs account email + study/codebook/coding metadata over encrypted HTTPS/WSS — including codebook definitions, criteria, and examples and your de-identified study/participant labels. Author them de-identified from the start. The exact field table lives in [docs/PRIVACY-AND-PERMISSIONS.md](docs/PRIVACY-AND-PERMISSIONS.md).
-- **No compliance promises**: Codemap can support a protocol; it does not certify anything.
+- **No compliance promises**: Fleuron can support a protocol; it does not certify anything.
 
 ---
 
@@ -79,8 +79,8 @@ Project Folder (my-study.codemap/)
 
 ```bash
 # Clone repository
-git clone https://github.com/wilson-taiwan/codemap.git
-cd codemap
+git clone https://github.com/wilson-taiwan/fleuron.git
+cd fleuron
 
 # Install frontend dependencies
 npm install
@@ -109,7 +109,7 @@ npm run test:e2e
 
 ## Methodology
 
-Codemap is designed to support **reflexive thematic analysis** (Braun & Clarke, 2019, 2021). It emphasizes qualitative rigor, researcher subjectivity, and iterative codebook refinement over inter-rater reliability scores or algorithmic consensus.
+Fleuron is designed to support **reflexive thematic analysis** (Braun & Clarke, 2019, 2021). It emphasizes qualitative rigor, researcher subjectivity, and iterative codebook refinement over inter-rater reliability scores or algorithmic consensus.
 
 ---
 
@@ -121,4 +121,4 @@ Contributions, bug reports, and feature suggestions are welcome! Please check [C
 
 ## License
 
-Codemap is open-source software licensed under the [MIT License](LICENSE).
+Fleuron is open-source software licensed under the [MIT License](LICENSE).

@@ -21,8 +21,8 @@ const readWf = (name) => readFileSync(`${root}${wf(name)}`, "utf8");
 const readJson = (p) => JSON.parse(readFileSync(`${root}${p}`, "utf8"));
 const readFile = (p) => readFileSync(`${root}${p}`, "utf8");
 
-const CANONICAL_MAC_DMG = "Codemap_1.2.0_universal.dmg";
-const CANONICAL_WIN_EXE = "Codemap_1.2.0_x64-setup.exe";
+const CANONICAL_MAC_DMG = "Fleuron_2.0.0_universal.dmg";
+const CANONICAL_WIN_EXE = "Fleuron_2.0.0_x64-setup.exe";
 const DISCLOSURE_SNIPPET =
   "so your operating system cannot verify its publisher automatically";
 
@@ -116,9 +116,9 @@ test("candidate.yml never creates a GitHub Release", () => {
   assert.doesNotMatch(yaml, /gh release edit/i);
 });
 
-test("candidate.yml stamps CODEMAP_BUILD_COMMIT from github.sha in both build legs", () => {
+test("candidate.yml stamps FLEURON_BUILD_COMMIT from github.sha in both build legs", () => {
   const yaml = readWf("candidate");
-  const count = [...yaml.matchAll(/CODEMAP_BUILD_COMMIT[^]*?\$\{\{ github\.sha \}\}/g)].length;
+  const count = [...yaml.matchAll(/FLEURON_BUILD_COMMIT[^]*?\$\{\{ github\.sha \}\}/g)].length;
   assert.ok(count >= 2, `expected commit stamping in ≥2 places, found ${count}`);
 });
 
@@ -245,8 +245,8 @@ test("release.yml enforces the exact six-asset inventory before any further step
     CANONICAL_MAC_DMG,
     CANONICAL_WIN_EXE,
     `${CANONICAL_WIN_EXE}.sig`,
-    "Codemap_universal.app.tar.gz",
-    "Codemap_universal.app.tar.gz.sig",
+    "Fleuron_universal.app.tar.gz",
+    "Fleuron_universal.app.tar.gz.sig",
     "latest.json",
   ]) {
     assert.ok(yaml.includes(asset), `inventory must reference ${asset}`);
@@ -259,9 +259,9 @@ test("release.yml validates latest.json version/platform/urls/signatures", () =>
   assert.match(yaml, /releases\/download\/v\$\{|latest\.json.*version|version == "/);
 });
 
-test("release.yml supplies CODEMAP_BUILD_COMMIT to both legs", () => {
+test("release.yml supplies FLEURON_BUILD_COMMIT to both legs", () => {
   const yaml = readWf("release");
-  const count = [...yaml.matchAll(/CODEMAP_BUILD_COMMIT[^]*?\$\{\{ github\.sha \}\}/g)].length;
+  const count = [...yaml.matchAll(/FLEURON_BUILD_COMMIT[^]*?\$\{\{ github\.sha \}\}/g)].length;
   assert.ok(count >= 2, `expected commit stamping in ≥2 places, found ${count}`);
 });
 
@@ -323,14 +323,14 @@ test("updater channel is retained verbatim", () => {
   const updater = conf.plugins?.updater;
   assert.ok(updater?.pubkey, "updater pubkey missing");
   assert.deepEqual(updater.endpoints, [
-    "https://github.com/wilson-taiwan/codemap/releases/latest/download/latest.json",
+    "https://github.com/wilson-taiwan/fleuron/releases/latest/download/latest.json",
   ]);
 });
 
 test("canonical support matrix + filenames appear in candidate summary/report", () => {
   const yaml = readWf("candidate");
-  assert.ok(yaml.includes(CANONICAL_MAC_DMG) || yaml.includes("Codemap_${VERSION}_universal.dmg"));
-  assert.ok(yaml.includes(CANONICAL_WIN_EXE) || yaml.includes("Codemap_${VERSION}_x64-setup.exe"));
+  assert.ok(yaml.includes(CANONICAL_MAC_DMG) || yaml.includes("Fleuron_${VERSION}_universal.dmg"));
+  assert.ok(yaml.includes(CANONICAL_WIN_EXE) || yaml.includes("Fleuron_${VERSION}_x64-setup.exe"));
 });
 
 // ----------------------
@@ -358,7 +358,7 @@ test("canonical publisher disclosure is carried verbatim by INSTALLING + README"
     const text = readFile(p);
     assert.ok(text.includes(DISCLOSURE_SNIPPET), `${p} lost the canonical notice`);
     assert.ok(
-      text.includes("https://github.com/wilson-taiwan/codemap/releases"),
+      text.includes("https://github.com/wilson-taiwan/fleuron/releases"),
       `${p} must name the official releases URL`,
     );
   }

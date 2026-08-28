@@ -216,7 +216,7 @@ mod tests {
             <html>
             <head><title>Test Report</title></head>
             <body>
-                <h1>Codemap Qualitative Study Report</h1>
+                <h1>Fleuron Qualitative Study Report</h1>
                 <p>Testing real WebKit PDF generation.</p>
             </body>
             </html>

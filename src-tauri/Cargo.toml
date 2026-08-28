@@ -1,8 +1,8 @@
 [package]
 name = "qualitative-coding-app"
-version = "1.2.0"
+version = "2.0.0"
 description = "Offline qualitative coding for reflexive thematic analysis"
-authors = ["Codemap contributors"]
+authors = ["Fleuron contributors"]
 license = "MIT"
 edition = "2021"
 
@@ -16,7 +16,7 @@ name = "qualitative_coding_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "Codemap"
+name = "Fleuron"
 path = "src/main.rs"
 
 [build-dependencies]
@@ -24,7 +24,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # macos-private-api backs the translucent window + vibrancy declared in
-# tauri.conf.json. It rules out Mac App Store submission; Codemap ships as a
+# tauri.conf.json. It rules out Mac App Store submission; Fleuron ships as a
 # DMG, so that costs nothing.
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"

@@ -7,11 +7,11 @@ TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 echo "Testing summarize-macos-crash.py on synthetic JSON .ips crash report..."
-SAMPLE_IPS="$TEMP_DIR/Codemap-2026-08-22-120000.ips"
+SAMPLE_IPS="$TEMP_DIR/Fleuron-2026-08-22-120000.ips"
 cat << 'EOF' > "$SAMPLE_IPS"
 {
-  "app_name": "Codemap",
-  "bundleID": "app.codemap.desktop",
+  "app_name": "Fleuron",
+  "bundleID": "study.fleuron.desktop",
   "app_version": "1.0.0",
   "os_version": "macOS 15.0",
   "captureTime": "2026-08-22 12:00:00 -0700",

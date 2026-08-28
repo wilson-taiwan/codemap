@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the complete local-Supabase verification suite for Codemap.
+# Run the complete local-Supabase verification suite for Fleuron.
 #
 # This wrapper is LOCAL ONLY. It refuses to proceed when Docker or the
 # Supabase CLI are unusable, and it never accepts a database URL, never runs

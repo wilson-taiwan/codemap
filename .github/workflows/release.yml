@@ -95,11 +95,11 @@ jobs:
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 50
     env:
-      CODEMAP_BUILD_COMMIT: ${{ github.sha }}
+      FLEURON_BUILD_COMMIT: ${{ github.sha }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      CODEMAP_SYNC_URL: ${{ secrets.CODEMAP_SYNC_URL }}
-      CODEMAP_SYNC_ANON_KEY: ${{ secrets.CODEMAP_SYNC_ANON_KEY }}
+      FLEURON_SYNC_URL: ${{ secrets.FLEURON_SYNC_URL }}
+      FLEURON_SYNC_ANON_KEY: ${{ secrets.FLEURON_SYNC_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -136,7 +136,7 @@ jobs:
         run: |
           bash scripts/run-selftest-with-crash-check.sh \
             --binary \
-            src-tauri/target/universal-apple-darwin/release/bundle/macos/Codemap.app/Contents/MacOS/Codemap
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/Fleuron.app/Contents/MacOS/Fleuron
 
       - name: Packaged-app selftest (real backend)
         if: matrix.target == 'x86_64-pc-windows-msvc'
@@ -149,8 +149,8 @@ jobs:
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           bash scripts/verify-mac-artifact.sh \
-            "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Codemap_${VERSION}_universal.dmg" \
-            "$VERSION" "$CODEMAP_BUILD_COMMIT"
+            "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Fleuron_${VERSION}_universal.dmg" \
+            "$VERSION" "$FLEURON_BUILD_COMMIT"
 
       - name: Stage canonical artifacts (macOS)
         if: matrix.target == 'universal-apple-darwin'
@@ -159,9 +159,9 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
           B="src-tauri/target/universal-apple-darwin/release/bundle"
           mkdir staging
-          cp -f "$B/dmg/Codemap_${VERSION}_universal.dmg" staging/
-          cp -f "$B/macos/Codemap.app.tar.gz" staging/Codemap_universal.app.tar.gz
-          cp -f "$B/macos/Codemap.app.tar.gz.sig" staging/Codemap_universal.app.tar.gz.sig
+          cp -f "$B/dmg/Fleuron_${VERSION}_universal.dmg" staging/
+          cp -f "$B/macos/Fleuron.app.tar.gz" staging/Fleuron_universal.app.tar.gz
+          cp -f "$B/macos/Fleuron.app.tar.gz.sig" staging/Fleuron_universal.app.tar.gz.sig
           find staging -type f | sort
 
       - name: Stage canonical artifacts (Windows)
@@ -204,11 +204,11 @@ jobs:
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           mkdir -p assets
-          mv "artifacts/Codemap_${VERSION}_universal.dmg" assets/
-          mv "artifacts/Codemap_${VERSION}_x64-setup.exe" assets/
-          mv "artifacts/Codemap_${VERSION}_x64-setup.exe.sig" assets/
-          mv artifacts/Codemap_universal.app.tar.gz assets/
-          mv artifacts/Codemap_universal.app.tar.gz.sig assets/
+          mv "artifacts/Fleuron_${VERSION}_universal.dmg" assets/
+          mv "artifacts/Fleuron_${VERSION}_x64-setup.exe" assets/
+          mv "artifacts/Fleuron_${VERSION}_x64-setup.exe.sig" assets/
+          mv artifacts/Fleuron_universal.app.tar.gz assets/
+          mv artifacts/Fleuron_universal.app.tar.gz.sig assets/
           find assets -type f | sort
           EXPECTED=5
           COUNT=$(find assets -type f | wc -l)
@@ -220,19 +220,19 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          BASE="https://github.com/wilson-taiwan/codemap/releases/download/${TAG}"
-          MAC_SIG="$(cat assets/Codemap_universal.app.tar.gz.sig)"
-          WIN_SIG="$(cat assets/Codemap_${VERSION}_x64-setup.exe.sig)"
+          BASE="https://github.com/wilson-taiwan/fleuron/releases/download/${TAG}"
+          MAC_SIG="$(cat assets/Fleuron_universal.app.tar.gz.sig)"
+          WIN_SIG="$(cat assets/Fleuron_${VERSION}_x64-setup.exe.sig)"
           PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           cat > assets/latest.json <<JSON
           {
             "version": "${VERSION}",
-            "notes": "See https://github.com/wilson-taiwan/codemap/blob/main/CHANGELOG.md for release notes.",
+            "notes": "See https://github.com/wilson-taiwan/fleuron/blob/main/CHANGELOG.md for release notes.",
             "pub_date": "${PUB_DATE}",
             "platforms": {
-              "darwin-aarch64": { "signature": "${MAC_SIG}", "url": "${BASE}/Codemap_universal.app.tar.gz" },
-              "darwin-x86_64": { "signature": "${MAC_SIG}", "url": "${BASE}/Codemap_universal.app.tar.gz" },
-              "windows-x86_64": { "signature": "${WIN_SIG}", "url": "${BASE}/Codemap_${VERSION}_x64-setup.exe" }
+              "darwin-aarch64": { "signature": "${MAC_SIG}", "url": "${BASE}/Fleuron_universal.app.tar.gz" },
+              "darwin-x86_64": { "signature": "${MAC_SIG}", "url": "${BASE}/Fleuron_universal.app.tar.gz" },
+              "windows-x86_64": { "signature": "${WIN_SIG}", "url": "${BASE}/Fleuron_${VERSION}_x64-setup.exe" }
             }
           }
           JSON
@@ -247,12 +247,12 @@ jobs:
         run: |
           # Draft-only, always: the human presses publish after re-verification.
           # Equivalent to tauri-action's `releaseDraft: true` — CI must never flip it.
-          # Exact v1.2.0 asset inventory attached below (see docs/INSTALLING.md):
-          #   Codemap_1.2.0_universal.dmg
-          #   Codemap_1.2.0_x64-setup.exe
-          #   Codemap_1.2.0_x64-setup.exe.sig
-          #   Codemap_universal.app.tar.gz
-          #   Codemap_universal.app.tar.gz.sig
+          # Exact v2.0.0 asset inventory attached below (see docs/INSTALLING.md):
+          #   Fleuron_2.0.0_universal.dmg
+          #   Fleuron_2.0.0_x64-setup.exe
+          #   Fleuron_2.0.0_x64-setup.exe.sig
+          #   Fleuron_universal.app.tar.gz
+          #   Fleuron_universal.app.tar.gz.sig
           #   latest.json
           gh release delete "$TAG" --yes --cleanup-tag=false 2>/dev/null || true
           # Resolve the version ONCE. Inlining $(node -p \"...\") inside a
@@ -263,12 +263,12 @@ jobs:
           {
             echo "**Publisher verification notice**"
             echo ""
-            echo "> Codemap is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at \`https://github.com/wilson-taiwan/codemap/releases\`. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop."
+            echo "> Fleuron is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at \`https://github.com/wilson-taiwan/fleuron/releases\`. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop."
             echo ""
             echo "| Your computer | Manual download |"
             echo "| --- | --- |"
-            echo "| macOS (Intel or Apple Silicon) | \`Codemap_${VERSION}_universal.dmg\` |"
-            echo "| Windows 11 x64 | \`Codemap_${VERSION}_x64-setup.exe\` |"
+            echo "| macOS (Intel or Apple Silicon) | \`Fleuron_${VERSION}_universal.dmg\` |"
+            echo "| Windows 11 x64 | \`Fleuron_${VERSION}_x64-setup.exe\` |"
             echo ""
             echo "- Official source commit: ${GITHUB_SHA}"
             echo "- Install guide and expected OS warnings: docs/INSTALLING.md"
@@ -276,9 +276,9 @@ jobs:
             echo "- Support: SUPPORT.md · Security: SECURITY.md"
             echo "- Changelog: CHANGELOG.md"
             echo ""
-            echo "**Updater infrastructure — do not download manually:** \`Codemap_universal.app.tar.gz\`, \`.sig\` files, \`latest.json\`, \`SHA256SUMS.txt\`."
+            echo "**Updater infrastructure — do not download manually:** \`Fleuron_universal.app.tar.gz\`, \`.sig\` files, \`latest.json\`, \`SHA256SUMS.txt\`."
           } > body.md
-          gh release create "$TAG" --draft --title "Codemap $TAG" --notes-file body.md
+          gh release create "$TAG" --draft --title "Fleuron $TAG" --notes-file body.md
           gh release upload "$TAG" \
             "assets/latest.json" \
             "$(echo assets/*.dmg)" \
@@ -315,11 +315,11 @@ jobs:
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           mkdir verify
-          mv "artifacts/Codemap_${VERSION}_universal.dmg" verify/
-          mv "artifacts/Codemap_${VERSION}_x64-setup.exe" verify/
-          mv "artifacts/Codemap_${VERSION}_x64-setup.exe.sig" verify/
-          mv artifacts/Codemap_universal.app.tar.gz verify/
-          mv artifacts/Codemap_universal.app.tar.gz.sig verify/
+          mv "artifacts/Fleuron_${VERSION}_universal.dmg" verify/
+          mv "artifacts/Fleuron_${VERSION}_x64-setup.exe" verify/
+          mv "artifacts/Fleuron_${VERSION}_x64-setup.exe.sig" verify/
+          mv artifacts/Fleuron_universal.app.tar.gz verify/
+          mv artifacts/Fleuron_universal.app.tar.gz.sig verify/
 
       # The six-asset inventory is fail-closed after both platform uploads.
       - name: Validate exact draft inventory + drafts stay drafts
@@ -329,15 +329,15 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          EXPECTED="Codemap_${VERSION}_universal.dmg Codemap_${VERSION}_x64-setup.exe Codemap_${VERSION}_x64-setup.exe.sig Codemap_universal.app.tar.gz Codemap_universal.app.tar.gz.sig latest.json"
-          VIEW="$(gh release view "$TAG" --repo wilson-taiwan/codemap --json isDraft,isPrerelease,targetCommitish)"
+          EXPECTED="Fleuron_${VERSION}_universal.dmg Fleuron_${VERSION}_x64-setup.exe Fleuron_${VERSION}_x64-setup.exe.sig Fleuron_universal.app.tar.gz Fleuron_universal.app.tar.gz.sig latest.json"
+          VIEW="$(gh release view "$TAG" --repo wilson-taiwan/fleuron --json isDraft,isPrerelease,targetCommitish)"
           echo "$VIEW" | grep -q '"isDraft":true' || { echo "release must be a draft"; exit 1; }
           echo "$VIEW" | grep -q '"isPrerelease":false' || { echo "must not be a prerelease"; exit 1; }
           # NOT `gh api .../releases/tags/$TAG`: the REST "get release by tag"
           # endpoint does not resolve DRAFT releases and 404s. Every release
           # this workflow makes is a draft, so that call could never succeed.
           # `gh release view` reads drafts.
-          NAMES="$(gh release view "$TAG" --repo wilson-taiwan/codemap --json assets --jq '.assets[].name' | tr '\n' ' ')"
+          NAMES="$(gh release view "$TAG" --repo wilson-taiwan/fleuron --json assets --jq '.assets[].name' | tr '\n' ' ')"
           for want in $EXPECTED; do
             grep -qw "$want" <<<"$NAMES" || { echo "missing asset: $want"; exit 1; }
           done
@@ -351,9 +351,9 @@ jobs:
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           # Same reason as above: drafts are invisible to the by-tag endpoint.
-          gh release view "$TAG" --repo wilson-taiwan/codemap --json assets \
+          gh release view "$TAG" --repo wilson-taiwan/fleuron --json assets \
             --jq '.assets[]|select(.name=="latest.json")|.name' | grep -q latest.json
-          gh release download "$TAG" --repo wilson-taiwan/codemap --pattern 'latest.json' --dir _lj --clobber
+          gh release download "$TAG" --repo wilson-taiwan/fleuron --pattern 'latest.json' --dir _lj --clobber
           node -e '
             const fs=require("fs");
             const j=JSON.parse(fs.readFileSync("_lj/latest.json","utf8"));
@@ -363,7 +363,7 @@ jobs:
             const plat=["darwin-aarch64","darwin-x86_64","windows-x86_64"];
             for(const p of plat){ if(!j.platforms[p]) throw new Error("missing platform "+p); }
             for(const p of Object.values(j.platforms)){
-              if(!p.url.startsWith(`https://github.com/wilson-taiwan/codemap/releases/download/${tag}/`)) throw new Error("bad url "+p.url);
+              if(!p.url.startsWith(`https://github.com/wilson-taiwan/fleuron/releases/download/${tag}/`)) throw new Error("bad url "+p.url);
               if(typeof p.signature!=="string"||p.signature.length<40) throw new Error("bad signature");
             }
             console.log("latest.json OK");
@@ -377,15 +377,15 @@ jobs:
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           cd verify
-          for f in "Codemap_${VERSION}_universal.dmg" \
-                   "Codemap_universal.app.tar.gz" \
-                   "Codemap_universal.app.tar.gz.sig" \
-                   "Codemap_${VERSION}_x64-setup.exe" \
-                   "Codemap_${VERSION}_x64-setup.exe.sig"; do
+          for f in "Fleuron_${VERSION}_universal.dmg" \
+                   "Fleuron_universal.app.tar.gz" \
+                   "Fleuron_universal.app.tar.gz.sig" \
+                   "Fleuron_${VERSION}_x64-setup.exe" \
+                   "Fleuron_${VERSION}_x64-setup.exe.sig"; do
             test -f "$f" || { echo "missing local copy: $f"; exit 1; }
             shasum -a 256 "$f"
           done > SHA256SUMS.raw.txt
-          gh release download "$TAG" --repo wilson-taiwan/codemap --pattern 'latest.json' --dir . --clobber
+          gh release download "$TAG" --repo wilson-taiwan/fleuron --pattern 'latest.json' --dir . --clobber
           shasum -a 256 latest.json >> SHA256SUMS.raw.txt
           LC_ALL=C sort -k2 SHA256SUMS.raw.txt -o SHA256SUMS.txt
           cat SHA256SUMS.txt
@@ -402,6 +402,6 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           gh release upload "$TAG" verify/SHA256SUMS.txt --clobber
-          STILL_DRAFT="$(gh release view "$TAG" --repo wilson-taiwan/codemap --json isDraft --jq .isDraft)"
+          STILL_DRAFT="$(gh release view "$TAG" --repo wilson-taiwan/fleuron --json isDraft --jq .isDraft)"
           test "$STILL_DRAFT" = "true" || { echo "refusing: release left draft state"; exit 1; }
           echo "✓ checksums attested + attached; release remains a DRAFT — no automation publishes it"

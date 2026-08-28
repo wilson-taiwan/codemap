@@ -1205,7 +1205,7 @@ const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 pub fn client() -> Result<Client, SyncError> {
     Client::builder()
         .timeout(TIMEOUT)
-        .user_agent(concat!("Codemap/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("Fleuron/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|e| SyncError::Network(e.to_string()))
 }
@@ -2083,7 +2083,7 @@ pub fn reset_cursors_for_repair(conn: &Connection) -> rusqlite::Result<()> {
 /// Strictly guarantees NO participant labels, NO code names, and NO transcript text.
 pub fn diagnostics_summary_text(report: &DiagnosticsReport) -> String {
     format!(
-        "Codemap Sync Diagnostics\n\
+        "Fleuron Sync Diagnostics\n\
          ========================\n\
          Summary: {}\n\
          Local: {} coded segments, {} codes\n\
@@ -2618,12 +2618,18 @@ pub const RPC_CONTRACTS: &[RpcSpec] = &[
 
 /// Stable server-side token raised by `require_sync_entitlement()` for every
 /// entitlement-gated write path (RPC bodies and direct REST policy failures).
+// FROZEN at the pre-rename spelling. This token is raised by
+// `public.require_entitlement()` on the deployed Supabase project, and this
+// repo deploys no migrations — the server will keep raising
+// `CODEMAP_ENTITLEMENT_REQUIRED` regardless of what the app is called.
+// Renaming it here silently breaks the friendly subscription message: a
+// blocked write would surface as a raw 403 instead.
 pub const ENTITLEMENT_REQUIRED_TOKEN: &str = "CODEMAP_ENTITLEMENT_REQUIRED";
 
 /// Exact user-facing message for an entitlement-gated write failure. Held in
 /// one place so RPC classification and direct REST paths cannot drift apart.
 pub const ENTITLEMENT_REQUIRED_MESSAGE: &str =
-    "Syncing new coding needs an active Codemap subscription. Your work is \
+    "Syncing new coding needs an active Fleuron subscription. Your work is \
      saved safely on this computer, and you can still pull your team's latest \
      — subscribe to resume syncing your own changes.";
 
@@ -4525,7 +4531,7 @@ mod tests {
         assert_eq!(coded[0].project_id, "proj-shared");
     }
 
-    /// Two temp `.codemap` folders exchange coding without live Supabase.
+    /// Two temp `.fleuron` folders exchange coding without live Supabase.
     #[test]
     fn two_temp_projects_exchange_coding() {
         let project_id = "proj-shared-local";

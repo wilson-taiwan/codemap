@@ -28,7 +28,7 @@ export function AboutModal() {
   async function copyBuildDetails() {
     if (!info) return;
     const text = [
-      `Codemap ${info.version}`,
+      `Fleuron ${info.version}`,
       `Build: ${info.build_commit ?? "unknown"}`,
       `Platform: ${navigator.platform}`,
       `Source: ${info.source_url ?? OFFICIAL_URLS.repository}`,
@@ -46,7 +46,7 @@ export function AboutModal() {
     <Modal
       open={showAbout}
       onClose={closeAbout}
-      title={info?.name ?? "Codemap"}
+      title={info?.name ?? "Fleuron"}
       subtitle={`Version ${info?.version ?? "…"}`}
       footer={
         <>

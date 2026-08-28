@@ -1,5 +1,5 @@
 name: "Bug report"
-description: "Something misbehaves inside Codemap after it launches"
+description: "Something misbehaves inside Fleuron after it launches"
 labels: ["bug"]
 body:
   - type: markdown
@@ -21,7 +21,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Codemap version + build commit
+      label: Fleuron version + build commit
       description: "About dialog → Copy build details"
     validations:
       required: true

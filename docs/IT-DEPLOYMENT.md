@@ -1,6 +1,6 @@
 # IT deployment guide
 
-Codemap is a solo-maintained, open-source desktop application for qualitative coding. This page tells IT teams exactly what it installs, what it touches, and which controls decide whether it may run.
+Fleuron is a solo-maintained, open-source desktop application for qualitative coding. This page tells IT teams exactly what it installs, what it touches, and which controls decide whether it may run.
 
 ## Support matrix
 
@@ -12,10 +12,10 @@ Codemap is a solo-maintained, open-source desktop application for qualitative co
 
 ## Installer facts (Windows)
 
-- Single x64 NSIS installer: `Codemap_1.2.0_x64-setup.exe`
+- Single x64 NSIS installer: `Fleuron_2.0.0_x64-setup.exe`
 - **Current-user install only** (`RequestExecutionLevel user`, `installMode: currentUser`). No UAC prompt, no per-machine option, no elevation anywhere in install/update/uninstall
 - Installs beneath the user's LocalAppData per-user program path
-- **WebView2:** `webviewInstallMode: skip`. Codemap never downloads, bundles, installs, or repairs WebView2. Windows 11 normally ships Evergreen already
+- **WebView2:** `webviewInstallMode: skip`. Fleuron never downloads, bundles, installs, or repairs WebView2. Windows 11 normally ships Evergreen already
 
 ## Package provenance
 
@@ -24,7 +24,7 @@ Codemap is a solo-maintained, open-source desktop application for qualitative co
 - Every release includes GitHub artifact attestations and a sorted `SHA256SUMS.txt`; verify with:
 
 ```bash
-gh attestation verify Codemap_1.2.0_x64-setup.exe --repo wilson-taiwan/codemap
+gh attestation verify Fleuron_2.0.0_x64-setup.exe --repo wilson-taiwan/fleuron
 shasum -a 256 -c SHA256SUMS.txt   # or sha256sum -c on Linux
 ```
 
@@ -40,7 +40,7 @@ Hash-per-release allowlisting fits this model cleanly: pin the published SHA-256
 
 | What | Where |
 | --- | --- |
-| Default study library | `%USERPROFILE%\Codemap` / `~/Codemap` |
+| Default study library | `%USERPROFILE%\Fleuron` / `~/Fleuron` |
 | App preferences | OS app-data dir (`app-preferences.json`) |
 | Recents/membership caches | Same app-data dir |
 | Stored sign-in | Windows: DPAPI blob `session.dpapi` (current user). macOS: mode-0600 `session.json` |
@@ -50,7 +50,7 @@ Controlled Folder Access: studies default outside protected folders. If users ch
 
 ## Policy blocks are respected
 
-Smart App Control, WDAC/App Control for Business, and AppLocker blocks have no consumer bypass and we will not provide one. If you allow-list Codemap, allow the specific signed bundle ID (`app.codemap.desktop` on macOS) and/or hash-pinned installer per release.
+Smart App Control, WDAC/App Control for Business, and AppLocker blocks have no consumer bypass and we will not provide one. If you allow-list Fleuron, allow the specific signed bundle ID (`study.fleuron.desktop` on macOS) and/or hash-pinned installer per release.
 
 ## Update behavior
 

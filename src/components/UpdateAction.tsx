@@ -39,7 +39,7 @@ export function describeUpdateAction(
       return {
         label: "Update available",
         title: status.targetVersion
-          ? `Download Codemap ${status.targetVersion}`
+          ? `Download Fleuron ${status.targetVersion}`
           : "Download available update",
         disabled: false,
         spinning: false,
@@ -58,7 +58,7 @@ export function describeUpdateAction(
     case "readyToInstall":
       return {
         label: "Ready—restart to update",
-        title: "Restart Codemap to install the verified update",
+        title: "Restart Fleuron to install the verified update",
         disabled: false,
         spinning: false,
       };

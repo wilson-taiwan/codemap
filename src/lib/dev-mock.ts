@@ -676,7 +676,7 @@ let mockUpdateStatus = {
 };
 
 const DEMO = {
-  path: "/Users/demo/Drive/sample-study.codemap",
+  path: "/Users/demo/Drive/sample-study.fleuron",
   title: "Sample Study",
   methodology: "reflexive-ta",
   coders: ["Ada Lovelace"],
@@ -799,8 +799,8 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
     // harness has no database to swap.
     case "create_backup": {
       const made = {
-        path: `/fake/backups/codemap-manual-${mockBackups.length}.codemapbak`,
-        file_name: `codemap-manual-${mockBackups.length}.codemapbak`,
+        path: `/fake/backups/fleuron-manual-${mockBackups.length}.fleuronbak`,
+        file_name: `fleuron-manual-${mockBackups.length}.fleuronbak`,
         size_bytes: 190_000 + mockBackups.length * 1_500,
         created_at: new Date().toISOString(),
         reason: "manual" as const,
@@ -838,7 +838,7 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
       return {
         restored_from: args?.backupPath as string,
         restored: mockBackups[0],
-        safety_backup_path: "/fake/backups/codemap-pre-restore.codemapbak",
+        safety_backup_path: "/fake/backups/fleuron-pre-restore.fleuronbak",
       };
 
     case "list_codes":
@@ -1206,7 +1206,7 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
     case "get_projects_library_dir":
       // Fixture paths never embed a real username; the separator follows the
       // harness platform so wizard previews look native on both.
-      return isWindows() ? "C:\\Users\\you\\Codemap" : "/Users/you/Codemap";
+      return isWindows() ? "C:\\Users\\you\\Fleuron" : "/Users/you/Fleuron";
     case "library_sync_warning":
       // The default library is local in the demo — the interesting case is
       // reachable by picking a path with a provider name in it.
@@ -1544,7 +1544,7 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
     }
     case "sync_diagnostics_dump": {
       return (
-        "Codemap Sync Diagnostics\n" +
+        "Fleuron Sync Diagnostics\n" +
         "========================\n" +
         "Summary: Everything matches. 42 coded passages, 5 codes.\n" +
         "Local: 42 coded segments, 5 codes\n" +
@@ -1613,7 +1613,7 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
     case "get_app_version":
       // No version number on purpose — a hardcoded one here goes stale at every
       // release and this stub has no way to know the real answer.
-      return { name: "Codemap", version: "browser preview", copyright: "Codemap contributors" };
+      return { name: "Fleuron", version: "browser preview", copyright: "Fleuron contributors" };
     case "get_update_status":
       return mockUpdateStatus;
     case "update_check":
@@ -1701,10 +1701,10 @@ export function installDevMock() {
   };
 
   document.documentElement.dataset.devMock = "true";
-  (w as Record<string, unknown>).__CODEMAP_IPC_LOG__ = ipcRing;
-  (w as Record<string, unknown>).__CODEMAP_CLEAR_IPC_LOG__ = clearIpcRing;
+  (w as Record<string, unknown>).__FLEURON_IPC_LOG__ = ipcRing;
+  (w as Record<string, unknown>).__FLEURON_CLEAR_IPC_LOG__ = clearIpcRing;
   console.info(
-    "%c[Codemap] browser preview — Tauri IPC is mocked, nothing is written to disk.",
+    "%c[Fleuron] browser preview — Tauri IPC is mocked, nothing is written to disk.",
     "color:#8a6410",
   );
 }

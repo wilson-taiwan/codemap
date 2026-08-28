@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0]
+
+Codemap is now **Fleuron**.
+
+This is a rename, not a rewrite — the app, its data model, and its sync
+protocol are unchanged. It is a major version because the application
+identifier changed, which means 2.0.0 installs alongside a 1.x install rather
+than updating it.
+
+### Changed
+
+- Projects are now created as `.fleuron` folders. Existing `.codemap` and
+  `.qcproj` projects open unchanged.
+- The application data directory moved from `app.codemap.desktop` to
+  `study.fleuron.desktop`. A 1.x install's recent-projects list, preferences,
+  and signed-in session do not carry over; sign in again after upgrading.
+- Backups are written as `.fleuronbak`. Existing `.codemapbak` files still import.
+- The default library for new projects moved from `~/Codemap` to `~/Fleuron`
+  (`%USERPROFILE%\Fleuron` on Windows). Projects already on disk are never moved.
+- Build and CI environment variables are now `FLEURON_*`.
+
 ## [1.2.0] - 2026-08-27
 
 ### Added

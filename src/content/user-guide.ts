@@ -37,11 +37,11 @@ export const USER_GUIDE_SECTIONS: GuideSection[] = [
     id: "getting-started",
     category: "getting-started",
     title: "Quick reference: getting started",
-    whenToUse: "Opening Codemap, starting a study, or joining an existing study.",
+    whenToUse: "Opening Fleuron, starting a study, or joining an existing study.",
     steps: [
       "Starting a study: Click 'Set up a new study' on the home screen. Name your study and choose a local folder.",
       "Joining a study: Click 'Join a study' and paste the 8-character study key sent by your colleague.",
-      "Importing transcripts: Add participant IDs (e.g. P01, P02) and point Codemap at your local .docx or .vtt transcript files.",
+      "Importing transcripts: Add participant IDs (e.g. P01, P02) and point Fleuron at your local .docx or .vtt transcript files.",
       "Coding text: Select any text passage in the transcript to open the coding bubble and apply or create codes.",
     ],
     expectedResults: [
@@ -54,7 +54,7 @@ export const USER_GUIDE_SECTIONS: GuideSection[] = [
     id: "sync-with-your-coder",
     category: "sync",
     title: "How sync works (and what never leaves your computer)",
-    whenToUse: "Understanding collaboration, privacy, and data flow in Codemap.",
+    whenToUse: "Understanding collaboration, privacy, and data flow in Fleuron.",
     steps: [
       DATA_BOUNDARY_SUMMARY,
       "Concretely, collaboration shares: your account email; study title and membership; the de-identified study/participant label; interview IDs, segment counts, and content hashes; every codebook field including names, definitions, inclusion/exclusion criteria, examples, colors, and hierarchy; coding attribution and character offsets for each coded passage.",
@@ -64,7 +64,7 @@ export const USER_GUIDE_SECTIONS: GuideSection[] = [
     ],
     expectedResults: [
       "Both coders see shared coding highlights and attribution without sending files back and forth.",
-      "Study/participant labels and all codebook text are synced word-for-word — author them de-identified. Codemap supports a protocol; it does not certify compliance of any kind.",
+      "Study/participant labels and all codebook text are synced word-for-word — author them de-identified. Fleuron supports a protocol; it does not certify compliance of any kind.",
     ],
     commonMistakes: [
       "Typing slightly different Participant IDs (e.g. P7 vs P07) — IDs decide interview identity, so ensure they match your protocol exactly.",
@@ -76,11 +76,11 @@ export const USER_GUIDE_SECTIONS: GuideSection[] = [
     category: "trust",
     title: "Trust, privacy & permissions",
     whenToUse:
-      "Understanding install warnings, what Codemap accesses, where data lives, and how to verify a build.",
+      "Understanding install warnings, what Fleuron accesses, where data lives, and how to verify a build.",
     steps: [
       "Open Trust & permissions from Welcome, Settings, About, or this guide to see warning guidance for your operating system, file access explanations, and build details.",
-      "Install warnings: Codemap is unsigned by Apple/Microsoft publisher identities, so the first launch shows an expected warning on each OS. The Trust panel shows exactly which warnings are expected and which mean stop.",
-      "Files & permissions: studies default to ~/Codemap (macOS) or %USERPROFILE%\\Codemap (Windows). Choosing a folder in the native picker is the only permission Codemap asks for; denied access recovers inline without raw error strings.",
+      "Install warnings: Fleuron is unsigned by Apple/Microsoft publisher identities, so the first launch shows an expected warning on each OS. The Trust panel shows exactly which warnings are expected and which mean stop.",
+      "Files & permissions: studies default to ~/Fleuron (macOS) or %USERPROFILE%\\Fleuron (Windows). Choosing a folder in the native picker is the only permission Fleuron asks for; denied access recovers inline without raw error strings.",
       `Verify a build: check version, filename, and the official release page (${OFFICIAL_URLS.releases}); SHA-256 digests and artifact attestations are available under Advanced verification.`,
     ],
     expectedResults: [
@@ -114,7 +114,7 @@ export const USER_GUIDE_SECTIONS: GuideSection[] = [
     title: "Troubleshooting: near-miss IDs, missing transcripts & conflicts",
     whenToUse: "Diagnosing unlinked transcripts, missing highlights, or sync issues.",
     steps: [
-      "Near-miss Participant IDs: If your colleague typed 'P07' and you typed 'P7', Codemap warns you. Re-name the participant in Interview Settings to match.",
+      "Near-miss Participant IDs: If your colleague typed 'P07' and you typed 'P7', Fleuron warns you. Re-name the participant in Interview Settings to match.",
       "Missing transcript file: If a participant has coding from a colleague but no local transcript text, use 'Link transcripts' to point to the local .docx/.vtt file.",
       "Unresolved code highlights: A neutral dotted highlight indicates a code from a colleague that is still pulling or syncing.",
       "Offline work: You can code freely while offline. All changes queue locally and reconcile automatically once reconnected.",

@@ -310,7 +310,7 @@ fn entitlement_token_maps_to_one_friendly_message() {
     use super::classify_rest_create_failure;
     use super::classify_rest_upsert_failure;
 
-    let friendly = "Syncing new coding needs an active Codemap subscription. \
+    let friendly = "Syncing new coding needs an active Fleuron subscription. \
      Your work is saved safely on this computer, and you can still pull your \
      team's latest — subscribe to resume syncing your own changes.";
 

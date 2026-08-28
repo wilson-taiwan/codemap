@@ -407,7 +407,7 @@ pub fn restore_backup(
 #[tauri::command]
 pub fn delete_backup(state: State<'_, AppState>, backup_path: String) -> Result<(), String> {
     // Scoped to this project's own backups folder. Without the check this
-    // command would delete any `.codemapbak` on the disk that the frontend
+    // command would delete any `.fleuronbak` on the disk that the frontend
     // named, and the frontend is not where that authority belongs.
     let project_path = PathBuf::from(state.project_path_str()?);
     let archive = PathBuf::from(&backup_path);
@@ -984,7 +984,7 @@ pub fn scan_transcript_folder(folder_path: String) -> Result<Vec<ScannedTranscri
         let category = crate::file_error::classify_io(&e);
         crate::file_error::wrap_file_error(
             category,
-            "Codemap could not read that folder. If access is restricted, choose another folder.",
+            "Fleuron could not read that folder. If access is restricted, choose another folder.",
             &e.to_string(),
         )
     })?;
@@ -1102,25 +1102,25 @@ pub fn set_app_preferences(
 /// which in turn forces its string data to exist at any length. The commit is
 /// a substring of the marker, so the verifier's plain search still matches.
 #[used]
-static BUILD_COMMIT_MARKER: &str = concat!("codemap-build-commit:", env!("CODEMAP_BUILD_COMMIT"));
+static BUILD_COMMIT_MARKER: &str = concat!("fleuron-build-commit:", env!("FLEURON_BUILD_COMMIT"));
 
 #[tauri::command]
 pub fn get_app_version(app: tauri::AppHandle) -> Result<AppVersionInfo, String> {
     let info = app.package_info();
     // Build commit comes from compile time; candidate/release CI sets
-    // CODEMAP_BUILD_COMMIT to the exact source SHA and the packaged-app
+    // FLEURON_BUILD_COMMIT to the exact source SHA and the packaged-app
     // verifier fails if About does not report it. Non-CI builds honestly say
     // "development".
-    let build_commit = env!("CODEMAP_BUILD_COMMIT").to_string();
+    let build_commit = env!("FLEURON_BUILD_COMMIT").to_string();
     Ok(AppVersionInfo {
         name: info.name.to_string(),
         version: info.version.to_string(),
-        copyright: Some("Codemap contributors".into()),
+        copyright: Some("Fleuron contributors".into()),
         build_commit: Some(build_commit),
-        source_url: Some("https://github.com/wilson-taiwan/codemap".into()),
-        release_url: Some("https://github.com/wilson-taiwan/codemap/releases".into()),
+        source_url: Some("https://github.com/wilson-taiwan/fleuron".into()),
+        release_url: Some("https://github.com/wilson-taiwan/fleuron/releases".into()),
         install_guide_url: Some(
-            "https://github.com/wilson-taiwan/codemap/blob/main/docs/INSTALLING.md".into(),
+            "https://github.com/wilson-taiwan/fleuron/blob/main/docs/INSTALLING.md".into(),
         ),
     })
 }
@@ -1272,7 +1272,7 @@ fn format_v2_diagnostics(
     coordinator: &crate::sync_coordinator::SyncCoordinatorHealth,
 ) -> String {
     format!(
-        "Codemap Sync Protocol 2 Diagnostics\n\
+        "Fleuron Sync Protocol 2 Diagnostics\n\
          ==================================\n\
          Protocol: 2\n\
          Generation suffix: {}\n\
@@ -1406,10 +1406,10 @@ impl AppState {
         match version {
             Some(v) if v >= sync::REQUIRED_SERVER_SCHEMA => Ok(()),
             Some(v) => Err(format!(
-                "Server update needed (found version {}; Codemap needs {}).",
+                "Server update needed (found version {}; Fleuron needs {}).",
                 v, sync::REQUIRED_SERVER_SCHEMA
             )),
-            None => Err("Codemap couldn't verify the server version. Membership and admin changes are temporarily disabled; check again when online.".into()),
+            None => Err("Fleuron couldn't verify the server version. Membership and admin changes are temporarily disabled; check again when online.".into()),
         }
     }
 
@@ -1926,7 +1926,7 @@ pub fn sync_join_project(
         Some(Some(v)) if v >= sync::REQUIRED_SERVER_SCHEMA => {}
         Some(Some(v)) => {
             return Err(format!(
-                "Server update needed (found version {}; Codemap needs {}).",
+                "Server update needed (found version {}; Fleuron needs {}).",
                 v,
                 sync::REQUIRED_SERVER_SCHEMA
             ))
@@ -2185,7 +2185,7 @@ async fn require_sync_v2_server(app: &tauri::AppHandle, state: &AppState) -> Res
             "Server update needed (found version {version}; Sync Protocol 2 needs 10)."
         )),
         None => Err(
-            "Codemap could not verify the Sync Protocol 2 server version. Try again when online."
+            "Fleuron could not verify the Sync Protocol 2 server version. Try again when online."
                 .into(),
         ),
     }

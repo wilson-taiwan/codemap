@@ -6,9 +6,9 @@
 # It performs a single POST to the public RPC and never writes anything.
 #
 # Environment:
-#   CODEMAP_SYNC_URL        Base URL, e.g. http://127.0.0.1:54331
+#   FLEURON_SYNC_URL        Base URL, e.g. http://127.0.0.1:54331
 #                           (defaults to the local stack)
-#   CODEMAP_SYNC_ANON_KEY   Public anon key for the project
+#   FLEURON_SYNC_ANON_KEY   Public anon key for the project
 #                           (defaults to the Supabase local-dev well-known
 #                            anon key; correct for an unmodified local stack)
 #
@@ -23,8 +23,8 @@ set +x
 
 EXPECTED="${1:-}"
 
-SYNC_URL="${CODEMAP_SYNC_URL:-http://127.0.0.1:54331}"
-SYNC_ANON_KEY="${CODEMAP_SYNC_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}"
+SYNC_URL="${FLEURON_SYNC_URL:-http://127.0.0.1:54331}"
+SYNC_ANON_KEY="${FLEURON_SYNC_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}"
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "✗ curl is required" >&2

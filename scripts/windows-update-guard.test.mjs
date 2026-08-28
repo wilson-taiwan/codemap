@@ -41,7 +41,7 @@ export function verifyWaitLoopSemantics(hooksText) {
 
 export function verifyNoCopyFilesMain(hooksText, nsiText = "") {
   const combined = `${hooksText}\n${nsiText}`;
-  if (/CopyFiles[^\r\n]*Codemap\.exe/i.test(combined) || /CopyFiles[^\r\n]*MAINBINARY/i.test(combined)) {
+  if (/CopyFiles[^\r\n]*Fleuron\.exe/i.test(combined) || /CopyFiles[^\r\n]*MAINBINARY/i.test(combined)) {
     throw new Error("CopyFiles must not be used on primary executable (creates nested directory)");
   }
 }
@@ -51,13 +51,13 @@ export function verifyStagedAtomicReplacement(hooksText, nsiText = "") {
   if (!/ReplaceFileW|MoveFileExW/i.test(combined)) {
     throw new Error("Atomic replacement must use ReplaceFileW or MoveFileExW");
   }
-  if (!/\.codemap-update[\\/]staged/i.test(combined)) {
-    throw new Error("Installer must stage update in .codemap-update/staged directory");
+  if (!/\.fleuron-update[\\/]staged/i.test(combined)) {
+    throw new Error("Installer must stage update in .fleuron-update/staged directory");
   }
 }
 
 export function verifyEmbeddedVersionVerification(hooksText) {
-  if (/CODEMAP_TARGET_VERSION_FILE/i.test(hooksText)) {
+  if (/FLEURON_TARGET_VERSION_FILE/i.test(hooksText)) {
     throw new Error("Target version side channel must be removed; embedded version is authoritative");
   }
   if (!/GetDLLVersion/i.test(hooksText)) {
@@ -69,7 +69,7 @@ export function verifyEmbeddedVersionVerification(hooksText) {
 }
 
 export function verifyOptionalArguments(hooksText) {
-  if (/StrCmp\s+\$CodemapTargetVersion\s+""\s+verify_failed/i.test(hooksText)) {
+  if (/StrCmp\s+\$FleuronTargetVersion\s+""\s+verify_failed/i.test(hooksText)) {
     throw new Error("Missing optional argument must not cause installer verification failure");
   }
 }
@@ -115,7 +115,7 @@ test("Windows installer uses supported pre/post-install transaction hooks", () =
 });
 
 test("Windows installer never offers an Ignore path for the primary executable", () => {
-  assert.doesNotMatch(hooks, /Ignore.*Codemap\.exe|Codemap\.exe.*Ignore/is);
+  assert.doesNotMatch(hooks, /Ignore.*Fleuron\.exe|Fleuron\.exe.*Ignore/is);
 });
 
 test("Windows installer has no forced or broad process termination", () => {
@@ -126,7 +126,7 @@ test("Windows installer wait loop uses a safe 30s (120 x 250ms) bounded budget",
   verifyWaitLoopSemantics(hooks);
 });
 
-test("Windows installer never uses CopyFiles on Codemap.exe", () => {
+test("Windows installer never uses CopyFiles on Fleuron.exe", () => {
   verifyNoCopyFilesMain(hooks, nsi);
 });
 
@@ -181,7 +181,7 @@ test("negative mutation: inverted wait loop fails verification", () => {
 
 test("negative mutation: reintroduced CopyFiles fails verification", () => {
   const copyFilesCode = `
-    CopyFiles /SILENT "$INSTDIR\\Codemap.exe" "$INSTDIR\\Codemap.exe.update-backup"
+    CopyFiles /SILENT "$INSTDIR\\Fleuron.exe" "$INSTDIR\\Fleuron.exe.update-backup"
   `;
   assert.throws(() => verifyNoCopyFilesMain(copyFilesCode), /CopyFiles must not be used/);
 });
@@ -195,7 +195,7 @@ test("negative mutation: forced TerminateProcess fails verification", () => {
 
 test("negative mutation: taskkill / nsProcess::Kill fails verification", () => {
   const taskkillCode = `
-    nsProcess::_KillProcess "Codemap.exe"
+    nsProcess::_KillProcess "Fleuron.exe"
   `;
   assert.throws(() => verifyNoForcedOrBroadTermination(taskkillCode), /broad process kill/);
 });
@@ -203,8 +203,8 @@ test("negative mutation: taskkill / nsProcess::Kill fails verification", () => {
 test("negative mutation: mandatory target-version file argument fails verification", () => {
   const targetVersionCode = `
     ${hooks}
-    Var CodemapTargetVersion
-    GetOptions "$0" "/CODEMAP_TARGET_VERSION_FILE=" $CodemapTargetVersionFile
+    Var FleuronTargetVersion
+    GetOptions "$0" "/FLEURON_TARGET_VERSION_FILE=" $FleuronTargetVersionFile
   `;
   assert.throws(() => verifyEmbeddedVersionVerification(targetVersionCode), /Target version side channel/);
 });
@@ -225,34 +225,34 @@ test("metadata fixtures: recognize known poison directory shapes without touchin
     {
       name: "valid-live-plus-nested-backup",
       paths: {
-        "Codemap.exe": { type: "file", size: 5000000, version: "0.27.0" },
-        "Codemap.exe.update-backup": { type: "directory" },
-        "Codemap.exe.update-backup/Codemap.exe": { type: "file", size: 5000000, version: "0.26.1" },
+        "Fleuron.exe": { type: "file", size: 5000000, version: "0.27.0" },
+        "Fleuron.exe.update-backup": { type: "directory" },
+        "Fleuron.exe.update-backup/Fleuron.exe": { type: "file", size: 5000000, version: "0.26.1" },
       },
       expectedAction: "remove-backup-dir-keep-live",
     },
     {
       name: "missing-live-plus-nested-backup",
       paths: {
-        "Codemap.exe.update-backup": { type: "directory" },
-        "Codemap.exe.update-backup/Codemap.exe": { type: "file", size: 5000000, version: "0.26.1" },
+        "Fleuron.exe.update-backup": { type: "directory" },
+        "Fleuron.exe.update-backup/Fleuron.exe": { type: "file", size: 5000000, version: "0.26.1" },
       },
       expectedAction: "rescue-backup-to-live",
     },
     {
       name: "live-path-is-nested-directory",
       paths: {
-        "Codemap.exe": { type: "directory" },
-        "Codemap.exe/Codemap.exe": { type: "file", size: 5000000, version: "0.26.1" },
+        "Fleuron.exe": { type: "directory" },
+        "Fleuron.exe/Fleuron.exe": { type: "file", size: 5000000, version: "0.26.1" },
       },
       expectedAction: "rescue-nested-to-live-file",
     },
     {
       name: "poison-directory-with-unexpected-extra-content",
       paths: {
-        "Codemap.exe": { type: "directory" },
-        "Codemap.exe/Codemap.exe": { type: "file", size: 5000000, version: "0.26.1" },
-        "Codemap.exe/unexpected.txt": { type: "file", size: 100 },
+        "Fleuron.exe": { type: "directory" },
+        "Fleuron.exe/Fleuron.exe": { type: "file", size: 5000000, version: "0.26.1" },
+        "Fleuron.exe/unexpected.txt": { type: "file", size: 100 },
       },
       expectedAction: "safe-abort-retain-bytes",
     },

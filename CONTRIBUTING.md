@@ -1,6 +1,6 @@
-# Contributing to Codemap
+# Contributing to Fleuron
 
-Thank you for your interest in contributing to Codemap! We welcome contributions from qualitative researchers, developers, and designers.
+Thank you for your interest in contributing to Fleuron! We welcome contributions from qualitative researchers, developers, and designers.
 
 ---
 
@@ -22,8 +22,8 @@ We are committed to providing a friendly, safe, and welcoming environment for al
 
 1. Fork and clone the repository:
    ```bash
-   git clone https://github.com/<your-username>/codemap.git
-   cd codemap
+   git clone https://github.com/<your-username>/fleuron.git
+   cd fleuron
    ```
 2. Install Node dependencies:
    ```bash
@@ -58,7 +58,7 @@ We are committed to providing a friendly, safe, and welcoming environment for al
   - Ensure all database queries through SQLite respect schema migrations and handle errors cleanly.
   - Run `cargo fmt` and `cargo clippy` before submitting changes.
 - **Privacy First**:
-  - Codemap's core architecture guarantees that transcript text and private memos remain strictly local on the user's disk. Ensure new features never inadvertently expose private data across network endpoints.
+  - Fleuron's core architecture guarantees that transcript text and private memos remain strictly local on the user's disk. Ensure new features never inadvertently expose private data across network endpoints.
 
 ---
 
@@ -77,4 +77,4 @@ We are committed to providing a friendly, safe, and welcoming environment for al
 
 ## License
 
-By contributing to Codemap, you agree that your contributions will be licensed under the project's [MIT License](LICENSE).
+By contributing to Fleuron, you agree that your contributions will be licensed under the project's [MIT License](LICENSE).

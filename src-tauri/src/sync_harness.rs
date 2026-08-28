@@ -982,7 +982,7 @@ fn test_divergence_and_rejoin_convergence() {
 #[test]
 fn test_sync_fuzz_200_seeds() {
     let start = std::time::Instant::now();
-    let num_seeds = std::env::var("CODEMAP_FUZZ_SEEDS")
+    let num_seeds = std::env::var("FLEURON_FUZZ_SEEDS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(200);
@@ -998,14 +998,14 @@ fn test_sync_fuzz_200_seeds() {
     // 200 seeds have been measured from ~20s to ~56s on healthy macos-latest
     // builds — so a tight wall-clock budget produced flaky release failures.
     // Keep a generous ceiling that still trips on a true regression, tunable via
-    // env for slower/faster machines. Mirrors the CODEMAP_FUZZ_SEEDS idiom above.
-    let budget_secs = std::env::var("CODEMAP_FUZZ_BUDGET_SECS")
+    // env for slower/faster machines. Mirrors the FLEURON_FUZZ_SEEDS idiom above.
+    let budget_secs = std::env::var("FLEURON_FUZZ_BUDGET_SECS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(180);
     assert!(
         elapsed.as_secs() < budget_secs,
-        "Fuzzer exceeded {}-second budget: {:?} (set CODEMAP_FUZZ_BUDGET_SECS to adjust)",
+        "Fuzzer exceeded {}-second budget: {:?} (set FLEURON_FUZZ_BUDGET_SECS to adjust)",
         budget_secs,
         elapsed
     );

@@ -62,8 +62,8 @@ test("click every reachable control without console errors", async ({
   }
 
   const ipcUnhandled = await page.evaluate(() => {
-    const log = (window as unknown as { __CODEMAP_IPC_LOG__?: { ok: boolean; cmd: string }[] })
-      .__CODEMAP_IPC_LOG__;
+    const log = (window as unknown as { __FLEURON_IPC_LOG__?: { ok: boolean; cmd: string }[] })
+      .__FLEURON_IPC_LOG__;
     return (log ?? []).filter((e) => !e.ok).map((e) => e.cmd);
   });
 

@@ -175,7 +175,7 @@ mod tests {
     fn wrapped_payload_round_trips_through_frontend_shape() {
         let wrapped = wrap_file_error(
             FileAccessCategory::PermissionDenied,
-            "Codemap does not have permission to open this folder.",
+            "Fleuron does not have permission to open this folder.",
             "/Users/x/secret (os error 5)",
         );
         assert!(wrapped.starts_with("CODEMAP_FILE_ERROR|"));

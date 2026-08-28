@@ -114,7 +114,9 @@ export function BackupsPanel() {
   async function importFromDisk() {
     const file = await open({
       multiple: false,
-      filters: [{ name: "Codemap backup", extensions: ["codemapbak"] }],
+      filters: [
+        { name: "Fleuron backup", extensions: ["fleuronbak", "codemapbak"] },
+      ],
       title: "Choose a backup file",
     });
     if (!file || Array.isArray(file)) return;
@@ -146,7 +148,7 @@ export function BackupsPanel() {
           style={{ background: "var(--fill)" }}
         >
           <p className="text-[12.5px]" style={{ color: "var(--ink-2)" }}>
-            Codemap takes a snapshot every time this project opens. You can also
+            Fleuron takes a snapshot every time this project opens. You can also
             save one now — worth doing before anything you are unsure about.
           </p>
           <div className="mt-2.5 flex items-center gap-2">
@@ -190,7 +192,7 @@ export function BackupsPanel() {
             className="btn btn-ghost btn-sm ml-auto"
             disabled={busy}
             onClick={() => void importFromDisk()}
-            title="Bring in a .codemapbak file from somewhere else"
+            title="Bring in a .fleuronbak file from somewhere else"
           >
             <Icon name="import" size={13} />
             Add from a file

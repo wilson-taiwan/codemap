@@ -14,7 +14,7 @@ echo "[crash-check] Scanning system diagnostic reports and internal crash logs..
 if [[ "$(uname -s)" == "Darwin" ]]; then
   REPORTS_DIR="$HOME/Library/Logs/DiagnosticReports"
   if [[ -d "$REPORTS_DIR" ]]; then
-    # Look for Codemap*.ips or Codemap*.crash modified after START_TIME
+    # Look for Fleuron*.ips or Fleuron*.crash modified after START_TIME
     while IFS= read -r report_file; do
       if [[ -n "$report_file" ]]; then
         mod_time=$(stat -f "%m" "$report_file" 2>/dev/null || stat -c "%Y" "$report_file" 2>/dev/null || echo 0)
@@ -24,26 +24,26 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
           CRASH_FOUND=1
         fi
       fi
-    done < <(find "$REPORTS_DIR" -maxdepth 2 -type f \( -name "Codemap*.ips" -o -name "Codemap*.crash" \) 2>/dev/null || true)
+    done < <(find "$REPORTS_DIR" -maxdepth 2 -type f \( -name "Fleuron*.ips" -o -name "Fleuron*.crash" \) 2>/dev/null || true)
   fi
 fi
 
 # 2. Linux coredump / /var/crash
 if [[ "$(uname -s)" == "Linux" ]]; then
   if command -v coredumpctl &>/dev/null; then
-    if coredumpctl list --since="@$START_TIME" 2>/dev/null | grep -i "Codemap" &>/dev/null; then
-      echo "❌ [crash-check] Linux coredump recorded for Codemap since start timestamp."
+    if coredumpctl list --since="@$START_TIME" 2>/dev/null | grep -i "Fleuron" &>/dev/null; then
+      echo "❌ [crash-check] Linux coredump recorded for Fleuron since start timestamp."
       CRASH_FOUND=1
     fi
   fi
 fi
 
-# 3. Codemap internal crash log check
+# 3. Fleuron internal crash log check
 # Search typical AppData locations for crashes/crash.log
 APP_DATA_CRASH_DIRS=(
-  "$HOME/Library/Application Support/app.codemap.desktop/crashes"
+  "$HOME/Library/Application Support/study.fleuron.desktop/crashes"
   "$HOME/Library/Application Support/qualitative-coding-app/crashes"
-  "$HOME/.local/share/app.codemap.desktop/crashes"
+  "$HOME/.local/share/study.fleuron.desktop/crashes"
   "$HOME/.local/share/qualitative-coding-app/crashes"
 )
 

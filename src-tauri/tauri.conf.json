@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Codemap",
-  "version": "1.2.0",
-  "identifier": "app.codemap.desktop",
+  "productName": "Fleuron",
+  "version": "2.0.0",
+  "identifier": "study.fleuron.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "Codemap",
+        "title": "Fleuron",
         "dragDropEnabled": false,
         "width": 1400,
         "height": 900,
@@ -55,11 +55,12 @@
     "fileAssociations": [
       {
         "ext": [
+          "fleuron",
           "codemap",
           "qcproj"
         ],
-        "name": "Codemap Project",
-        "mimeType": "application/x-codemap",
+        "name": "Fleuron Project",
+        "mimeType": "application/x-fleuron",
         "role": "Editor",
         "rank": "Owner"
       }
@@ -67,7 +68,7 @@
     "category": "Productivity",
     "shortDescription": "Qualitative coding for reflexive thematic analysis",
     "longDescription": "Offline-first qualitative coding for reflexive thematic analysis. Import transcripts, code passages with a living codebook, memo as you go, and export coded segments. Work fully locally, or collaborate over encrypted hosted sync — transcript text and memos always stay on your computer.",
-    "copyright": "Codemap contributors",
+    "copyright": "Fleuron contributors",
     "macOS": {
       "minimumSystemVersion": "10.15",
       "signingIdentity": "-",
@@ -92,7 +93,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk5Q0NBNzAzOUQyOTA1NjIKUldSaUJTbWRBNmZNbWRTVytqSHM3aHJ2VEpneDJVOFRlNWNYNGdkTHRQMzhzNy9TZTkrV25PaXgK",
       "endpoints": [
-        "https://github.com/wilson-taiwan/codemap/releases/latest/download/latest.json"
+        "https://github.com/wilson-taiwan/fleuron/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

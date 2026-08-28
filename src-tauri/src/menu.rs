@@ -20,10 +20,10 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     // with the app name regardless of what we call it.
     #[cfg(target_os = "macos")]
     {
-        let about = MenuItem::with_id(app, "app_about", "About Codemap", true, None::<&str>)?;
+        let about = MenuItem::with_id(app, "app_about", "About Fleuron", true, None::<&str>)?;
         menus.push(Submenu::with_items(
             app,
-            "Codemap",
+            "Fleuron",
             true,
             &[
                 &about,
@@ -34,7 +34,7 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 &PredefinedMenuItem::hide_others(app, None)?,
                 &PredefinedMenuItem::show_all(app, None)?,
                 &PredefinedMenuItem::separator(app)?,
-                &PredefinedMenuItem::quit(app, Some("Quit Codemap"))?,
+                &PredefinedMenuItem::quit(app, Some("Quit Fleuron"))?,
             ],
         )?);
     }
@@ -105,8 +105,8 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         ],
     )?);
 
-    let help = MenuItem::with_id(app, "help_guide", "Codemap User Guide", true, Some("?"))?;
-    let about_help = MenuItem::with_id(app, "help_about", "About Codemap", true, None::<&str>)?;
+    let help = MenuItem::with_id(app, "help_guide", "Fleuron User Guide", true, Some("?"))?;
+    let about_help = MenuItem::with_id(app, "help_about", "About Fleuron", true, None::<&str>)?;
     menus.push(Submenu::with_items(
         app,
         "Help",

@@ -58,7 +58,7 @@ pub struct PhoenixMessage {
 }
 
 pub fn channel_topic(project_id: &str) -> String {
-    format!("realtime:codemap:{project_id}")
+    format!("realtime:fleuron:{project_id}")
 }
 
 fn postgres_changes_config(project_id: &str, sync_protocol: i64) -> Vec<serde_json::Value> {
@@ -177,7 +177,7 @@ impl RealtimeManager {
         my_coder_name: String,
         sync_protocol: i64,
     ) {
-        if std::env::var("CODEMAP_DISABLE_REALTIME").ok().as_deref() == Some("1") {
+        if std::env::var("FLEURON_DISABLE_REALTIME").ok().as_deref() == Some("1") {
             return;
         }
 
@@ -366,7 +366,7 @@ async fn drive_phoenix_session<R: tauri::Runtime>(
     let mut is_subscribed_to_postgres = false;
     let mut presence_map: HashMap<String, HashMap<String, PresenceUser>> = HashMap::new();
 
-    let heartbeat_duration = if cfg!(test) || std::env::var("CODEMAP_TEST_HEARTBEAT_MS").is_ok() {
+    let heartbeat_duration = if cfg!(test) || std::env::var("FLEURON_TEST_HEARTBEAT_MS").is_ok() {
         Duration::from_millis(50)
     } else {
         Duration::from_secs(20)
@@ -586,7 +586,7 @@ mod tests {
 
     #[test]
     fn channel_topic_format() {
-        assert_eq!(channel_topic("proj-123"), "realtime:codemap:proj-123");
+        assert_eq!(channel_topic("proj-123"), "realtime:fleuron:proj-123");
     }
 
     #[test]
@@ -792,7 +792,7 @@ mod tests {
         let text = msg.to_text().unwrap();
         let join_msg: PhoenixMessage = serde_json::from_str(text).unwrap();
         assert_eq!(join_msg.event, "phx_join");
-        assert_eq!(join_msg.topic, "realtime:codemap:proj-123");
+        assert_eq!(join_msg.topic, "realtime:fleuron:proj-123");
         assert_eq!(join_msg.join_ref, join_msg.r#ref);
         let join_ref = join_msg.join_ref.clone().unwrap();
 
@@ -812,7 +812,7 @@ mod tests {
 
         // 2. Server sends join reply (status ok)
         let reply = serde_json::json!({
-            "topic": "realtime:codemap:proj-123",
+            "topic": "realtime:fleuron:proj-123",
             "event": "phx_reply",
             "payload": {
                 "status": "ok",
@@ -836,7 +836,7 @@ mod tests {
 
         // 3. Server sends system subscription success
         let system_msg = serde_json::json!({
-            "topic": "realtime:codemap:proj-123",
+            "topic": "realtime:fleuron:proj-123",
             "event": "system",
             "payload": {
                 "extension": "postgres_changes",
@@ -868,7 +868,7 @@ mod tests {
         let track_msg: PhoenixMessage =
             serde_json::from_str(track_frame.to_text().unwrap()).unwrap();
         assert_eq!(track_msg.event, "presence");
-        assert_eq!(track_msg.topic, "realtime:codemap:proj-123");
+        assert_eq!(track_msg.topic, "realtime:fleuron:proj-123");
         assert_eq!(track_msg.join_ref.as_deref(), Some(join_ref.as_str()));
         assert_eq!(
             track_msg
@@ -892,7 +892,7 @@ mod tests {
 
         // 7. Send valid postgres_changes
         let pg_msg = serde_json::json!({
-            "topic": "realtime:codemap:proj-123",
+            "topic": "realtime:fleuron:proj-123",
             "event": "postgres_changes",
             "payload": {
                 "ids": [101],
@@ -937,7 +937,7 @@ mod tests {
         let join_ref = join_msg.join_ref.unwrap();
 
         let reply = serde_json::json!({
-            "topic": "realtime:codemap:proj-123",
+            "topic": "realtime:fleuron:proj-123",
             "event": "phx_reply",
             "payload": { "status": "ok", "response": { "postgres_changes": [{ "id": 1 }] } },
             "ref": join_ref,
@@ -948,7 +948,7 @@ mod tests {
             .unwrap();
 
         let sys_err = serde_json::json!({
-            "topic": "realtime:codemap:proj-123",
+            "topic": "realtime:fleuron:proj-123",
             "event": "system",
             "payload": {
                 "extension": "postgres_changes",

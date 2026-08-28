@@ -159,9 +159,9 @@ impl UpdateCoordinator {
         app.updater_builder()
             .timeout(Duration::from_secs(10))
             .installer_args([
-                format!("/CODEMAP_PARENT_PID={}", std::process::id()),
-                nsis_argument("CODEMAP_PENDING_UPDATE", &pending_marker),
-                nsis_argument("CODEMAP_INSTALL_SENTINEL", &install_sentinel),
+                format!("/FLEURON_PARENT_PID={}", std::process::id()),
+                nsis_argument("FLEURON_PENDING_UPDATE", &pending_marker),
+                nsis_argument("FLEURON_INSTALL_SENTINEL", &install_sentinel),
             ])
             .on_before_exit(move || {
                 let state = before_exit_app.state::<AppState>();
@@ -319,7 +319,7 @@ impl UpdateCoordinator {
                     inner.status.failure = Some(UpdateFailure {
                         stage: "download".into(),
                         retryable: true,
-                        message: "The update could not be downloaded or verified. Codemap is still open and writable.".into(),
+                        message: "The update could not be downloaded or verified. Fleuron is still open and writable.".into(),
                     });
                     inner.verified_bytes = None;
                     inner.update = Some(update);
@@ -428,7 +428,7 @@ impl UpdateCoordinator {
                 update,
                 bytes,
                 "install",
-                "The update could not be installed. Codemap reopened your existing project.",
+                "The update could not be installed. Fleuron reopened your existing project.",
             )),
         }
     }
@@ -489,7 +489,7 @@ impl UpdateCoordinator {
             self.set_failed(
                 app,
                 "installer",
-                "The installer restored the prior Codemap executable after verification failed. You can retry after checking for updates.",
+                "The installer restored the prior Fleuron executable after verification failed. You can retry after checking for updates.",
                 true,
             );
             return;
@@ -514,7 +514,7 @@ impl UpdateCoordinator {
                 self.set_failed(
                     app,
                     "launch",
-                    "Codemap started with an unexpected version after an update attempt. Normal startup is available; collect diagnostics before retrying.",
+                    "Fleuron started with an unexpected version after an update attempt. Normal startup is available; collect diagnostics before retrying.",
                     true,
                 );
             }
@@ -797,8 +797,8 @@ mod tests {
     fn nsis_argument_keeps_the_marker_path_explicit() {
         let value = PathBuf::from("C:/Users/Test User/AppData/pending-update.json");
         assert_eq!(
-            nsis_argument("CODEMAP_PENDING_UPDATE", &value),
-            "/CODEMAP_PENDING_UPDATE=\"C:/Users/Test User/AppData/pending-update.json\""
+            nsis_argument("FLEURON_PENDING_UPDATE", &value),
+            "/FLEURON_PENDING_UPDATE=\"C:/Users/Test User/AppData/pending-update.json\""
         );
     }
 

@@ -7,7 +7,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 START_TIME=$(date +%s)
 
-echo "==> Starting Codemap Selftest with Crash Verification..."
+echo "==> Starting Fleuron Selftest with Crash Verification..."
 node "$SCRIPT_DIR/run-selftest.mjs" "$@"
 
 echo "==> Verifying zero crashes occurred during test..."

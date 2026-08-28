@@ -1,22 +1,22 @@
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 
-Var CodemapParentPid
-Var CodemapPendingUpdate
-Var CodemapInstallSentinel
-Var CodemapInstalledOldVersion
+Var FleuronParentPid
+Var FleuronPendingUpdate
+Var FleuronInstallSentinel
+Var FleuronInstalledOldVersion
 
-Function CodemapReadUpdateArguments
+Function FleuronReadUpdateArguments
   ${GetParameters} $0
-  ${GetOptions} "$0" "/CODEMAP_PARENT_PID=" $CodemapParentPid
-  ${GetOptions} "$0" "/CODEMAP_PENDING_UPDATE=" $CodemapPendingUpdate
-  ${GetOptions} "$0" "/CODEMAP_INSTALL_SENTINEL=" $CodemapInstallSentinel
+  ${GetOptions} "$0" "/FLEURON_PARENT_PID=" $FleuronParentPid
+  ${GetOptions} "$0" "/FLEURON_PENDING_UPDATE=" $FleuronPendingUpdate
+  ${GetOptions} "$0" "/FLEURON_INSTALL_SENTINEL=" $FleuronInstallSentinel
 FunctionEnd
 
 ; Helper: inspect Win32 file attributes
 ; Input: path in $0
 ; Output: pushes 0 (absent/error), 1 (file), 2 (directory)
-Function CodemapGetPathKind
+Function FleuronGetPathKind
   System::Call 'kernel32::GetFileAttributesW(w r0) i.r1'
   ${If} $1 == -1
     Push 0
@@ -32,12 +32,12 @@ Function CodemapGetPathKind
   ${EndIf}
 FunctionEnd
 
-Function CodemapWriteInstallSentinel
-  StrCmp $CodemapInstallSentinel "" sentinel_done
-  ${GetParent} "$CodemapInstallSentinel" $0
+Function FleuronWriteInstallSentinel
+  StrCmp $FleuronInstallSentinel "" sentinel_done
+  ${GetParent} "$FleuronInstallSentinel" $0
   CreateDirectory "$0"
   ClearErrors
-  FileOpen $0 "$CodemapInstallSentinel" w
+  FileOpen $0 "$FleuronInstallSentinel" w
   IfErrors sentinel_failed
 
   ; Retrieve installer PID
@@ -45,8 +45,8 @@ Function CodemapWriteInstallSentinel
 
   ; Write structured JSON sentinel
   FileWrite $0 '{"schema":1,"installer_pid":$1,'
-  ${If} $CodemapParentPid != ""
-    FileWrite $0 '"parent_pid":$CodemapParentPid,'
+  ${If} $FleuronParentPid != ""
+    FileWrite $0 '"parent_pid":$FleuronParentPid,'
   ${Else}
     FileWrite $0 '"parent_pid":null,'
   ${EndIf}
@@ -57,15 +57,15 @@ Function CodemapWriteInstallSentinel
 
 sentinel_failed:
   ${IfNot} ${Silent}
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Codemap could not create its update guard. The existing installation was left unchanged."
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Fleuron could not create its update guard. The existing installation was left unchanged."
   ${EndIf}
   Abort
 sentinel_done:
 FunctionEnd
 
-Function CodemapParentExited
-  StrCmp $CodemapParentPid "" parent_exited
-  StrCpy $0 $CodemapParentPid
+Function FleuronParentExited
+  StrCmp $FleuronParentPid "" parent_exited
+  StrCpy $0 $FleuronParentPid
   ; Open process with SYNCHRONIZE only (0x00100000) — no terminate rights
   System::Call 'kernel32::OpenProcess(i 0x00100000, i 0, i r0) p.r1'
   StrCmp $1 0 parent_exited
@@ -78,9 +78,9 @@ parent_exited:
   Push 1
 FunctionEnd
 
-Function CodemapCanReplaceExecutable
-  StrCpy $0 "$INSTDIR\Codemap.exe"
-  Call CodemapGetPathKind
+Function FleuronCanReplaceExecutable
+  StrCpy $0 "$INSTDIR\Fleuron.exe"
+  Call FleuronGetPathKind
   Pop $1
   ${If} $1 == 0
     ; Absent is replaceable
@@ -93,7 +93,7 @@ Function CodemapCanReplaceExecutable
   ${EndIf}
 
   ; Check exclusive access to file
-  System::Call 'kernel32::CreateFileW(w "$INSTDIR\Codemap.exe", i 0x40010000, i 0, p 0, i 3, i 0, p 0) p.r0'
+  System::Call 'kernel32::CreateFileW(w "$INSTDIR\Fleuron.exe", i 0x40010000, i 0, p 0, i 3, i 0, p 0) p.r0'
   IntCmp $0 -1 executable_locked executable_ready executable_ready
 executable_locked:
   Push 0
@@ -104,19 +104,19 @@ executable_ready:
   Return
 FunctionEnd
 
-Function CodemapWaitForRelease
+Function FleuronWaitForRelease
   ; Use $R0-$R2 for the counter and results. The helper calls below clobber
-  ; $0/$1/$2 — CodemapCanReplaceExecutable does `StrCpy $0 <path>` and an
+  ; $0/$1/$2 — FleuronCanReplaceExecutable does `StrCpy $0 <path>` and an
   ; internal `Pop $1` — which previously reset the loop counter to a path
   ; string (parsed as 0, so +1 => 1, never reaching 120) and overwrote the
-  ; parent-exited result, so `$1 == 1` never held when Codemap.exe was absent.
+  ; parent-exited result, so `$1 == 1` never held when Fleuron.exe was absent.
   ; That was an infinite wait that hung every fresh silent install. The helpers
   ; never touch $R0-$R2, so these survive across the calls.
   StrCpy $R0 0
   ${While} $R0 < 120
-    Call CodemapParentExited
+    Call FleuronParentExited
     Pop $R1
-    Call CodemapCanReplaceExecutable
+    Call FleuronCanReplaceExecutable
     Pop $R2
     ${If} $R1 == 1
     ${AndIf} $R2 == 1
@@ -126,29 +126,32 @@ Function CodemapWaitForRelease
     IntOp $R0 $R0 + 1
   ${EndWhile}
 
-  Delete "$CodemapInstallSentinel"
+  Delete "$FleuronInstallSentinel"
   ${IfNot} ${Silent}
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Codemap is still closing after 30 seconds. The update was cancelled before any files were replaced. Close that one Codemap window, then retry the update."
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Fleuron is still closing after 30 seconds. The update was cancelled before any files were replaced. Close that one Fleuron window, then retry the update."
   ${EndIf}
   Abort
 FunctionEnd
 
 ; Recognize and safely repair every known v0.27.0 malformed backup state
-Function CodemapRepairLegacyV027State
+; v0.27.0 legacy repair. The `$INSTDIR\Codemap.exe` literals below are
+; DELIBERATE and must not be renamed: this repairs a broken state the
+; v0.27.0 installer left on disk, and that state carries the old name.
+Function FleuronRepairLegacyV027State
   ; Check live path kind
   StrCpy $0 "$INSTDIR\Codemap.exe"
-  Call CodemapGetPathKind
+  Call FleuronGetPathKind
   Pop $R0 ; 0 = absent, 1 = file, 2 = directory
 
   ; Check legacy backup path kind
   StrCpy $0 "$INSTDIR\Codemap.exe.update-backup"
-  Call CodemapGetPathKind
+  Call FleuronGetPathKind
   Pop $R1 ; 0 = absent, 1 = file, 2 = directory
 
   ; State A: live path is a directory (Codemap.exe\Codemap.exe)
   ${If} $R0 == 2
     StrCpy $0 "$INSTDIR\Codemap.exe\Codemap.exe"
-    Call CodemapGetPathKind
+    Call FleuronGetPathKind
     Pop $R2
     ${If} $R2 == 1
       ; Rescue nested executable through $PLUGINSDIR
@@ -159,7 +162,7 @@ Function CodemapRepairLegacyV027State
       Rename "$PLUGINSDIR\Codemap.exe" "$INSTDIR\Codemap.exe"
     ${Else}
       ${IfNot} ${Silent}
-        MessageBox MB_OK|MB_ICONEXCLAMATION "Codemap detected an unrecognised directory at $INSTDIR\Codemap.exe. Update cancelled to protect files."
+        MessageBox MB_OK|MB_ICONEXCLAMATION "Fleuron detected an unrecognised directory at $INSTDIR\Codemap.exe. Update cancelled to protect files."
       ${EndIf}
       Abort
     ${EndIf}
@@ -169,12 +172,12 @@ Function CodemapRepairLegacyV027State
   ${If} $R1 == 2
     StrCpy $0 "$INSTDIR\Codemap.exe\Codemap.exe.update-backup\Codemap.exe"
     StrCpy $0 "$INSTDIR\Codemap.exe.update-backup\Codemap.exe"
-    Call CodemapGetPathKind
+    Call FleuronGetPathKind
     Pop $R2
     ${If} $R2 == 1
       ; Re-check live path kind
       StrCpy $0 "$INSTDIR\Codemap.exe"
-      Call CodemapGetPathKind
+      Call FleuronGetPathKind
       Pop $R0
       ${If} $R0 == 1
         ; Live file is healthy; remove nested backup
@@ -196,7 +199,7 @@ Function CodemapRepairLegacyV027State
   ; State C: legacy backup is a regular file
   ${If} $R1 == 1
     StrCpy $0 "$INSTDIR\Codemap.exe"
-    Call CodemapGetPathKind
+    Call FleuronGetPathKind
     Pop $R0
     ${If} $R0 == 1
       Delete "$INSTDIR\Codemap.exe.update-backup"
@@ -206,39 +209,39 @@ Function CodemapRepairLegacyV027State
   ${EndIf}
 FunctionEnd
 
-Function CodemapReconcileInterruptedTransaction
+Function FleuronReconcileInterruptedTransaction
   ; Inspect transaction backup
-  StrCpy $0 "$INSTDIR\.codemap-update\backup\Codemap.exe"
-  Call CodemapGetPathKind
+  StrCpy $0 "$INSTDIR\.fleuron-update\backup\Fleuron.exe"
+  Call FleuronGetPathKind
   Pop $R1 ; 1 = file
 
   ; Inspect live
-  StrCpy $0 "$INSTDIR\Codemap.exe"
-  Call CodemapGetPathKind
+  StrCpy $0 "$INSTDIR\Fleuron.exe"
+  Call FleuronGetPathKind
   Pop $R0 ; 0 = absent, 1 = file
 
   ${If} $R1 == 1
     ${If} $R0 == 0
-      Rename "$INSTDIR\.codemap-update\backup\Codemap.exe" "$INSTDIR\Codemap.exe"
+      Rename "$INSTDIR\.fleuron-update\backup\Fleuron.exe" "$INSTDIR\Fleuron.exe"
     ${ElseIf} $R0 == 1
-      Delete "$INSTDIR\.codemap-update\backup\Codemap.exe"
+      Delete "$INSTDIR\.fleuron-update\backup\Fleuron.exe"
     ${EndIf}
   ${EndIf}
 
   ; Clean leftover staged
-  Delete "$INSTDIR\.codemap-update\staged\Codemap.exe"
+  Delete "$INSTDIR\.fleuron-update\staged\Fleuron.exe"
 FunctionEnd
 
-Function CodemapMarkPendingUpdateFailed
-  StrCmp $CodemapPendingUpdate "" pending_failed_done
-  FileOpen $0 "$CodemapPendingUpdate.failed" w
+Function FleuronMarkPendingUpdateFailed
+  StrCmp $FleuronPendingUpdate "" pending_failed_done
+  FileOpen $0 "$FleuronPendingUpdate.failed" w
   IfErrors pending_failed_done
   FileWrite $0 "nsis verification failed$\r$\n"
   FileClose $0
 pending_failed_done:
 FunctionEnd
 
-Function CodemapVerifyExecutableVersion
+Function FleuronVerifyExecutableVersion
   ; Input: path in $0
   ; Output: pushes 1 (valid), 0 (invalid)
   ClearErrors
@@ -288,105 +291,105 @@ verify_fail:
   Push 0
 FunctionEnd
 
-Function CodemapCommitTransaction
-  ; Staged binary is in $INSTDIR\.codemap-update\staged\Codemap.exe
-  StrCpy $0 "$INSTDIR\.codemap-update\staged\Codemap.exe"
-  Call CodemapVerifyExecutableVersion
+Function FleuronCommitTransaction
+  ; Staged binary is in $INSTDIR\.fleuron-update\staged\Fleuron.exe
+  StrCpy $0 "$INSTDIR\.fleuron-update\staged\Fleuron.exe"
+  Call FleuronVerifyExecutableVersion
   Pop $1
   ${If} $1 != 1
-    Delete "$CodemapInstallSentinel"
+    Delete "$FleuronInstallSentinel"
     ${IfNot} ${Silent}
       MessageBox MB_OK|MB_ICONEXCLAMATION "The candidate update executable could not be verified. Installation aborted."
     ${EndIf}
     Abort
   ${EndIf}
 
-  StrCpy $0 "$INSTDIR\Codemap.exe"
-  Call CodemapGetPathKind
+  StrCpy $0 "$INSTDIR\Fleuron.exe"
+  Call FleuronGetPathKind
   Pop $R0
 
   ${If} $R0 == 1
     ; Existing live installation: capture old version for rollback
-    GetDLLVersion "$INSTDIR\Codemap.exe" $1 $2
+    GetDLLVersion "$INSTDIR\Fleuron.exe" $1 $2
     IntOp $3 $1 / 65536
     IntOp $4 $1 & 0xFFFF
     IntOp $5 $2 / 65536
     IntOp $6 $2 & 0xFFFF
-    StrCpy $CodemapInstalledOldVersion "$3.$4.$5.$6"
+    StrCpy $FleuronInstalledOldVersion "$3.$4.$5.$6"
 
-    ; Ensure clean backup target in .codemap-update\backup
-    Delete "$INSTDIR\.codemap-update\backup\Codemap.exe"
+    ; Ensure clean backup target in .fleuron-update\backup
+    Delete "$INSTDIR\.fleuron-update\backup\Fleuron.exe"
 
     ; Atomic same-volume replacement with write-through (REPLACEFILE_WRITE_THROUGH = 1)
-    System::Call 'kernel32::ReplaceFileW(w "$INSTDIR\Codemap.exe", w "$INSTDIR\.codemap-update\staged\Codemap.exe", w "$INSTDIR\.codemap-update\backup\Codemap.exe", i 1, p 0, p 0) i.r0'
+    System::Call 'kernel32::ReplaceFileW(w "$INSTDIR\Fleuron.exe", w "$INSTDIR\.fleuron-update\staged\Fleuron.exe", w "$INSTDIR\.fleuron-update\backup\Fleuron.exe", i 1, p 0, p 0) i.r0'
     ${If} $0 == 0
-      Call CodemapMarkPendingUpdateFailed
-      Delete "$CodemapInstallSentinel"
+      Call FleuronMarkPendingUpdateFailed
+      Delete "$FleuronInstallSentinel"
       ${IfNot} ${Silent}
-        MessageBox MB_OK|MB_ICONEXCLAMATION "Codemap could not replace the executable. The update was cancelled before replacement."
+        MessageBox MB_OK|MB_ICONEXCLAMATION "Fleuron could not replace the executable. The update was cancelled before replacement."
       ${EndIf}
       Abort
     ${EndIf}
   ${Else}
     ; Fresh installation: MoveFileExW with MOVEFILE_REPLACE_EXISTING (1) | MOVEFILE_WRITE_THROUGH (8) = 9
-    System::Call 'kernel32::MoveFileExW(w "$INSTDIR\.codemap-update\staged\Codemap.exe", w "$INSTDIR\Codemap.exe", i 9) i.r0'
+    System::Call 'kernel32::MoveFileExW(w "$INSTDIR\.fleuron-update\staged\Fleuron.exe", w "$INSTDIR\Fleuron.exe", i 9) i.r0'
     ${If} $0 == 0
-      Delete "$CodemapInstallSentinel"
+      Delete "$FleuronInstallSentinel"
       ${IfNot} ${Silent}
-        MessageBox MB_OK|MB_ICONEXCLAMATION "Codemap could not install the executable."
+        MessageBox MB_OK|MB_ICONEXCLAMATION "Fleuron could not install the executable."
       ${EndIf}
       Abort
     ${EndIf}
   ${EndIf}
 
   ; Re-verify the live installed executable
-  StrCpy $0 "$INSTDIR\Codemap.exe"
-  Call CodemapVerifyExecutableVersion
+  StrCpy $0 "$INSTDIR\Fleuron.exe"
+  Call FleuronVerifyExecutableVersion
   Pop $1
   ${If} $1 != 1
     ; Roll back from backup if present
     ${If} $R0 == 1
-      System::Call 'kernel32::MoveFileExW(w "$INSTDIR\.codemap-update\backup\Codemap.exe", w "$INSTDIR\Codemap.exe", i 9) i.r0'
+      System::Call 'kernel32::MoveFileExW(w "$INSTDIR\.fleuron-update\backup\Fleuron.exe", w "$INSTDIR\Fleuron.exe", i 9) i.r0'
     ${EndIf}
-    Call CodemapMarkPendingUpdateFailed
-    Delete "$CodemapInstallSentinel"
+    Call FleuronMarkPendingUpdateFailed
+    Delete "$FleuronInstallSentinel"
     ${IfNot} ${Silent}
-      MessageBox MB_OK|MB_ICONEXCLAMATION "The Codemap update could not be verified. The prior executable was restored."
+      MessageBox MB_OK|MB_ICONEXCLAMATION "The Fleuron update could not be verified. The prior executable was restored."
     ${EndIf}
     Abort
   ${EndIf}
 FunctionEnd
 
 !macro NSIS_HOOK_PREINSTALL
-  Call CodemapReadUpdateArguments
-  Call CodemapRepairLegacyV027State
-  Call CodemapReconcileInterruptedTransaction
-  Call CodemapWriteInstallSentinel
-  Call CodemapWaitForRelease
+  Call FleuronReadUpdateArguments
+  Call FleuronRepairLegacyV027State
+  Call FleuronReconcileInterruptedTransaction
+  Call FleuronWriteInstallSentinel
+  Call FleuronWaitForRelease
   Delete "$INSTDIR\qualitative-coding-app.exe"
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
-  Delete "$INSTDIR\.codemap-update\backup\Codemap.exe"
-  Delete "$INSTDIR\.codemap-update\staged\Codemap.exe"
-  RMDir "$INSTDIR\.codemap-update\backup"
-  RMDir "$INSTDIR\.codemap-update\staged"
-  RMDir "$INSTDIR\.codemap-update"
-  Delete "$INSTDIR\Codemap.exe.update-backup"
-  RMDir "$INSTDIR\Codemap.exe.update-backup"
-  Delete "$CodemapInstallSentinel"
+  Delete "$INSTDIR\.fleuron-update\backup\Fleuron.exe"
+  Delete "$INSTDIR\.fleuron-update\staged\Fleuron.exe"
+  RMDir "$INSTDIR\.fleuron-update\backup"
+  RMDir "$INSTDIR\.fleuron-update\staged"
+  RMDir "$INSTDIR\.fleuron-update"
+  Delete "$INSTDIR\Fleuron.exe.update-backup"
+  RMDir "$INSTDIR\Fleuron.exe.update-backup"
+  Delete "$FleuronInstallSentinel"
 !macroend
 
-Function un.CodemapWaitForUninstallRelease
+Function un.FleuronWaitForUninstallRelease
   StrCpy $0 0
   ${While} $0 < 120
-    StrCpy $1 "$INSTDIR\Codemap.exe"
+    StrCpy $1 "$INSTDIR\Fleuron.exe"
     System::Call 'kernel32::GetFileAttributesW(w r1) i.r2'
     ${If} $2 == -1
       Return
     ${EndIf}
     ; Test exclusive open
-    System::Call 'kernel32::CreateFileW(w "$INSTDIR\Codemap.exe", i 0x40010000, i 0, p 0, i 3, i 0, p 0) p.r2'
+    System::Call 'kernel32::CreateFileW(w "$INSTDIR\Fleuron.exe", i 0x40010000, i 0, p 0, i 3, i 0, p 0) p.r2'
     ${If} $2 != -1
       System::Call 'kernel32::CloseHandle(p r2)'
       Return
@@ -397,16 +400,16 @@ Function un.CodemapWaitForUninstallRelease
 FunctionEnd
 
 !macro NSIS_HOOK_PREUNINSTALL
-  Call un.CodemapWaitForUninstallRelease
+  Call un.FleuronWaitForUninstallRelease
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
-  Delete "$INSTDIR\.codemap-update\backup\Codemap.exe"
-  Delete "$INSTDIR\.codemap-update\staged\Codemap.exe"
-  RMDir "$INSTDIR\.codemap-update\backup"
-  RMDir "$INSTDIR\.codemap-update\staged"
-  RMDir "$INSTDIR\.codemap-update"
-  Delete "$INSTDIR\Codemap.exe.update-backup"
-  RMDir "$INSTDIR\Codemap.exe.update-backup"
+  Delete "$INSTDIR\.fleuron-update\backup\Fleuron.exe"
+  Delete "$INSTDIR\.fleuron-update\staged\Fleuron.exe"
+  RMDir "$INSTDIR\.fleuron-update\backup"
+  RMDir "$INSTDIR\.fleuron-update\staged"
+  RMDir "$INSTDIR\.fleuron-update"
+  Delete "$INSTDIR\Fleuron.exe.update-backup"
+  RMDir "$INSTDIR\Fleuron.exe.update-backup"
   RMDir "$INSTDIR"
 !macroend

@@ -45,7 +45,7 @@ check_case() {
   local expect="$2"
   shift 2
   local out
-  if out="$(CODEMAP_SRC_ROOT="$fixture" "$VERIFIER" 2>&1)"; then
+  if out="$(FLEURON_SRC_ROOT="$fixture" "$VERIFIER" 2>&1)"; then
     if [[ "$expect" == "pass" ]]; then
       echo "  ✓ $name"
       PASS=$((PASS + 1))

@@ -98,7 +98,7 @@ describe("parseRecoveryPaste", () => {
   it("pulls a code out of a whole-email paste that has no link", () => {
     expect(
       parseRecoveryPaste(
-        "Reset your Codemap password\nType this code in Codemap: 482193\nIf you did not ask, ignore this.",
+        "Reset your Fleuron password\nType this code in Fleuron: 482193\nIf you did not ask, ignore this.",
       ),
     ).toEqual({ kind: "otp", token: "482193" });
   });

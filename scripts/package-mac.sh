@@ -5,9 +5,9 @@
 # with `find … | head -1`, which shipped the wrong files for three releases.
 #
 #   * `find "$BUNDLE_ROOT/macos" -name '*.app' | head -1` picked whichever app
-#     bundle traversal happened to reach first. After the Codemap rename the
-#     directory held both "Qualitative Coding.app" and "Codemap.app", so
-#     releases/Codemap.app was silently the OLD build.
+#     bundle traversal happened to reach first. After the Fleuron rename the
+#     directory held both "Qualitative Coding.app" and "Fleuron.app", so
+#     releases/Fleuron.app was silently the OLD build.
 #   * `find "$BUNDLE_ROOT" -maxdepth 2 -name '*.dmg' | head -1` reached
 #     bundle/macos/ before bundle/dmg/ and matched `rw.NNNNN.*.dmg` — the
 #     read-write SCRATCH image bundle_dmg.sh leaves behind. Every DMG in
@@ -33,7 +33,7 @@ BUNDLE_ROOT="$CARGO_TARGET_DIR/release/bundle"
 
 echo "→ Packaging ${PRODUCT_NAME} ${VERSION}"
 
-if [[ "$UPDATER_PUBKEY" == "REPLACE_WITH_CODEMAP_UPDATER_PUBLIC_KEY" || "$UPDATER_PUBKEY" == "__REPLACE_WITH_PUBLIC_UPDATER_KEY__" ]]; then
+if [[ "$UPDATER_PUBKEY" == "REPLACE_WITH_FLEURON_UPDATER_PUBLIC_KEY" || "$UPDATER_PUBKEY" == "__REPLACE_WITH_PUBLIC_UPDATER_KEY__" ]]; then
   echo "Error: replace the updater public key in src-tauri/tauri.conf.json before packaging."
   exit 1
 fi
@@ -115,7 +115,7 @@ cat <<EOF
   Updater:      releases/${PRODUCT_NAME}-${VERSION}-mac.app.tar.gz[.sig]
 
 Canonical distribution is the GitHub Releases page:
-  https://github.com/wilson-taiwan/codemap/releases
+  https://github.com/wilson-taiwan/fleuron/releases
 Upload this artifact through a candidate workflow rather than sharing files
 by hand — the release page, exact filename, and version are part of how users
 verify they have the official download.

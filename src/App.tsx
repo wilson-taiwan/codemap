@@ -43,7 +43,7 @@ function App() {
           useProjectStore
             .getState()
             .showStatus(
-              "Codemap closed unexpectedly during its last session. Your project database has been verified and is ready.",
+              "Fleuron closed unexpectedly during its last session. Your project database has been verified and is ready.",
               "info",
             );
         }

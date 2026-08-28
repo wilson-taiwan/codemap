@@ -2,7 +2,7 @@
 # Verify the EXACT release DMG artifact, not a pre-DMG build directory.
 #
 # Attaches <dmg> read-only to a unique mount point, locates exactly one
-# Codemap.app inside, runs scripts/verify-mac-bundle.sh against that mounted
+# Fleuron.app inside, runs scripts/verify-mac-bundle.sh against that mounted
 # copy with the expected version + build commit, and always detaches.
 set -euo pipefail
 
@@ -19,7 +19,7 @@ hdiutil imageinfo "$DMG" >/dev/null || { echo "Error: unreadable/corrupt disk im
 image_format="$(hdiutil imageinfo "$DMG" | awk '/Format:/{print $2; exit}')"
 echo "    Format: ${image_format:-unknown}"
 
-MOUNT_DIR="$(mktemp -d /tmp/codemap-dmg-verify.XXXXXX)"
+MOUNT_DIR="$(mktemp -d /tmp/fleuron-dmg-verify.XXXXXX)"
 # Declared before the trap: under `set -u` an attach failure would otherwise
 # make cleanup die on an unbound DEV_ENTRY, hiding hdiutil's real error and
 # leaking the mountpoint directory.
@@ -65,16 +65,16 @@ if [[ ! "$DEV_ENTRY" =~ ^/dev/disk ]]; then
   exit 1
 fi
 
-APP_PATHS="$(find "$MOUNT_DIR" -maxdepth 3 -name "Codemap.app" -type d)"
+APP_PATHS="$(find "$MOUNT_DIR" -maxdepth 3 -name "Fleuron.app" -type d)"
 APP_COUNT="$(grep -c . <<<"$APP_PATHS" || true)"
 if [[ "$APP_COUNT" != "1" ]]; then
-  echo "Error: expected exactly one Codemap.app in the DMG, found $APP_COUNT:"
+  echo "Error: expected exactly one Fleuron.app in the DMG, found $APP_COUNT:"
   echo "$APP_PATHS" | sed 's/^/    /'
   exit 1
 fi
 
 echo "==> Verifying bundle inside mounted image"
-CODEMAP_BUILD_COMMIT="$COMMIT" \
+FLEURON_BUILD_COMMIT="$COMMIT" \
   bash "$SCRIPT_DIR/verify-mac-bundle.sh" "$APP_PATHS" "$VERSION"
 
 echo "✓ DMG artifact verified: $(basename "$DMG") (version $VERSION, commit ${COMMIT:0:12})"

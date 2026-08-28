@@ -66,7 +66,7 @@ export function SyncDiagnostics({ status }: SyncDiagnosticsProps) {
     ? "Connected"
     : status?.realtimeHealth === "connecting"
       ? "Connecting…"
-      : "Live updates are unavailable; Codemap is still checking for changes every minute.";
+      : "Live updates are unavailable; Fleuron is still checking for changes every minute.";
 
   return (
     <section className="mb-5 border-t pt-4">

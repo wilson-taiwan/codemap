@@ -16,11 +16,11 @@
 //! will install:
 //!
 //! ```sh
-//! export CODEMAP_SYNC_URL='https://<project>.supabase.co'
-//! export CODEMAP_SYNC_ANON_KEY='eyJ…'      # the anon key, never service_role
+//! export FLEURON_SYNC_URL='https://<project>.supabase.co'
+//! export FLEURON_SYNC_ANON_KEY='eyJ…'      # the anon key, never service_role
 //! ```
 //!
-//! ⚠️ **`CODEMAP_SYNC_ANON_KEY` must be the *anon* key.** Decode the JWT payload
+//! ⚠️ **`FLEURON_SYNC_ANON_KEY` must be the *anon* key.** Decode the JWT payload
 //! and check that `role` reads `anon` before using it. A `service_role` key
 //! bypasses row-level security completely, and baking one into a binary handed
 //! to other people would expose the whole database. The anon key is safe here
@@ -39,7 +39,7 @@
 
 /// Treat an unset variable and an empty one identically.
 ///
-/// CI writes `CODEMAP_SYNC_ANON_KEY: ${{ secrets.… }}`, and a secret that does
+/// CI writes `FLEURON_SYNC_ANON_KEY: ${{ secrets.… }}`, and a secret that does
 /// not exist arrives as the empty string rather than as nothing at all. Without
 /// this the app would compile in an empty key and fail at runtime against the
 /// server instead of falling back to asking.
@@ -51,7 +51,7 @@ const fn non_empty(value: Option<&str>) -> Option<&str> {
 }
 
 /// The study's Supabase project, e.g. `https://<ref>.supabase.co`.
-pub const URL: Option<&str> = non_empty(option_env!("CODEMAP_SYNC_URL"));
+pub const URL: Option<&str> = non_empty(option_env!("FLEURON_SYNC_URL"));
 
 /// The anon key for the project above. See the module note before changing.
-pub const ANON_KEY: Option<&str> = non_empty(option_env!("CODEMAP_SYNC_ANON_KEY"));
+pub const ANON_KEY: Option<&str> = non_empty(option_env!("FLEURON_SYNC_ANON_KEY"));

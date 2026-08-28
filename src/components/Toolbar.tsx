@@ -360,7 +360,7 @@ export function Toolbar() {
               onSelect: () => openGuide("workspace-overview"),
             },
             {
-              label: "About Codemap",
+              label: "About Fleuron",
               icon: "help",
               onSelect: () => openAbout(),
             },

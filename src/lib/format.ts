@@ -24,7 +24,7 @@ export function formatBytes(bytes: number): string {
  * Last path component, on either separator.
  *
  * Empty parts are dropped so a trailing separator does not swallow the answer
- * — a directory path is as likely to arrive as `…/Study.codemap/` as without,
+ * — a directory path is as likely to arrive as `…/Study.fleuron/` as without,
  * and the old `|| path` fallback returned the entire path in that case.
  */
 export function basename(path: string): string {

@@ -63,7 +63,7 @@ use tauri::{Emitter, Listener, Manager, RunEvent};
 /// the Apple Event carries any URL the association matched.
 ///
 /// Delivery is queued rather than emitted while the frontend is still loading.
-/// This is the fix for the bug where double-clicking a `.codemap` opened the
+/// This is the fix for the bug where double-clicking a `.fleuron` opened the
 /// app on its home screen: a cold launch delivers the path during `setup` (or
 /// as an Apple Event moments later), both of which land well before the webview
 /// has mounted its listener, and an emit with nobody listening is simply lost.

@@ -357,7 +357,7 @@ export function SyncSheet() {
     if (!name || starting) return;
     setStarting(true);
     try {
-      await createGroup(project?.title ?? "Codemap study", name);
+      await createGroup(project?.title ?? "Fleuron study", name);
     } finally {
       setStarting(false);
     }
@@ -421,7 +421,7 @@ export function SyncSheet() {
           style={{ background: "var(--warning-soft)", color: "var(--warning)" }}
           role="alert"
         >
-          Server update needed. Your server is running schema version {serverSchemaVersion}; this version of Codemap requires version {requiredServerSchema}. Group creation and management are paused until the server is updated.
+          Server update needed. Your server is running schema version {serverSchemaVersion}; this version of Fleuron requires version {requiredServerSchema}. Group creation and management are paused until the server is updated.
         </div>
       )}
 
@@ -732,7 +732,7 @@ export function SyncSheet() {
               ) : v2Readiness.members.some((member) => !member.ready) ? (
                 <p className="hint">
                   Real-time collaboration turns on automatically once everyone on
-                  your team updates Codemap.
+                  your team updates Fleuron.
                 </p>
               ) : (
                 <p className="hint">Setting up real-time collaboration…</p>

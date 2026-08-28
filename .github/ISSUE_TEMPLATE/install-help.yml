@@ -26,11 +26,11 @@ body:
     validations:
       required: true
   - type: textarea
-    id: codemap-details
+    id: fleuron-details
     attributes:
-      label: Codemap version + build commit + exact filename
+      label: Fleuron version + build commit + exact filename
       placeholder: |
-        Version 1.2.0, build commit from About → Copy build details, and the exact file downloaded.
+        Version 2.0.0, build commit from About → Copy build details, and the exact file downloaded.
   - type: dropdown
     id: stage
     attributes:

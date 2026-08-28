@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify a built Codemap.app is the app we think we built.
+# Verify a built Fleuron.app is the app we think we built.
 #
 # History: v0.21.0 shipped a macOS app whose Rust backend was current and whose
 # frontend was ten hours stale — dist/ was never rebuilt, and cargo happily
@@ -13,9 +13,9 @@
 #   - Info.plist bound + Sealed Resources present (rejects v1.1-style
 #     `Identifier=generated`, `Info.plist=not bound`, `Sealed Resources=none`);
 #   - all five protected-folder purpose strings equal src-tauri/Info.plist;
-#   - build commit embedded in the binary matches CODEMAP_BUILD_COMMIT
+#   - build commit embedded in the binary matches FLEURON_BUILD_COMMIT
 #     (or the literal "development" for local builds);
-#   - universal check: both arm64 and x86_64 unless CODEMAP_REQUIRE_UNIVERSAL=0;
+#   - universal check: both arm64 and x86_64 unless FLEURON_REQUIRE_UNIVERSAL=0;
 #   - spctl --assess rejection recorded as EXPECTED evidence for this plan.
 set -euo pipefail
 
@@ -24,7 +24,7 @@ EXPECTED_VERSION="${2:?usage: verify-mac-bundle.sh <path-to .app> <expected-vers
 DIST_DIR="${3:-dist}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE_PLIST="$REPO_ROOT/src-tauri/Info.plist"
-REQUIRE_UNIVERSAL="${CODEMAP_REQUIRE_UNIVERSAL:-1}"
+REQUIRE_UNIVERSAL="${FLEURON_REQUIRE_UNIVERSAL:-1}"
 
 PLIST="$APP/Contents/Info.plist"
 [[ -f "$PLIST" ]] || { echo "Error: no Info.plist at $PLIST"; exit 1; }
@@ -34,13 +34,13 @@ plist() { /usr/libexec/PlistBuddy -c "Print :$1" "$PLIST"; }
 NAME="$(plist CFBundleName)"
 VERSION="$(plist CFBundleShortVersionString)"
 IDENTIFIER="$(plist CFBundleIdentifier)"
-# Derive rather than hardcode: the product is "Codemap" but the executable is
+# Derive rather than hardcode: the product is "Fleuron" but the executable is
 # still the crate name, and a rename is exactly when this check must not lie.
 BIN="$APP/Contents/MacOS/$(plist CFBundleExecutable)"
 [[ -f "$BIN" ]] || { echo "Error: no executable at $BIN"; exit 1; }
 
-if [[ "$IDENTIFIER" != "app.codemap.desktop" ]]; then
-  echo "Error: $APP reports identifier $IDENTIFIER, expected app.codemap.desktop."
+if [[ "$IDENTIFIER" != "study.fleuron.desktop" ]]; then
+  echo "Error: $APP reports identifier $IDENTIFIER, expected study.fleuron.desktop."
   echo "       A generated bundle identifier breaks the provenance contract."
   exit 1
 fi
@@ -124,10 +124,10 @@ done
 echo "✓ No unused/hardware capability keys declared"
 
 # ── Build commit provenance ──────────────────────────────────────────────────
-BUILD_COMMIT="${CODEMAP_BUILD_COMMIT:-development}"
+BUILD_COMMIT="${FLEURON_BUILD_COMMIT:-development}"
 grep -aqF "$BUILD_COMMIT" "$BIN" || {
   echo "Error: build commit '$BUILD_COMMIT' not found embedded in $BIN."
-  echo "       Candidate/release builds set CODEMAP_BUILD_COMMIT at compile time."
+  echo "       Candidate/release builds set FLEURON_BUILD_COMMIT at compile time."
   exit 1
 }
 echo "✓ Build commit ($BUILD_COMMIT) embedded in binary"
@@ -144,7 +144,7 @@ if [[ "$REQUIRE_UNIVERSAL" == "1" ]]; then
   fi
   echo "✓ Universal executable contains both arm64 and x86_64"
 else
-  echo "⚠ Universal check skipped (CODEMAP_REQUIRE_UNIVERSAL=0); archs: $ARCHS_OUTPUT"
+  echo "⚠ Universal check skipped (FLEURON_REQUIRE_UNIVERSAL=0); archs: $ARCHS_OUTPUT"
 fi
 
 # ── The frontend bundle ─────────────────────────────────────────────────────
@@ -185,13 +185,13 @@ done
 echo "✓ Shipped binary embeds the current frontend ($(basename "${assets[0]}"))"
 
 # ── The compiled-in sync server ─────────────────────────────────────────────
-if [[ -z "${CODEMAP_SYNC_URL:-}" ]]; then
-  echo "⚠ CODEMAP_SYNC_URL is unset — this build will ask each coder for the"
+if [[ -z "${FLEURON_SYNC_URL:-}" ]]; then
+  echo "⚠ FLEURON_SYNC_URL is unset — this build will ask each coder for the"
   echo "  server address and key by hand."
-elif grep -aqF "$CODEMAP_SYNC_URL" "$BIN"; then
+elif grep -aqF "$FLEURON_SYNC_URL" "$BIN"; then
   echo "✓ Compiled-in sync server present in the shipped binary"
 else
-  echo "Error: CODEMAP_SYNC_URL was set but does not appear in $BIN."
+  echo "Error: FLEURON_SYNC_URL was set but does not appear in $BIN."
   echo "       Refusing to claim a good build."
   exit 1
 fi

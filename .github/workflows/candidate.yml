@@ -80,11 +80,11 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     env:
-      CODEMAP_BUILD_COMMIT: ${{ github.sha }}
+      FLEURON_BUILD_COMMIT: ${{ github.sha }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      CODEMAP_SYNC_URL: ${{ secrets.CODEMAP_SYNC_URL }}
-      CODEMAP_SYNC_ANON_KEY: ${{ secrets.CODEMAP_SYNC_ANON_KEY }}
+      FLEURON_SYNC_URL: ${{ secrets.FLEURON_SYNC_URL }}
+      FLEURON_SYNC_ANON_KEY: ${{ secrets.FLEURON_SYNC_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -114,14 +114,14 @@ jobs:
         run: |
           bash scripts/run-selftest-with-crash-check.sh \
             --binary \
-            src-tauri/target/universal-apple-darwin/release/bundle/macos/Codemap.app/Contents/MacOS/Codemap
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/Fleuron.app/Contents/MacOS/Fleuron
 
       - name: Verify whole-bundle seal + DMG artifact
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           bash scripts/verify-mac-artifact.sh \
-            "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Codemap_${VERSION}_universal.dmg" \
-            "$VERSION" "$CODEMAP_BUILD_COMMIT"
+            "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Fleuron_${VERSION}_universal.dmg" \
+            "$VERSION" "$FLEURON_BUILD_COMMIT"
 
       - name: Stage canonical artifacts
         run: |
@@ -129,9 +129,9 @@ jobs:
           STAGE="staging"
           mkdir -p "$STAGE"
           B="src-tauri/target/universal-apple-darwin/release/bundle"
-          cp -f "$B/dmg/Codemap_${VERSION}_universal.dmg" "$STAGE/"
-          cp -f "$B/macos/Codemap.app.tar.gz" "$STAGE/Codemap_universal.app.tar.gz"
-          cp -f "$B/macos/Codemap.app.tar.gz.sig" "$STAGE/Codemap_universal.app.tar.gz.sig"
+          cp -f "$B/dmg/Fleuron_${VERSION}_universal.dmg" "$STAGE/"
+          cp -f "$B/macos/Fleuron.app.tar.gz" "$STAGE/Fleuron_universal.app.tar.gz"
+          cp -f "$B/macos/Fleuron.app.tar.gz.sig" "$STAGE/Fleuron_universal.app.tar.gz.sig"
           find "$STAGE" -type f | sort
 
       - name: SHA-256 inventory
@@ -148,7 +148,7 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
           {
             echo "### Candidate (macOS)"
-            echo "- Source SHA: $CODEMAP_BUILD_COMMIT"
+            echo "- Source SHA: $FLEURON_BUILD_COMMIT"
             echo "- Version: ${VERSION}"
             echo "- Platform: darwin universal (arm64+x86_64)"
             shasum -a 256 staging/* | sed 's/^/- /'
@@ -170,12 +170,12 @@ jobs:
     timeout-minutes: 50
     env:
       # Canonical release target triplet for this leg (x64 user-scope NSIS).
-      CODEMAP_RUST_TARGET: x86_64-pc-windows-msvc
-      CODEMAP_BUILD_COMMIT: ${{ github.sha }}
+      FLEURON_RUST_TARGET: x86_64-pc-windows-msvc
+      FLEURON_BUILD_COMMIT: ${{ github.sha }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      CODEMAP_SYNC_URL: ${{ secrets.CODEMAP_SYNC_URL }}
-      CODEMAP_SYNC_ANON_KEY: ${{ secrets.CODEMAP_SYNC_ANON_KEY }}
+      FLEURON_SYNC_URL: ${{ secrets.FLEURON_SYNC_URL }}
+      FLEURON_SYNC_ANON_KEY: ${{ secrets.FLEURON_SYNC_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -207,10 +207,13 @@ jobs:
 
       - name: Download canonical v1.1.0 installer for upgrade matrix
         shell: pwsh
+        # The v1.1.0 asset shipped as Codemap_1.1.0_x64-setup.exe and keeps that
+        # name forever — released filenames are immutable. Only the repo path
+        # moves to wilson-taiwan/fleuron (GitHub would redirect, but be explicit).
         run: |
           New-Item -ItemType Directory -Path _prev -Force | Out-Null
           Invoke-WebRequest `
-            -Uri 'https://github.com/wilson-taiwan/codemap/releases/download/v1.1.0/Codemap_1.1.0_x64-setup.exe' `
+            -Uri 'https://github.com/wilson-taiwan/fleuron/releases/download/v1.1.0/Codemap_1.1.0_x64-setup.exe' `
             -OutFile '_prev/Codemap_1.1.0_x64-setup.exe'
           Get-FileHash '_prev/Codemap_1.1.0_x64-setup.exe' -Algorithm SHA256 | Format-List
 
@@ -229,11 +232,11 @@ jobs:
           $version = node -p "require('./package.json').version"
           New-Item -ItemType Directory -Path staging -Force | Out-Null
           Copy-Item 'src-tauri/target/release/bundle/nsis/*-setup.exe' 'staging/tmp-setup.exe'
-          Move-Item 'staging/tmp-setup.exe' "staging/Codemap_${version}_x64-setup.exe" -Force
+          Move-Item 'staging/tmp-setup.exe' "staging/Fleuron_${version}_x64-setup.exe" -Force
           Copy-Item 'src-tauri/target/release/bundle/nsis/*.sig' staging/
-          # Canonical v1.2.0 names staged here match docs/INSTALLING.md:
-          #   Codemap_1.2.0_universal.dmg (macOS leg)
-          #   Codemap_1.2.0_x64-setup.exe (+ .sig)
+          # Canonical v2.0.0 names staged here match docs/INSTALLING.md:
+          #   Fleuron_2.0.0_universal.dmg (macOS leg)
+          #   Fleuron_2.0.0_x64-setup.exe (+ .sig)
           Get-ChildItem staging | Format-Table Name,Length
 
       - name: SHA-256 inventory
@@ -251,7 +254,7 @@ jobs:
         run: |
           $body = @(
             "### Candidate (Windows)"
-            "- Source SHA: $env:CODEMAP_BUILD_COMMIT"
+            "- Source SHA: $env:FLEURON_BUILD_COMMIT"
             "- Platform: windows x64 NSIS current-user"
           )
           foreach ($line in (Get-Content 'staging/SHA256SUMS.partial.txt')) { $body += "- $line" }

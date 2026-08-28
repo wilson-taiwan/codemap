@@ -20,4 +20,4 @@ Please include: affected version/build commit, platform, reproduction steps or P
 
 ## Security model notes
 
-Codemap signs updates with Tauri/minisign and publishes GitHub artifact attestations plus `SHA256SUMS.txt` per release. There is no Apple Developer ID/notarization and no Windows Authenticode publisher signature — the OS publisher warning shown on first launch is expected, and the [install guide](docs/INSTALLING.md) documents exactly which warnings are ordinary versus reasons to stop.
+Fleuron signs updates with Tauri/minisign and publishes GitHub artifact attestations plus `SHA256SUMS.txt` per release. There is no Apple Developer ID/notarization and no Windows Authenticode publisher signature — the OS publisher warning shown on first launch is expected, and the [install guide](docs/INSTALLING.md) documents exactly which warnings are ordinary versus reasons to stop.

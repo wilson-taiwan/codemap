@@ -24,6 +24,7 @@ test-results/
 # Local test projects
 *.qcproj/
 *.codemap/
+*.fleuron/
 
 # OS & editors
 .DS_Store

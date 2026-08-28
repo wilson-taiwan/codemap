@@ -460,7 +460,7 @@ fn v2_snapshot_rebuild_reapplies_a_durable_local_outbox() {
 #[test]
 fn v2_model_fuzz_1000_seeds() {
     let start = std::time::Instant::now();
-    let seed_count = std::env::var("CODEMAP_V2_FUZZ_SEEDS")
+    let seed_count = std::env::var("FLEURON_V2_FUZZ_SEEDS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(1_000);

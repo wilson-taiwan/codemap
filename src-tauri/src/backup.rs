@@ -2,7 +2,7 @@
 //!
 //! # Why an archive, and not a copied folder
 //!
-//! A `.codemap` project is a directory holding a live SQLite database in WAL
+//! A `.fleuron` project is a directory holding a live SQLite database in WAL
 //! mode. Copying that directory while the app is running captures `project.db`
 //! without the `-wal` alongside it that holds the most recent writes. The copy
 //! then opens perfectly and is silently missing work — the worst failure a
@@ -40,8 +40,12 @@ use std::path::{Path, PathBuf};
 
 /// Directory inside a project where snapshots are kept.
 const DIR: &str = "backups";
-/// Extension for a snapshot archive.
-pub const EXT: &str = "codemapbak";
+/// Extension for snapshots written from now on.
+pub const EXT: &str = "fleuronbak";
+/// Extensions accepted when listing or deleting. `codemapbak` is the pre-rename
+/// name and stays supported indefinitely — snapshots already on disk and on
+/// USB sticks must keep working. Imports are rewritten to `EXT` on copy.
+pub const READABLE_EXTS: [&str; 2] = ["fleuronbak", "codemapbak"];
 
 const DB_ENTRY: &str = "project.db";
 const META_ENTRY: &str = "project.json";
@@ -171,10 +175,10 @@ pub fn create(
     // is not exotic — restore takes a pre-restore snapshot immediately before
     // the one it is restoring lands. Without this, the second would silently
     // overwrite the first, and the file it destroyed would be the safety copy.
-    let mut archive_path = dir.join(format!("codemap-{stamp}-{}.{EXT}", reason.slug()));
+    let mut archive_path = dir.join(format!("fleuron-{stamp}-{}.{EXT}", reason.slug()));
     let mut nth = 2;
     while archive_path.exists() {
-        archive_path = dir.join(format!("codemap-{stamp}-{}-{nth}.{EXT}", reason.slug()));
+        archive_path = dir.join(format!("fleuron-{stamp}-{}-{nth}.{EXT}", reason.slug()));
         nth += 1;
     }
 
@@ -285,7 +289,7 @@ fn read_manifest(archive_path: &Path) -> Result<BackupManifest, String> {
     let mut zip = zip::ZipArchive::new(file).map_err(io_err("Not a readable backup file"))?;
     let mut entry = zip
         .by_name(MANIFEST_ENTRY)
-        .map_err(|_| "This file is not a Codemap backup.".to_string())?;
+        .map_err(|_| "This file is not a Fleuron backup.".to_string())?;
     let mut raw = String::new();
     entry
         .read_to_string(&mut raw)
@@ -309,7 +313,10 @@ fn list_in(dir: &Path) -> Vec<BackupInfo> {
     let mut out: Vec<BackupInfo> = entries
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|e| e == EXT))
+        .filter(|p| {
+            p.extension()
+                .is_some_and(|e| READABLE_EXTS.iter().any(|ok| e == *ok))
+        })
         .filter_map(|p| {
             let manifest = read_manifest(&p).ok()?;
             Some(BackupInfo {
@@ -330,7 +337,7 @@ fn list_in(dir: &Path) -> Vec<BackupInfo> {
 /// Verification happens on the extracted file, before the caller is allowed
 /// anywhere near the live project: `integrity_check` catches truncation and
 /// corruption, and the table probe catches a zip that is structurally fine but
-/// holds something that is not a Codemap database.
+/// holds something that is not a Fleuron database.
 fn extract_and_verify_db(archive_path: &Path, dest: &Path) -> Result<(), String> {
     let file = File::open(archive_path).map_err(io_err("Could not open the backup"))?;
     let mut zip = zip::ZipArchive::new(file).map_err(io_err("Not a readable backup file"))?;
@@ -362,7 +369,7 @@ fn extract_and_verify_db(archive_path: &Path, dest: &Path) -> Result<(), String>
         )
         .unwrap_or(0);
     if tables < 4 {
-        return Err("This file is not a Codemap backup.".into());
+        return Err("This file is not a Fleuron backup.".into());
     }
 
     Ok(())
@@ -508,8 +515,11 @@ pub fn import(project_path: &Path, source: &Path) -> Result<BackupInfo, String> 
 
 /// Remove one snapshot. Used by the manage-backups list.
 pub fn delete(archive_path: &Path) -> Result<(), String> {
-    if archive_path.extension().is_none_or(|e| e != EXT) {
-        return Err("That is not a Codemap backup file.".into());
+    if archive_path
+        .extension()
+        .is_none_or(|e| !READABLE_EXTS.iter().any(|ok| e == *ok))
+    {
+        return Err("That is not a Fleuron backup file.".into());
     }
     fs::remove_file(archive_path).map_err(io_err("Could not delete the backup"))
 }
@@ -669,13 +679,13 @@ mod tests {
     #[test]
     fn a_zip_that_is_not_a_backup_is_refused() {
         let (_dir, path, conn) = make_project();
-        let not_a_backup = path.join("nonsense.codemapbak");
+        let not_a_backup = path.join("nonsense.fleuronbak");
         fs::write(&not_a_backup, b"this is not a zip at all").unwrap();
 
         drop(conn);
         let err = restore(&path, &not_a_backup).unwrap_err();
         assert!(
-            err.contains("Not a readable backup") || err.contains("not a Codemap backup"),
+            err.contains("Not a readable backup") || err.contains("not a Fleuron backup"),
             "unhelpful message: {err}"
         );
     }
@@ -705,7 +715,7 @@ mod tests {
         let manual = create(&conn, &path, BackupReason::Manual, None).unwrap();
 
         let dir = backups_dir(&path);
-        let disguised = dir.join(format!("codemap-1999-01-01-000000-auto.{EXT}"));
+        let disguised = dir.join(format!("fleuron-1999-01-01-000000-auto.{EXT}"));
         fs::rename(&manual.path, &disguised).unwrap();
 
         for _ in 0..AUTO_KEEP + 2 {
@@ -738,12 +748,40 @@ mod tests {
         assert!(info.size_bytes > 0);
     }
 
+    /// Snapshots written before the Fleuron rename keep their `.codemapbak`
+    /// suffix on disk. They must stay listable, importable, and deletable.
+    #[test]
+    fn pre_rename_codemapbak_snapshots_are_still_usable() {
+        let (_dir, path, conn) = make_project();
+        add_code(&conn, "written-before-the-rename");
+        let made = create(&conn, &path, BackupReason::Manual, None).unwrap();
+
+        // Age it back to the old extension, as an existing project's folder has it.
+        let legacy = backups_dir(&path).join("codemap-2026-01-01-000000-manual.codemapbak");
+        fs::rename(&made.path, &legacy).unwrap();
+
+        assert_eq!(list(&path).len(), 1, "a .codemapbak must still be listed");
+        assert!(inspect(&legacy).is_ok(), "a .codemapbak must still be readable");
+
+        // Imported from elsewhere, it is rewritten under the new extension.
+        let (_dir2, other, conn2) = make_project();
+        drop(conn2);
+        let brought_in = import(&other, &legacy).unwrap();
+        assert!(
+            brought_in.file_name.ends_with(".fleuronbak"),
+            "import must rewrite to the current extension, got {}",
+            brought_in.file_name
+        );
+
+        assert!(delete(&legacy).is_ok(), "a .codemapbak must still be deletable");
+    }
+
     /// One unreadable file must not hide the good snapshots beside it.
     #[test]
     fn listing_skips_archives_it_cannot_read() {
         let (_dir, path, conn) = make_project();
         create(&conn, &path, BackupReason::Manual, None).unwrap();
-        fs::write(backups_dir(&path).join("junk.codemapbak"), b"garbage").unwrap();
+        fs::write(backups_dir(&path).join("junk.fleuronbak"), b"garbage").unwrap();
 
         assert_eq!(list(&path).len(), 1);
     }
@@ -764,7 +802,7 @@ mod tests {
         let made = create(&conn, &path, BackupReason::Manual, None).unwrap();
 
         let elsewhere = tempfile::tempdir().unwrap();
-        let moved = elsewhere.path().join("carried-on-a-usb-stick.codemapbak");
+        let moved = elsewhere.path().join("carried-on-a-usb-stick.fleuronbak");
         fs::rename(&made.path, &moved).unwrap();
         assert!(list(&path).is_empty());
 

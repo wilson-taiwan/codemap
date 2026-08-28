@@ -207,13 +207,13 @@ pub fn clear_recent_projects_for_selftest(app: &tauri::AppHandle) -> Result<(), 
 /// locally.
 ///
 /// Since v1.2 the default lives directly under the home directory
-/// (`~/Codemap` / `%USERPROFILE%\Codemap`) instead of Documents: Documents can
+/// (`~/Fleuron` / `%USERPROFILE%\Fleuron`) instead of Documents: Documents can
 /// be TCC-protected on macOS and redirected into OneDrive on Windows, which
 /// caused avoidable permission prompts and live-database risk.
 /// Existing projects are never moved — this only changes where *new* studies
 /// propose to live.
 pub fn projects_library_dir_from_home(home: &Path) -> PathBuf {
-    home.join("Codemap")
+    home.join("Fleuron")
 }
 
 pub fn projects_library_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -410,13 +410,13 @@ mod tests {
 
         // macOS-shaped home
         let mac_lib = projects_library_dir_from_home(Path::new("/Users/you"));
-        assert_eq!(norm(&mac_lib), "/Users/you/Codemap");
+        assert_eq!(norm(&mac_lib), "/Users/you/Fleuron");
         assert!(!mac_lib.to_string_lossy().contains("Documents"));
 
         // Windows-shaped home (backslashes survive as one component on a
         // Unix host, so normalize and compare shape only)
         let win_lib = projects_library_dir_from_home(Path::new("C:\\Users\\you"));
-        assert_eq!(norm(&win_lib), "C:/Users/you/Codemap");
+        assert_eq!(norm(&win_lib), "C:/Users/you/Fleuron");
         assert!(!win_lib
             .to_string_lossy()
             .to_lowercase()
@@ -425,7 +425,7 @@ mod tests {
         // Trailing separators are tolerated
         assert_eq!(
             norm(&projects_library_dir_from_home(Path::new("/home/you/"))),
-            "/home/you/Codemap"
+            "/home/you/Fleuron"
         );
     }
 

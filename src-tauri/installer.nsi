@@ -5,8 +5,8 @@
 ; Vendored Date: 2026-08-24
 ; Patch Markers:
 ;   - REMOVED: upstream name-wide process check macro in Section Install and Section Uninstall
-;   - ADDED: Staged extraction to $INSTDIR\.codemap-update\staged\${MAINBINARYNAME}.exe
-;   - ADDED: CodemapCommitTransaction before shortcuts/registry/uninstaller creation
+;   - ADDED: Staged extraction to $INSTDIR\.fleuron-update\staged\${MAINBINARYNAME}.exe
+;   - ADDED: FleuronCommitTransaction before shortcuts/registry/uninstaller creation
 ;
 Unicode true
 ManifestDPIAware true
@@ -670,14 +670,14 @@ Section Install
   !endif
 
     ; Staged extraction into transaction directory (removes upstream name-wide process check macro; hook performs bounded wait)
-  CreateDirectory "$INSTDIR\.codemap-update\staged"
-  CreateDirectory "$INSTDIR\.codemap-update\backup"
-  SetOutPath "$INSTDIR\.codemap-update\staged"
+  CreateDirectory "$INSTDIR\.fleuron-update\staged"
+  CreateDirectory "$INSTDIR\.fleuron-update\backup"
+  SetOutPath "$INSTDIR\.fleuron-update\staged"
   File "/oname=${MAINBINARYNAME}.exe" "${MAINBINARYSRCPATH}"
   SetOutPath $INSTDIR
 
   ; Execute transactional atomic replacement and verification before creating shortcuts/registry
-  Call CodemapCommitTransaction
+  Call FleuronCommitTransaction
 
   ; Copy resources
   {{#each resources_dirs}}

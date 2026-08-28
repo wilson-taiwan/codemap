@@ -5,10 +5,10 @@
 //   --binary <path>            Run a specific built binary instead of the
 //                              auto-resolved one (used by CI to point at the
 //                              universal macOS bundle / installed Windows exe).
-//   CODEMAP_SELFTEST_BINARY    Same effect as an environment variable.
+//   FLEURON_SELFTEST_BINARY    Same effect as an environment variable.
 //   any further args           Forwarded to the app's `--selftest` runner.
 import { runSelftest } from "./selftest-parent.mjs";
-import { findCodemapBinary } from "./selftest-parent.mjs";
+import { findFleuronBinary } from "./selftest-parent.mjs";
 
 const argv = process.argv.slice(2);
 const args = [...argv];
@@ -27,8 +27,8 @@ if (flagIndex !== -1) {
 runSelftest({
   binaryPath:
     customBinary ??
-    process.env.CODEMAP_SELFTEST_BINARY ??
-    findCodemapBinary(),
+    process.env.FLEURON_SELFTEST_BINARY ??
+    findFleuronBinary(),
   args,
 }).then(
   (result) => {

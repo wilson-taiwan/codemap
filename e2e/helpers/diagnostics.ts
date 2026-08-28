@@ -25,8 +25,8 @@ export async function flushDiagnostics(
 
   const ipcLog = await page
     .evaluate(() => {
-      const w = window as unknown as { __CODEMAP_IPC_LOG__?: unknown[] };
-      return w.__CODEMAP_IPC_LOG__ ?? [];
+      const w = window as unknown as { __FLEURON_IPC_LOG__?: unknown[] };
+      return w.__FLEURON_IPC_LOG__ ?? [];
     })
     .catch(() => []);
 

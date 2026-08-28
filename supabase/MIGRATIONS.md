@@ -1,4 +1,4 @@
-# Codemap Supabase Migrations
+# Fleuron Supabase Migrations
 
 `supabase/migrations/` is the only executable migration path. The original v1
 schema and flat migration files remain under `supabase/history/` and at their
@@ -39,7 +39,7 @@ cases without touching real files.
 
 ## Sync Protocol 2 activation in 1.1.0+
 
-Codemap 1.1.0 activates protocol 2 **automatically and silently**, on study
+Fleuron 1.1.0 activates protocol 2 **automatically and silently**, on study
 open and on study creation, when the server's own checks permit it (an admin
 client on a protocol-1 study, every current member capable of protocol 2 and
 registered). The old manual "Activate Sync Protocol 2" button is gone. A
@@ -75,7 +75,7 @@ it does not run `supabase db push`, migration repair, or mutating SQL.
 7. Run the read-only server certification (`scripts/check-server-schema.sh 10`)
    and inspect the remote migration list. Record version, history alignment,
    timestamp, operator, and any baseline-reconciliation evidence.
-8. After certification, a current Codemap 1.0.0 client may register readiness
+8. After certification, a current Fleuron 1.0.0 client may register readiness
    and run the pre-1.1.0 flows; clients upgraded to 1.1.0 activate protocol 2
    automatically on study open/create once the server's readiness gate passes.
 

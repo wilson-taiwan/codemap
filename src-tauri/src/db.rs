@@ -2124,11 +2124,11 @@ pub fn checkpoint(conn: &Connection) -> rusqlite::Result<()> {
 }
 
 /// Extension for projects created from now on.
-pub const PROJECT_EXT: &str = "codemap";
+pub const PROJECT_EXT: &str = "fleuron";
 
-/// Extensions the app opens. `qcproj` is the pre-rename name and stays
-/// supported indefinitely — projects already on Drive must keep working.
-const PROJECT_EXTS: [&str; 2] = ["codemap", "qcproj"];
+/// Extensions the app opens. `codemap` and `qcproj` are pre-rename names and
+/// stay supported indefinitely — projects already on Drive must keep working.
+const PROJECT_EXTS: [&str; 3] = ["fleuron", "codemap", "qcproj"];
 
 pub fn create_project(input: &CreateProjectInput) -> rusqlite::Result<PathBuf> {
     let already_suffixed = PROJECT_EXTS
@@ -2201,7 +2201,7 @@ pub fn open_project(path: &str) -> rusqlite::Result<Connection> {
     let project_path = Path::new(path);
     if !is_project_path(project_path) {
         return Err(rusqlite::Error::InvalidParameterName(
-            "Not a Codemap project. Choose a folder ending in .codemap (or .qcproj).".into(),
+            "Not a Fleuron project. Choose a folder ending in .fleuron (or .codemap / .qcproj).".into(),
         ));
     }
     let db_path = project_path.join("project.db");
@@ -2223,7 +2223,7 @@ pub fn open_project_snapshot_inner(
     let project_path = Path::new(path);
     if !is_project_path(project_path) {
         return Err(rusqlite::Error::InvalidParameterName(
-            "Not a Codemap project. Choose a folder ending in .codemap (or .qcproj).".into(),
+            "Not a Fleuron project. Choose a folder ending in .fleuron (or .codemap / .qcproj).".into(),
         ));
     }
     let db_path = project_path.join("project.db");
@@ -4596,6 +4596,9 @@ pub fn list_coded_segments(
 
 pub fn get_project_deletion_summary(path: &str) -> Result<ProjectDeletionSummary, String> {
     let p = Path::new(path);
+    // Legacy probe: a nested `.codemap/project.db` layout that predates the flat
+    // one below. Deliberately NOT renamed to `.fleuron` — that would probe a
+    // layout which has never existed on disk.
     let db_path = p.join(".codemap").join("project.db");
     let actual_db = if db_path.exists() {
         db_path
@@ -4604,7 +4607,7 @@ pub fn get_project_deletion_summary(path: &str) -> Result<ProjectDeletionSummary
     };
 
     if !actual_db.exists() {
-        return Err("Not a valid Codemap project database".into());
+        return Err("Not a valid Fleuron project database".into());
     }
 
     let conn = Connection::open_with_flags(
@@ -4682,7 +4685,7 @@ pub fn delete_project_folder_impl(path: &str) -> Result<(), String> {
     }
 
     if !p.join("project.db").exists() && !p.join("project.json").exists() {
-        return Err("Refusing to delete folder: not a Codemap project (missing project.db or project.json).".into());
+        return Err("Refusing to delete folder: not a Fleuron project (missing project.db or project.json).".into());
     }
 
     #[cfg(target_os = "macos")]
@@ -5389,6 +5392,56 @@ mod tests {
         .unwrap();
         let conn = open_project(&path.to_string_lossy()).unwrap();
         (dir, path, conn)
+    }
+
+    #[test]
+    fn a_new_project_is_created_with_the_fleuron_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = create_project(&CreateProjectInput {
+            parent_dir: dir.path().to_string_lossy().to_string(),
+            project_name: "study".into(),
+            title: "T".into(),
+            coders: vec!["Alice".into()],
+        })
+        .unwrap();
+        assert_eq!(path.extension().unwrap(), "fleuron");
+        assert_eq!(PROJECT_EXT, "fleuron");
+    }
+
+    #[test]
+    fn every_pre_rename_project_extension_still_opens() {
+        // `.codemap` and `.qcproj` are pre-rename names. Projects sitting on
+        // disk and on Drive must keep opening after the Fleuron rename.
+        for ext in ["fleuron", "codemap", "qcproj"] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = create_project(&CreateProjectInput {
+                parent_dir: dir.path().to_string_lossy().to_string(),
+                project_name: format!("study.{ext}"),
+                title: "T".into(),
+                coders: vec!["Alice".into()],
+            })
+            .unwrap();
+
+            assert_eq!(
+                path.extension().unwrap(),
+                ext,
+                "an explicit .{ext} suffix must not be double-suffixed"
+            );
+            assert!(is_project_path(&path), ".{ext} must be recognised");
+            assert!(
+                open_project(&path.to_string_lossy()).is_ok(),
+                ".{ext} must open"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unknown_extension_is_still_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let stray = dir.path().join("not-a-study.txt");
+        std::fs::create_dir_all(&stray).unwrap();
+        assert!(!is_project_path(&stray));
+        assert!(open_project(&stray.to_string_lossy()).is_err());
     }
 
     fn seed_segment(conn: &Connection) -> (String, String) {
@@ -8009,7 +8062,7 @@ mod tests {
 
     #[test]
     fn delete_project_folder_nonexistent_is_idempotent_ok() {
-        let res = delete_project_folder_impl("/nonexistent/codemap/study/folder");
+        let res = delete_project_folder_impl("/nonexistent/fleuron/study/folder");
         assert!(res.is_ok());
     }
 
@@ -8186,6 +8239,6 @@ mod tests {
             "/Users/test/Library/CloudStorage/Box-Box/MyStudy"
         ));
         assert!(is_box_path_str("/Users/test/Box Sync/MyStudy"));
-        assert!(!is_box_path_str("/Users/test/Documents/Codemap/MyStudy"));
+        assert!(!is_box_path_str("/Users/test/Documents/Fleuron/MyStudy"));
     }
 }

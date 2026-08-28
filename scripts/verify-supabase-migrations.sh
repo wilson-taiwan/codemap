@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Static verification for the Codemap Supabase migration chain.
+# Static verification for the Fleuron Supabase migration chain.
 #
 # Approved by `supabase/MIGRATIONS.md` as the local verification gate. This
 # script never talks to any database — it inspects the repository structure
@@ -23,13 +23,13 @@
 #      repair, or mutating SQL.
 #
 # Env vars:
-#   CODEMAP_SRC_ROOT  Repo root to inspect (defaults to the repository that
+#   FLEURON_SRC_ROOT  Repo root to inspect (defaults to the repository that
 #                     contains this script). Used by the negative-fixture
 #                     self-check (scripts/verify-supabase-migrations.test.sh).
 set -euo pipefail
 set +x
 
-ROOT="${CODEMAP_SRC_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+ROOT="${FLEURON_SRC_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 MIGRATIONS_DIR="$ROOT/supabase/migrations"
 RELEASE_WORKFLOW="$ROOT/.github/workflows/release.yml"
 

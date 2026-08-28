@@ -28,7 +28,7 @@ export function verifyWindowsTemplateConfig(windowsConfJson) {
     throw new Error(`Windows bundle targets must be exactly ["nsis"], got: ${JSON.stringify(windowsConfJson?.bundle?.targets)}`);
   }
   if (windowsBundle?.webviewInstallMode?.type !== "skip") {
-    throw new Error("webviewInstallMode must be exactly 'skip' — Codemap never downloads, bundles, or repairs WebView2");
+    throw new Error("webviewInstallMode must be exactly 'skip' — Fleuron never downloads, bundles, or repairs WebView2");
   }
   if (nsisConf.installMode !== "currentUser") {
     throw new Error(`NSIS installMode must be exactly 'currentUser' (no elevation), got: ${nsisConf.installMode}`);
@@ -49,7 +49,7 @@ export function verifyNoSecurityMutations(nsiText, hooksText = "") {
     /add-firewall|netsh.*firewall/i,
     /certutil|Import-Certificate/i,
     /DisableObsoleteCipherSuites|SmartScreenDism/i,
-    /taskkill\s+\/f\s+\/im\s+(?!.*(codemap))/i,
+    /taskkill\s+\/f\s+\/im\s+(?!.*(fleuron))/i,
   ];
   for (const re of banned) {
     // Strip pure comment lines first so guidance comments don't false-positive.
@@ -91,10 +91,10 @@ export function verifyTemplateStagedExtraction(nsiText) {
 
 export function verifyUninstallCleanup(hooksText, nsiText) {
   const combined = `${hooksText}\n${nsiText}`;
-  if (!/\.codemap-update/i.test(combined)) {
-    throw new Error("Uninstaller must clean up .codemap-update transaction directory");
+  if (!/\.fleuron-update/i.test(combined)) {
+    throw new Error("Uninstaller must clean up .fleuron-update transaction directory");
   }
-  if (/RMDir\s+\/r\s+.*app_data|RMDir\s+\/r\s+.*app\.codemap/i.test(combined)) {
+  if (/RMDir\s+\/r\s+.*app_data|RMDir\s+\/r\s+.*app\.fleuron/i.test(combined)) {
     throw new Error("Uninstaller must never delete persistent application data");
   }
 }
@@ -209,7 +209,7 @@ test("negative mutation: added Defender exclusion fails security-mutation scan",
 
 test("negative mutation: firewall allow rule in template fails scan", () => {
   assert.throws(
-    () => verifyNoSecurityMutations('ExecWait \'netsh advfirewall firewall add rule name="Codemap" dir=in\'', ""),
+    () => verifyNoSecurityMutations('ExecWait \'netsh advfirewall firewall add rule name="Fleuron" dir=in\'', ""),
     /forbidden security mutation/
   );
 });

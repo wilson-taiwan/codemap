@@ -29,9 +29,9 @@ function ipcCount(page: import("@playwright/test").Page, cmd: string) {
   return page.evaluate((command) => {
     const log = (
       window as unknown as {
-        __CODEMAP_IPC_LOG__?: { cmd: string; ok: boolean; err?: string }[];
+        __FLEURON_IPC_LOG__?: { cmd: string; ok: boolean; err?: string }[];
       }
-    ).__CODEMAP_IPC_LOG__;
+    ).__FLEURON_IPC_LOG__;
     return (log ?? []).filter((e) => e.cmd === command && e.ok).length;
   }, cmd);
 }

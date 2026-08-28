@@ -264,7 +264,7 @@ export function SetupWizard() {
                   </button>
                   {parentDir === libraryDir && libraryDir && (
                     <p className="hint mt-1.5">
-                      Recommended — Codemap keeps projects here.{" "}
+                      Recommended — Fleuron keeps projects here.{" "}
                       <button
                         type="button"
                         onClick={chooseLocation}

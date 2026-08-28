@@ -4,21 +4,21 @@
   <!--
     Truthful purpose strings only (v1.2 trust contract). Every declared
     reason matches an actual user action in the app: picking a study,
-    transcript, or export location there. Codemap never requests Full Disk
+    transcript, or export location there. Fleuron never requests Full Disk
     Access and declares nothing for hardware/sensors it cannot touch;
     scripts/verify-mac-bundle.sh compares these exact values against the
     built bundle so drift fails the build.
   -->
   <dict>
     <key>NSDocumentsFolderUsageDescription</key>
-    <string>Codemap accesses Documents only when you choose a study or transcript there.</string>
+    <string>Fleuron accesses Documents only when you choose a study or transcript there.</string>
     <key>NSDesktopFolderUsageDescription</key>
-    <string>Codemap accesses Desktop only when you choose a study, transcript, or export location there.</string>
+    <string>Fleuron accesses Desktop only when you choose a study, transcript, or export location there.</string>
     <key>NSDownloadsFolderUsageDescription</key>
-    <string>Codemap accesses Downloads only when you choose a transcript or file there.</string>
+    <string>Fleuron accesses Downloads only when you choose a transcript or file there.</string>
     <key>NSNetworkVolumesUsageDescription</key>
-    <string>Codemap accesses a network volume only when you choose a study, transcript, or export location there.</string>
+    <string>Fleuron accesses a network volume only when you choose a study, transcript, or export location there.</string>
     <key>NSRemovableVolumesUsageDescription</key>
-    <string>Codemap accesses a removable drive only when you choose a study, transcript, or export location there.</string>
+    <string>Fleuron accesses a removable drive only when you choose a study, transcript, or export location there.</string>
   </dict>
 </plist>

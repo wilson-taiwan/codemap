@@ -1264,7 +1264,7 @@ function EmptyTranscript({
         ) : (
           <>
             Zoom captions, SRT, a Word document, or plain text with speaker
-            labels. Codemap splits it into speaker turns you can code one at a
+            labels. Fleuron splits it into speaker turns you can code one at a
             time.
           </>
         )}

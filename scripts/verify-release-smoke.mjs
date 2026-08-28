@@ -11,7 +11,7 @@
 //   --pre-tag   Every real row is dated evidence; ONLY the two labeled
 //               pending rows may remain unchecked/unlabeled.
 //   --final     Zero pending markers, zero unchecked rows, zero NOT RUN,
-//               and the header must state version 1.2.0.
+//               and the header must state version 2.0.0.
 
 import { readFileSync } from "node:fs";
 import process from "node:process";
@@ -42,7 +42,7 @@ function main() {
     body: m[2],
   }));
   if (rows.length < 20) {
-    fail(`RELEASE-SMOKE.md has only ${rows.length} rows; a v1.2.0 smoke list needs its full contract`);
+    fail(`RELEASE-SMOKE.md has only ${rows.length} rows; a v2.0.0 smoke list needs its full contract`);
   }
 
   const pendingAllowedInPreTag =
@@ -77,8 +77,8 @@ function main() {
   }
 
   const versionMatch = text.match(/\*\*Version:\*\*\s*(\S+)/);
-  if (!versionMatch || versionMatch[1] !== "1.2.0") {
-    problems.push('header "**Version:**" must say 1.2.0');
+  if (!versionMatch || versionMatch[1] !== "2.0.0") {
+    problems.push('header "**Version:**" must say 2.0.0');
   }
 
   if (problems.length > 0) {

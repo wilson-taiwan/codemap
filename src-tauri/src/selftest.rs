@@ -29,12 +29,12 @@ pub struct SelftestStagingConfig {
 
 impl SelftestStagingConfig {
     pub fn from_env() -> Option<Self> {
-        let url = std::env::var("CODEMAP_STAGING_SUPABASE_URL").ok()?;
-        let anon_key = std::env::var("CODEMAP_STAGING_SUPABASE_ANON_KEY").ok()?;
-        let owner_email = std::env::var("CODEMAP_STAGING_OWNER_EMAIL").ok()?;
-        let owner_password = std::env::var("CODEMAP_STAGING_OWNER_PASSWORD").ok()?;
-        let joiner_email = std::env::var("CODEMAP_STAGING_JOINER_EMAIL").ok()?;
-        let joiner_password = std::env::var("CODEMAP_STAGING_JOINER_PASSWORD").ok()?;
+        let url = std::env::var("FLEURON_STAGING_SUPABASE_URL").ok()?;
+        let anon_key = std::env::var("FLEURON_STAGING_SUPABASE_ANON_KEY").ok()?;
+        let owner_email = std::env::var("FLEURON_STAGING_OWNER_EMAIL").ok()?;
+        let owner_password = std::env::var("FLEURON_STAGING_OWNER_PASSWORD").ok()?;
+        let joiner_email = std::env::var("FLEURON_STAGING_JOINER_EMAIL").ok()?;
+        let joiner_password = std::env::var("FLEURON_STAGING_JOINER_PASSWORD").ok()?;
         if url.trim().is_empty()
             || anon_key.trim().is_empty()
             || owner_email.trim().is_empty()
@@ -124,7 +124,7 @@ pub fn selftest_seed_unbound(
 ) -> Result<String, String> {
     let proj_dir = db::create_project(&CreateProjectInput {
         parent_dir: std::env::temp_dir().to_string_lossy().to_string(),
-        project_name: format!("codemap_selftest_unbound_{}", uuid::Uuid::new_v4()),
+        project_name: format!("fleuron_selftest_unbound_{}", uuid::Uuid::new_v4()),
         title: "Selftest Study Unbound".to_string(),
         coders: vec![coder_name],
     })
@@ -147,7 +147,7 @@ pub fn selftest_seed(
 ) -> Result<serde_json::Value, String> {
     let proj_dir = db::create_project(&CreateProjectInput {
         parent_dir: std::env::temp_dir().to_string_lossy().to_string(),
-        project_name: format!("codemap_selftest_{}", uuid::Uuid::new_v4()),
+        project_name: format!("fleuron_selftest_{}", uuid::Uuid::new_v4()),
         title: "Selftest Study".to_string(),
         coders: vec!["Ada Lovelace".to_string()],
     })
@@ -203,7 +203,7 @@ pub fn selftest_seed(
 #[tauri::command]
 pub fn selftest_report(results: Vec<SelftestSuiteResult>) -> Result<(), String> {
     println!("\n==========================================");
-    println!("        CODEMAP SELFTEST REPORT           ");
+    println!("        FLEURON SELFTEST REPORT           ");
     println!("==========================================");
     let require_online = std::env::args().any(|a| a == "--require-online");
     let mut all_passed = true;

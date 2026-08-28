@@ -86,7 +86,7 @@ export function TranscriptLinkPanel({
         parseFileError(e) ??
         ({
           category: "permission_denied",
-          message: "Codemap could not read that folder.",
+          message: "Fleuron could not read that folder.",
           detail: e instanceof Error ? e.message : String(e),
         } satisfies FileAccessUi);
       setScanFailure(ui);
@@ -194,13 +194,13 @@ export function TranscriptLinkPanel({
     >
       <div className="flex flex-col gap-4">
         <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--ink-2)" }}>
-          Linking simply means pointing Codemap at the <code>.docx</code> or <code>.vtt</code> transcript file on this computer that corresponds to each Participant ID.
+          Linking simply means pointing Fleuron at the <code>.docx</code> or <code>.vtt</code> transcript file on this computer that corresponds to each Participant ID.
         </p>
 
         {/* Persistent disclosure — visible before the picker opens, no modal,
             no extra confirmation. The picker itself is the consent. */}
         <p className="text-[12px] leading-relaxed" style={{ color: "var(--ink-2)" }}>
-          Codemap reads supported transcript files directly inside the folder
+          Fleuron reads supported transcript files directly inside the folder
           you choose (not subfolders) to match labels and content hashes.
           Files are processed on this computer; transcript text is not
           uploaded.
@@ -242,7 +242,7 @@ export function TranscriptLinkPanel({
                 Choose another folder
               </button>
               <a
-                href="https://github.com/wilson-taiwan/codemap/blob/main/docs/INSTALLING.md#troubleshooting-file-access"
+                href="https://github.com/wilson-taiwan/fleuron/blob/main/docs/INSTALLING.md#troubleshooting-file-access"
                 target="_blank"
                 rel="noreferrer"
                 className="btn btn-ghost btn-sm underline"

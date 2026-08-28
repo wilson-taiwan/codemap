@@ -105,7 +105,7 @@ export function SettingsSheet() {
                 className="btn btn-outline btn-sm mt-3"
                 onClick={() => void signOut()}
               >
-                Sign out of Codemap
+                Sign out of Fleuron
               </button>
               <p className="hint mt-2">
                 Signing out does not leave a group or unbind a folder. It only
@@ -203,7 +203,7 @@ export function SettingsSheet() {
                 Reopen the last project on launch
               </span>
               <span className="hint mt-0.5 block">
-                Off means Codemap always starts at the project library.
+                Off means Fleuron always starts at the project library.
               </span>
             </span>
           </label>
@@ -241,7 +241,7 @@ export function SettingsSheet() {
             <span>
               Automatically check GitHub for updates
               <span className="hint mt-1 block">
-                Checks quietly. Codemap asks before downloading or installing.
+                Checks quietly. Fleuron asks before downloading or installing.
               </span>
             </span>
           </label>

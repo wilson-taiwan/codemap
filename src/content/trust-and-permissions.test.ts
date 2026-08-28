@@ -23,7 +23,7 @@ import {
 describe("publisher verification notice", () => {
   it("matches the canonical wording exactly", () => {
     expect(PUBLISHER_VERIFICATION_NOTICE).toBe(
-      "Codemap is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at https://github.com/wilson-taiwan/codemap/releases. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.",
+      "Fleuron is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at https://github.com/wilson-taiwan/fleuron/releases. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.",
     );
   });
 
@@ -120,7 +120,7 @@ describe("support matrix and capabilities", () => {
     expect(sMode?.tier).toBe("unsupported");
   });
 
-  it("lists every capability Codemap does not request", () => {
+  it("lists every capability Fleuron does not request", () => {
     for (const cap of ["Camera", "Microphone", "Screen recording", "Accessibility", "Location", "Full Disk Access"]) {
       expect(NOT_REQUESTED_CAPABILITIES).toContain(cap);
     }
@@ -149,8 +149,8 @@ describe("network, sign-in storage, and canonical assets", () => {
   });
 
   it("canonical assets are exactly the two manual downloads", () => {
-    expect(CANONICAL_ASSETS.macos).toBe("Codemap_1.2.0_universal.dmg");
-    expect(CANONICAL_ASSETS.windows).toBe("Codemap_1.2.0_x64-setup.exe");
+    expect(CANONICAL_ASSETS.macos).toBe("Fleuron_2.0.0_universal.dmg");
+    expect(CANONICAL_ASSETS.windows).toBe("Fleuron_2.0.0_x64-setup.exe");
     expect(OFFICIAL_URLS.releases).toContain("/releases");
   });
 });

@@ -1,4 +1,4 @@
-# User guide — Codemap
+# User guide — Fleuron
 
 Current as of **v1.0.0**. In-app help is the same content: press **Help** on the welcome screen or toolbar, or **`?`** / **Cmd+/** anytime.
 
@@ -13,7 +13,7 @@ Current as of **v1.0.0**. In-app help is the same content: press **Help** on the
 | **A group key** | Eight characters from **Group & sync…**. That is the only thing a second coder carries. |
 | **Transcripts in Box** | De-identified files. Both of you import the same file under the same study label. |
 
-The app is the tool; the **project** is a `.codemap` folder on *this* computer. Coding travels through sync. Transcripts travel through Box. **Never copy, sync, or share the live project folder.**
+The app is the tool; the **project** is a `.fleuron` folder on *this* computer. Coding travels through sync. Transcripts travel through Box. **Never copy, sync, or share the live project folder.**
 
 ---
 
@@ -27,7 +27,7 @@ The app is the tool; the **project** is a `.codemap` folder on *this* computer. 
 2. Home screen → **Join a group**. If you are not signed in, create an account or sign in first — **Confirm password** is required. **Forgot password?** emails a short code; type it in the app. There is nothing to click in the message.
 3. Paste the key and confirm the name the group should file your coding under.
 4. **Create a new copy** (usual) or **Use a folder already on this computer** if this machine already has the study. Binding a folder that belongs to a *different* group is refused.
-5. Link each transcript from Box. Codemap checks the passage count against the group's copy.
+5. Link each transcript from Box. Fleuron checks the passage count against the group's copy.
 6. **Start coding** enables once every transcript is linked.
 
 **Starting a new study.** Home screen → **Set up a new study** (⌘N). Then **⋯ → Group & sync… → Start a group** and send the key.
@@ -114,7 +114,7 @@ Every codebook field syncs word-for-word: names, definitions, colours, inclusion
 
 | | What it is | What to do |
 |---|---|---|
-| **Folder** ending `.codemap` | Your working project — a live database | **Keep it on your own computer.** Never copy it into Box/Drive. |
+| **Folder** ending `.fleuron` | Your working project — a live database | **Keep it on your own computer.** Never copy it into Box/Drive. |
 
 ---
 

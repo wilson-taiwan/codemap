@@ -241,7 +241,7 @@ describe("silent protocol-2 auto-activation", () => {
     vi.mocked(api.syncJoinProject).mockResolvedValue(undefined as never);
     vi.mocked(api.syncSetMyCoderName).mockResolvedValue({
       coderName: "Ada",
-      previousName: "a@codemap.test.local",
+      previousName: "a@fleuron.test.local",
     });
     vi.mocked(api.syncStatus).mockResolvedValue(
       statusWith({ projectId: "proj-new", protocol: 1 }),

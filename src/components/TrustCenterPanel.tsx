@@ -114,7 +114,7 @@ export function TrustCenterPanel() {
       open={open}
       onClose={close}
       title="Trust & permissions"
-      subtitle="What Codemap asks of your system, and what to expect."
+      subtitle="What Fleuron asks of your system, and what to expect."
     >
       <div className="scroll flex-1 space-y-7 px-5 py-5">
         {/* This build */}
@@ -144,7 +144,7 @@ export function TrustCenterPanel() {
                 void navigator.clipboard
                   .writeText(
                     [
-                      `Codemap ${info?.version ?? ""}`,
+                      `Fleuron ${info?.version ?? ""}`,
                       `Build: ${info?.build_commit ?? ""}`,
                       `Platform: ${navigator.platform}`,
                       `Source: ${info?.source_url ?? OFFICIAL_URLS.repository}`,
@@ -232,7 +232,7 @@ export function TrustCenterPanel() {
             </div>
           ))}
           <p className="hint mt-2">
-            Codemap does not request: {NOT_REQUESTED_CAPABILITIES.join(", ")}.
+            Fleuron does not request: {NOT_REQUESTED_CAPABILITIES.join(", ")}.
           </p>
         </section>
 

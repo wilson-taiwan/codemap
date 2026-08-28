@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const rootDir = resolve(__dirname, "..");
 
-export function findCodemapBinary(customRoot = rootDir) {
+export function findFleuronBinary(customRoot = rootDir) {
   const isMac = platform() === "darwin";
   const isWin = platform() === "win32";
 
@@ -16,30 +16,30 @@ export function findCodemapBinary(customRoot = rootDir) {
     const candidates = [
       resolve(
         customRoot,
-        "src-tauri/target/release/bundle/macos/Codemap.app/Contents/MacOS/Codemap",
+        "src-tauri/target/release/bundle/macos/Fleuron.app/Contents/MacOS/Fleuron",
       ),
-      resolve(customRoot, "src-tauri/target/release/Codemap"),
+      resolve(customRoot, "src-tauri/target/release/Fleuron"),
       resolve(
         customRoot,
-        "src-tauri/target/debug/bundle/macos/Codemap.app/Contents/MacOS/Codemap",
+        "src-tauri/target/debug/bundle/macos/Fleuron.app/Contents/MacOS/Fleuron",
       ),
-      resolve(customRoot, "src-tauri/target/debug/Codemap"),
+      resolve(customRoot, "src-tauri/target/debug/Fleuron"),
     ];
     for (const c of candidates) {
       if (existsSync(c)) return c;
     }
   } else if (isWin) {
     const candidates = [
-      resolve(customRoot, "src-tauri/target/release/Codemap.exe"),
-      resolve(customRoot, "src-tauri/target/debug/Codemap.exe"),
+      resolve(customRoot, "src-tauri/target/release/Fleuron.exe"),
+      resolve(customRoot, "src-tauri/target/debug/Fleuron.exe"),
     ];
     for (const c of candidates) {
       if (existsSync(c)) return c;
     }
   } else {
     const candidates = [
-      resolve(customRoot, "src-tauri/target/release/Codemap"),
-      resolve(customRoot, "src-tauri/target/debug/Codemap"),
+      resolve(customRoot, "src-tauri/target/release/Fleuron"),
+      resolve(customRoot, "src-tauri/target/debug/Fleuron"),
     ];
     for (const c of candidates) {
       if (existsSync(c)) return c;
@@ -49,7 +49,7 @@ export function findCodemapBinary(customRoot = rootDir) {
 }
 
 export function runSelftest({
-  binaryPath = findCodemapBinary(),
+  binaryPath = findFleuronBinary(),
   timeoutMs = 90000,
   env = process.env,
   args = [],
@@ -57,7 +57,7 @@ export function runSelftest({
   return new Promise((resolvePromise, rejectPromise) => {
     if (!binaryPath || !existsSync(binaryPath)) {
       rejectPromise(
-        new Error(`[selftest] ❌ Could not find Codemap binary to test in target directory.`),
+        new Error(`[selftest] ❌ Could not find Fleuron binary to test in target directory.`),
       );
       return;
     }

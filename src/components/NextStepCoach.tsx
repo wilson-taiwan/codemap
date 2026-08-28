@@ -57,7 +57,7 @@ export function NextStepCoach() {
     {
       id: "transcript",
       title: "Import a transcript",
-      why: "Zoom captions, SRT, a Word document, or plain text — Codemap splits it into speaker turns.",
+      why: "Zoom captions, SRT, a Word document, or plain text — Fleuron splits it into speaker turns.",
       icon: "import",
       action: { label: "Import a transcript", run: () => setIntent("import-vtt") },
       guideSection: "import-vtt-first",
