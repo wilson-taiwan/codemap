@@ -58,7 +58,7 @@ test("open workspace and code from the bubble", async ({ page }) => {
   test.setTimeout(90_000);
   await openWorkspace(page);
   await openCodingBubble(page);
-  await applyExistingCode(page, "Late diagnosis");
+  await applyExistingCode(page, "Waiting list");
 });
 
 test("undo removes a coding action", async ({ page }) => {
@@ -67,7 +67,7 @@ test("undo removes a coding action", async ({ page }) => {
   const passage2 = page.locator("article").nth(1);
   await passage2.click();
   await page.keyboard.press("c");
-  await applyExistingCode(page, "Late diagnosis");
+  await applyExistingCode(page, "Waiting list");
 
   await page.evaluate(async () => {
     const w = window as unknown as {
@@ -91,7 +91,7 @@ test("codebook filters passages and passage notes open inline", async ({ page })
   });
   const passages = page.getByRole("listbox", { name: "Transcript passages" });
   await filter.click();
-  await page.getByRole("menuitem", { name: /Rehearsal as labour/ }).click();
+  await page.getByRole("menuitem", { name: /Unwritten rules/ }).click();
   await expect(passages.getByRole("option")).toHaveCount(1);
 
   await page.getByRole("button", { name: "Filter passages by code" }).click();

@@ -55,9 +55,9 @@ test("keyboard-only traversal reaches a passage and applies a code", async ({
 
   await bubble
     .getByRole("textbox", { name: "Find or create a code" })
-    .fill("Late diagnosis");
+    .fill("Waiting list");
   const chip = bubble
-    .getByRole("button", { name: /^Late diagnosis/ })
+    .getByRole("button", { name: /^Waiting list/ })
     .first();
   await chip.focus();
   await expect(chip).toBeFocused();

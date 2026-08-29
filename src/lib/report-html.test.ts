@@ -16,7 +16,7 @@ describe("report-html", () => {
   const codes: Code[] = [
     {
       id: "c1",
-      name: "Rehearsal as labour",
+      name: "Unwritten rules",
       definition: "Preparing social scripts.",
       inclusion_criteria: "Explicit scripting",
       exclusion_criteria: null,
@@ -89,7 +89,7 @@ describe("report-html", () => {
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain("Sample Study &lt;2026&gt;");
     expect(html).toContain("Reflexive thematic analysis");
-    expect(html).toContain("Rehearsal as labour");
+    expect(html).toContain("Unwritten rules");
     expect(html).toContain("Preparing social scripts.");
     expect(html).toContain("I&#39;ve been rehearsing that hello since the drive in.");
     expect(html).toContain("@media print");

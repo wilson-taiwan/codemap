@@ -82,7 +82,7 @@ test("fixture=server-conflict surfaces the conflict and stays usable", async ({
     .first();
   await expect(conflictRegion).toBeVisible({ timeout: 20_000 });
   await expect(
-    page.getByText("Anticipatory rehearsal").first(),
+    page.getByText("Tacit gatekeeping").first(),
   ).toBeVisible();
 
   // Resolution controls exist; the sheet remains responsive afterwards.
@@ -161,8 +161,8 @@ test("fixture=slow reconciles when the dialog is dismissed mid-save", async ({
   const bubble = page.getByRole("dialog", { name: "Code this selection" });
   await expect(bubble).toBeVisible();
 
-  await bubble.getByRole("textbox", { name: "Find or create a code" }).fill("Late diagnosis");
-  await bubble.getByRole("button", { name: /^Late diagnosis/ }).first().click({
+  await bubble.getByRole("textbox", { name: "Find or create a code" }).fill("Waiting list");
+  await bubble.getByRole("button", { name: /^Waiting list/ }).first().click({
     force: true,
   });
   // Dismiss while the slowed save is still in flight.

@@ -85,7 +85,7 @@ test("escape right after applying still lands exactly one clean coding", async (
   await option.click();
   await openBubbleOn(page);
 
-  await clickCodeChip(page, "Late diagnosis");
+  await clickCodeChip(page, "Waiting list");
   // Escape races the save on purpose; reconciliation must still finish.
   await dismissTopDialog(page);
 
@@ -115,10 +115,10 @@ test("rapid double-apply toggles cleanly instead of duplicating", async ({
   await option.click();
   await openBubbleOn(page);
 
-  await clickCodeChip(page, "Late diagnosis");
+  await clickCodeChip(page, "Waiting list");
   // Second click lands while the first is still settling — the historical
   // duplicate-row trigger. A tick means membership, so two ticks cancel.
-  await clickCodeChip(page, "Late diagnosis");
+  await clickCodeChip(page, "Waiting list");
   await dismissTopDialog(page);
 
   await expect

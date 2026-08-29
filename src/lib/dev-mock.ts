@@ -93,10 +93,10 @@ function fixtureConflicts() {
     {
       id: "conflict-fixture-1",
       entity_type: "code" as const,
-      entity_label: "Anticipatory rehearsal",
+      entity_label: "Tacit gatekeeping",
       field_name: "name",
-      current_value: "Anticipatory rehearsal",
-      proposed_value: "Anticipatory rehearsing",
+      current_value: "Tacit gatekeeping",
+      proposed_value: "Tacit gatekeepers",
       proposer_label: "Luci Diaz",
       status: "unresolved" as const,
       created_at: "2026-08-20T10:00:00Z",
@@ -187,51 +187,51 @@ function sha256Sync(str: string): string {
 const TRANSCRIPT: [string, string][] = [
   [
     "Interviewer",
-    "Thanks for making the time. Could you start by telling me what a typical work day looks like for you?",
+    "Thanks for making the time. Could you start by telling me how you first got involved with the garden?",
   ],
   [
     "P04",
-    "It looks completely normal from the outside, that's the thing. I get in, I say hi to everyone, I do the small talk about the weekend. Nobody would guess.",
+    "There is a waiting list, officially. Four years, they told me on the phone. I had a plot in about six weeks, because I happened to help somebody carry compost.",
   ],
   [
     "P04",
-    "But I've been rehearsing that hello since the drive in. I have a rotation of about four responses and I pick one depending on who it is.",
+    "That is how most of it works, honestly. Nothing is written down anywhere, and the people who have been here longest simply know who gets which plot and when it comes free.",
   ],
   [
     "Interviewer",
-    "Rehearsing — can you say more about what that involves?",
+    "Nothing written down — can you say more about what that means day to day?",
   ],
   [
     "P04",
-    "It's like running lines. I'll think about who's likely to be in the kitchen at nine, what they asked me last week, whether I'm supposed to remember their daughter's name. And then I have that ready.",
+    "It means you learn by getting it wrong. I strimmed the path behind my shed in my first month and three separate people told me we do not cut that side until August. Nobody had thought to mention it.",
   ],
   [
     "P04",
-    "By about two in the afternoon I've got nothing left. I'll go and sit in my car for twenty minutes. I tell people I'm making a call.",
+    "By the second season I was the one telling somebody else. That was the strange part. I had become one of the people who knows, and I still could not have pointed you at a rule.",
   ],
   [
     "Interviewer",
-    "What happens if you don't get that twenty minutes?",
+    "What happens when someone does not pick it up?",
   ],
   [
     "P04",
-    "Then I'm short with people, and being short with people is the one thing I've spent fifteen years making sure I never am. So it costs more later.",
+    "They drift off. The plot goes over, they stop turning up to work days, and eventually there is a letter. But the letter is never really about the weeds.",
   ],
   [
     "P04",
-    "My sister was diagnosed at seven. I was thirty-four. And the only difference between us is that I was better at hiding it, which everyone treated as me being fine.",
+    "We lost a family last spring who I think were never actually let in. They were here eight months and I am not sure anyone learned their names.",
   ],
   [
     "Interviewer",
-    "How did it feel to hear the diagnosis at thirty-four?",
+    "How did that sit with you?",
   ],
   [
     "P04",
-    "Relief, mostly. And then quite a lot of anger, because I'd been told I was sensitive and difficult for three decades and it turned out there was a word for it.",
+    "Badly. Because I remember arriving and being handed a mug of tea inside ten minutes, and that was the entire difference. Somebody decided I was worth the tea.",
   ],
   [
     "P04",
-    "I don't really know who I am without the performance. That's the part nobody warns you about.",
+    "We call ourselves a community, and mostly we are. But there is a door, and not everyone gets shown where it is.",
   ],
 ];
 
@@ -244,7 +244,7 @@ const standardInterviews: Interview[] = [
     diagnosis_notes: null,
     interviewers: ["Ada Lovelace"],
     hub_memo:
-      "Strong through-line about rehearsal as labour. Compare with P02 — same exhaustion, different vocabulary.",
+      "Strong through-line about who gets let in and who does not. Compare with P02 — same site, very different arrival.",
     audio_path: null,
     segment_count: TRANSCRIPT.length,
     remote_segment_count: null,
@@ -278,8 +278,8 @@ const standardSegments: TranscriptSegment[] = TRANSCRIPT.map(([speaker, text], i
 const standardCodes: Code[] = [
   {
     id: "c1",
-    name: "Rehearsal as labour",
-    definition: "Preparing social responses in advance as unpaid, invisible work.",
+    name: "Unwritten rules",
+    definition: "Norms that govern the site but exist nowhere in writing.",
     inclusion_criteria: null,
     exclusion_criteria: null,
     example: null,
@@ -291,8 +291,8 @@ const standardCodes: Code[] = [
   },
   {
     id: "c2",
-    name: "Recovery time",
-    definition: "Withdrawal needed to sustain the performance.",
+    name: "Learning by transgression",
+    definition: "Discovering a rule by breaking it and being corrected.",
     inclusion_criteria: null,
     exclusion_criteria: null,
     example: null,
@@ -304,7 +304,7 @@ const standardCodes: Code[] = [
   },
   {
     id: "c3",
-    name: "Late diagnosis",
+    name: "Waiting list",
     definition: null,
     inclusion_criteria: null,
     exclusion_criteria: null,
@@ -317,8 +317,8 @@ const standardCodes: Code[] = [
   },
   {
     id: "c4",
-    name: "Cost of being good at it",
-    definition: "Competence at masking read by others as absence of need.",
+    name: "Threshold of belonging",
+    definition: "Informal admission granted by existing members, separate from formal membership.",
     inclusion_criteria: null,
     exclusion_criteria: null,
     example: null,
@@ -337,7 +337,7 @@ const standardCodedSegments: CodedSegment[] = [
     segment_id: "seg-2",
     code_ids: ["c1"],
     coder_name: "Ada Lovelace",
-    memo: "Explicit script metaphor — 'rotation of about four responses'.",
+    memo: "States 'nothing is written down' outright, then names who holds it anyway.",
     char_start: null,
     char_end: null,
     quote_text: TRANSCRIPT[2][1],
@@ -351,7 +351,7 @@ const standardCodedSegments: CodedSegment[] = [
     segment_id: "seg-5",
     code_ids: ["c2"],
     coder_name: "Luci Diaz",
-    memo: "Car as the only unobserved space in the working day.",
+    memo: "Becomes an enforcer of a rule she still cannot articulate.",
     char_start: null,
     char_end: null,
     quote_text: TRANSCRIPT[5][1],
@@ -366,9 +366,9 @@ const standardCodedSegments: CodedSegment[] = [
     code_ids: ["c4"],
     coder_name: "Luci Diaz",
     memo: null,
-    char_start: 102,
-    char_end: 136,
-    quote_text: TRANSCRIPT[2][1].slice(102, 136),
+    char_start: 78,
+    char_end: 115,
+    quote_text: TRANSCRIPT[2][1].slice(78, 115),
     block_id: "q002",
     timestamp_start: standardSegments[2].timestamp_start,
     participant_label: "P04-2026-03-11",
@@ -378,16 +378,16 @@ const standardCodedSegments: CodedSegment[] = [
 function generateStressFixture() {
   const speakers = ["Interviewer", "P04", "Interviewer", "P04", "P04"];
   const snippets = [
-    "Could you walk me through the specific routines you follow before an all-hands team meeting?",
-    "It starts about three hours before. I go into a private room, write down likely discussion topics, and script three alternate ways to state each point without sounding defensive or aggressive.",
-    "Do you feel that colleagues notice the preparation, or does it appear completely spontaneous to them?",
-    "Nobody has ever noticed. They compliment me on being articulate and organized, which feels bittersweet because they are praising the mask, not me.",
-    "When the meeting concludes, my heart rate stays elevated for at least forty-five minutes. I physically cannot look at email.",
-    "My previous manager assumed I was simply extroverted because I participated actively during team retrospectives.",
-    "In reality, every single comment was timed to a rhythm I worked out during high school debate competitions.",
-    "Can you describe what physical sensations accompany that level of conscious self-monitoring?",
-    "Tight shoulders, shallow breathing, clenched jaw. By Friday evening I have a tension headache that lasts until Sunday afternoon.",
-    "I was told for years that everyone feels this way in corporate environments, so I assumed I was simply weaker than others.",
+    "Could you walk me through what actually happens on a work day at the site?",
+    "It starts at nine, though the same four people have been there since eight. There is a list on the shed door, and there is the real list, which is whatever those four settled over the first pot of tea.",
+    "Do newer members pick that distinction up quickly, or does it take a while to become visible?",
+    "Most never see it at all. They take the shed list for the whole arrangement, and then they cannot work out why their requests keep going nowhere.",
+    "When the water is rationed in July the allocation is supposed to be strictly per plot, and in practice it follows who has helped whom.",
+    "My old neighbour assumed the committee decided everything, because that is what the constitution says on paper.",
+    "In reality most of it is settled well before any meeting, in the ten minutes while the kettle boils.",
+    "Can you describe how a new person is actually shown the ropes, given that none of it is written down?",
+    "Somebody adopts you, or nobody does. There is no middle version of it, and no one will ever tell you which one has happened to you.",
+    "I was told for years that the waiting list was strictly chronological, so I assumed everyone had arrived the same way I did.",
   ];
 
   const stressSegments: TranscriptSegment[] = [];
@@ -396,7 +396,7 @@ function generateStressFixture() {
     const snip = snippets[i % snippets.length];
     const text =
       i % 4 === 0
-        ? `${snip} Furthermore, when unexpected agenda changes occur, the entire rehearsed sequence collapses and I have to rely on canned stall phrases to buy processing time.`
+        ? `${snip} Furthermore, when the committee moves the work-day rota at short notice, the informal arrangements collapse and everyone falls back on asking whoever has been here longest.`
         : snip;
     const min = Math.floor(i / 2);
     const sec = (i * 30) % 60;
@@ -419,7 +419,7 @@ function generateStressFixture() {
       id: `c${i}`,
       name: `Analytic Concept ${i} — Extended Descriptive Strategy Title`,
       definition: `Detailed inclusion rules, boundary criteria, and theoretical grounding for concept ${i} within reflexive thematic analysis.`,
-      inclusion_criteria: `Use when explicit evidence of behavioral adaptation or cognitive burden for dimension ${i} is present.`,
+      inclusion_criteria: `Use when explicit evidence of an informal norm or an access barrier for dimension ${i} is present.`,
       exclusion_criteria: null,
       example: null,
       parent_id: i > 10 && i % 5 === 0 ? `c${i - 5}` : null,
@@ -1495,7 +1495,7 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
           { studyLabel: "P07", segmentCount: 12, mismatched: false },
           { studyLabel: "P02", segmentCount: 188, mismatched: true },
         ],
-        newCodeNames: ["Anticipatory rehearsal"],
+        newCodeNames: ["Tacit gatekeeping"],
         syncedAt: mockSync.lastSyncedAt,
         codedReceipt: { applied: 2, superseded: 0, deferred: 0 },
         codesReceipt: { applied: 1, superseded: 0, deferred: 0 },
@@ -1574,7 +1574,7 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
         },
       ];
     case "read_text_file":
-      return "block_id,participant,coder,codes,quote\nq002,P04-2026-03-11,Ada Lovelace,Rehearsal as labour,\"I have a rotation of about four responses…\"\n";
+      return "block_id,participant,coder,codes,quote\nq002,P04-2026-03-11,Ada Lovelace,Unwritten rules,\"the people who have been here longest…\"\n";
 
     case "read_transcript_file":
       // A small valid VTT — twelve turns, matching the count import_segments
