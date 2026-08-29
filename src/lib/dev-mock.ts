@@ -184,6 +184,16 @@ function sha256Sync(str: string): string {
   return result;
 }
 
+/**
+ * Synthetic demo interview. Written for this fixture — not a transcript, not a
+ * paraphrase of one, and not derived from any real interview or participant.
+ *
+ * Two rules if you edit it. Keep the domain mundane: this file is public, and a
+ * demo that reads like real research data invites the question of whose it is.
+ * And keep the coded-segment offsets below in step — they index into
+ * TRANSCRIPT[2][1] by character, so changing that turn silently moves the
+ * highlight the demo is meant to show.
+ */
 const TRANSCRIPT: [string, string][] = [
   [
     "Interviewer",
@@ -375,6 +385,10 @@ const standardCodedSegments: CodedSegment[] = [
   },
 ];
 
+/**
+ * 320-segment corpus for layout-stress testing. Synthetic, on the same terms as
+ * TRANSCRIPT above — this is the second copy, and the one easier to forget.
+ */
 function generateStressFixture() {
   const speakers = ["Interviewer", "P04", "Interviewer", "P04", "P04"];
   const snippets = [
