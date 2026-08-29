@@ -1,0 +1,18 @@
+==========================================
+        FLEURON SELFTEST REPORT
+==========================================
+  ✓ [PASS] group-lifecycle-offline (214ms)
+  ✓ [PASS] session-store (18ms)
+  ✓ [PASS] db-schema (45ms)
+  ✓ [PASS] db-crud (82ms)
+  ✓ [PASS] db-history (33ms)
+  ✓ [PASS] db-sync-queue (51ms)
+  ✓ [PASS] coding-flow (129ms)
+  ✓ [PASS] workspace-state (64ms)
+  ✓ [PASS] theme-contrast (19ms)
+  ✓ [PASS] updater-state (27ms)
+  ✓ [PASS] export-engine (73ms)
+  ↷ [SKIP] group-lifecycle-online: Offline mode active (FLEURON_STAGING_* not set)
+==========================================
+
+All selftest suites PASSED (or cleanly SKIPPED)! Exiting process 0.

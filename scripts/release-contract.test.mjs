@@ -21,8 +21,14 @@ const readWf = (name) => readFileSync(`${root}${wf(name)}`, "utf8");
 const readJson = (p) => JSON.parse(readFileSync(`${root}${p}`, "utf8"));
 const readFile = (p) => readFileSync(`${root}${p}`, "utf8");
 
-const CANONICAL_MAC_DMG = "Fleuron_2.0.0_universal.dmg";
-const CANONICAL_WIN_EXE = "Fleuron_2.0.0_x64-setup.exe";
+const RELEASE_VERSION = readJson("package.json").version;
+const VERSION_TOKEN = "$" + "{VERSION}";
+const CANONICAL_MAC_DMG = "Fleuron_" + RELEASE_VERSION + "_universal.dmg";
+const CANONICAL_WIN_EXE = "Fleuron_" + RELEASE_VERSION + "_x64-setup.exe";
+const MAC_QA_RUNNER = "Fleuron_" + RELEASE_VERSION + "_macos-qa-runner.zip";
+const WIN_QA_RUNNER = "Fleuron_" + RELEASE_VERSION + "_windows-qa-runner.zip";
+const MAC_QA_RUNNER_TEMPLATE = "Fleuron_" + VERSION_TOKEN + "_macos-qa-runner.zip";
+const WIN_QA_RUNNER_TEMPLATE = "Fleuron_" + VERSION_TOKEN + "_windows-qa-runner.zip";
 const DISCLOSURE_SNIPPET =
   "so your operating system cannot verify its publisher automatically";
 
@@ -47,6 +53,49 @@ function expectStepPresent(yaml, needle, label) {
 
 function expectNoContinueOnError(yaml, label) {
   assert.doesNotMatch(yaml, /continue-on-error/, `${label}: must never swallow failures`);
+}
+
+function assertQaRunnerReleaseContract(yaml) {
+  for (const asset of [MAC_QA_RUNNER_TEMPLATE, WIN_QA_RUNNER_TEMPLATE]) {
+    assert.ok(yaml.includes(asset), "QA runner asset missing from release workflow: " + asset);
+  }
+  assert.match(yaml, /qa\/macos\/Invoke-FleuronQA\.sh/);
+  assert.match(yaml, /qa\/macos\/README\.md/);
+  assert.match(yaml, /Fleuron-Windows-QA-Runner/);
+  assert.match(yaml, /qa\/Invoke-FleuronQA\.ps1/);
+  assert.match(yaml, /release\.json/);
+  assert.match(yaml, /platform": "macos"/);
+  assert.match(yaml, /platform = 'windows'/);
+  assert.match(yaml, /actions\/upload-artifact@v4/);
+  const buildAssets = jobBlock(yaml, "build-draft-assets");
+  assert.ok(buildAssets.includes("zip -qr"), "macOS runner must be archived");
+  assert.ok(buildAssets.includes("Compress-Archive"), "Windows runner must be archived");
+  assert.ok(buildAssets.includes("qa/Test-Parse.ps1"), "Windows runner must be syntax-checked");
+  assert.ok(buildAssets.includes("qa/Invoke-FleuronQA.ps1 -SelfCheck"), "Windows runner must self-check");
+  assert.ok(buildAssets.includes(MAC_QA_RUNNER_TEMPLATE));
+  assert.ok(buildAssets.includes("Fleuron_$($version)_windows-qa-runner.zip"));
+  const finalize = jobBlock(yaml, "finalize-draft");
+  assert.ok(finalize.includes(MAC_QA_RUNNER_TEMPLATE));
+  assert.ok(finalize.includes(WIN_QA_RUNNER_TEMPLATE));
+  const uploadIndex = finalize.indexOf("gh release upload");
+  assert.ok(uploadIndex !== -1, "draft asset upload step missing");
+  const uploadBlock = finalize.slice(uploadIndex);
+  assert.ok(uploadBlock.includes("assets/Fleuron_" + VERSION_TOKEN + "_macos-qa-runner.zip"));
+  assert.ok(uploadBlock.includes("assets/Fleuron_" + VERSION_TOKEN + "_windows-qa-runner.zip"));
+  const provenance = jobBlock(yaml, "provenance");
+  assert.ok(provenance.includes(MAC_QA_RUNNER_TEMPLATE));
+  assert.ok(provenance.includes(WIN_QA_RUNNER_TEMPLATE));
+  assert.ok(existsSync(root + "qa/macos/Invoke-FleuronQA.sh"), "macOS QA runner source missing");
+  assert.ok(existsSync(root + "qa/macos/README.md"), "macOS QA runner guide missing");
+  assert.ok(existsSync(root + "qa/Invoke-FleuronQA.ps1"), "Windows QA runner source missing");
+
+  const macRunner = readFile("qa/macos/Invoke-FleuronQA.sh");
+  assert.match(macRunner, /hdiutil verify/);
+  assert.match(macRunner, /codesign --verify --deep --strict/);
+  assert.match(macRunner, /--selftest/);
+  const winRunner = readFile("qa/Invoke-FleuronQA.ps1");
+  assert.match(winRunner, /Resolve-ExpectedVersion/);
+  assert.match(winRunner, /release\.json/);
 }
 
 // ----------------------
@@ -239,18 +288,29 @@ test("release.yml provenance job holds the right scopes and pins actions/attest@
   assert.match(yaml, /actions\/attest@v4/);
 });
 
-test("release.yml enforces the exact six-asset inventory before any further step", () => {
+test("release.yml enforces the exact eight-asset inventory before any further step", () => {
   const yaml = readWf("release");
   for (const asset of [
-    CANONICAL_MAC_DMG,
-    CANONICAL_WIN_EXE,
-    `${CANONICAL_WIN_EXE}.sig`,
+    "Fleuron_" + VERSION_TOKEN + "_universal.dmg",
+    "Fleuron_" + VERSION_TOKEN + "_x64-setup.exe",
+    "Fleuron_" + VERSION_TOKEN + "_x64-setup.exe.sig",
     "Fleuron_universal.app.tar.gz",
     "Fleuron_universal.app.tar.gz.sig",
+    MAC_QA_RUNNER_TEMPLATE,
+    WIN_QA_RUNNER_TEMPLATE,
     "latest.json",
   ]) {
-    assert.ok(yaml.includes(asset), `inventory must reference ${asset}`);
+    assert.ok(yaml.includes(asset), "inventory must reference " + asset);
   }
+});
+
+test("release.yml packages one version-pinned QA runner for each shipped OS", () => {
+  assertQaRunnerReleaseContract(readWf("release"));
+});
+
+test("negative mutation: removing a platform QA runner fails", () => {
+  const mutated = readWf("release").replaceAll("macos-qa-runner", "macos-runner-removed");
+  assert.throws(() => assertQaRunnerReleaseContract(mutated), /QA runner|macos-qa-runner/);
 });
 
 test("release.yml validates latest.json version/platform/urls/signatures", () => {
@@ -329,8 +389,26 @@ test("updater channel is retained verbatim", () => {
 
 test("canonical support matrix + filenames appear in candidate summary/report", () => {
   const yaml = readWf("candidate");
-  assert.ok(yaml.includes(CANONICAL_MAC_DMG) || yaml.includes("Fleuron_${VERSION}_universal.dmg"));
-  assert.ok(yaml.includes(CANONICAL_WIN_EXE) || yaml.includes("Fleuron_${VERSION}_x64-setup.exe"));
+  assert.ok(
+    yaml.includes(CANONICAL_MAC_DMG) ||
+      yaml.includes("Fleuron_" + VERSION_TOKEN + "_universal.dmg"),
+  );
+  assert.ok(
+    yaml.includes(CANONICAL_WIN_EXE) ||
+      yaml.includes("Fleuron_" + "$" + "{version}_x64-setup.exe"),
+  );
+});
+
+test("current install materials use the package version's asset names", () => {
+  const installing = readFile("docs/INSTALLING.md");
+  assert.ok(installing.includes(CANONICAL_MAC_DMG));
+  assert.ok(installing.includes(CANONICAL_WIN_EXE));
+  assert.ok(installing.includes(MAC_QA_RUNNER));
+  assert.ok(installing.includes(WIN_QA_RUNNER));
+
+  const trust = readFile("src/content/trust-and-permissions.ts");
+  assert.ok(trust.includes(CANONICAL_MAC_DMG));
+  assert.ok(trust.includes(CANONICAL_WIN_EXE));
 });
 
 // ----------------------

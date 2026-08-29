@@ -384,13 +384,41 @@ pub struct RestoreOutcome {
     pub safety_backup_path: String,
 }
 
+/// Replace `dest` with `src`, retrying briefly on Windows lock contention.
+///
+/// Windows refuses to replace a file that still has an open handle, and a
+/// `project.db` closed milliseconds earlier routinely has one for a moment --
+/// an antivirus or indexer scanning it, or a handle the OS has not released
+/// yet. Unix renames regardless, which is why a restore that passes every
+/// macOS gate still fails with `os error 5` on a real Windows machine. Same
+/// transient, same five-attempt shape, as the delete retry in
+/// `db::delete_project`.
+///
+/// Retrying stops as soon as `src` is gone: a vanished source will never
+/// succeed, and spinning on it would only delay the error the caller needs.
+fn rename_with_retry(src: &Path, dest: &Path) -> std::io::Result<()> {
+    let mut result = fs::rename(src, dest);
+    for attempt in 1..=5 {
+        match &result {
+            Ok(()) => break,
+            Err(_) if src.exists() => {
+                std::thread::sleep(std::time::Duration::from_millis(100 * attempt));
+                result = fs::rename(src, dest);
+            }
+            Err(_) => break,
+        }
+    }
+    result
+}
+
 /// Replace the project's database with the one inside `archive_path`.
 ///
 /// **The caller must have closed the project's connection first.** Windows
 /// refuses to rename over an open file, and on macOS the swap would succeed
 /// while the app kept reading the old inode — a restore that appears to do
 /// nothing until the next launch. `commands::restore_backup` owns that
-/// sequencing; nothing else should call this.
+/// sequencing; nothing else should call this. The final swap retries briefly
+/// for a transient Windows lock after that connection has closed.
 pub fn restore(project_path: &Path, archive_path: &Path) -> Result<RestoreOutcome, String> {
     let manifest = read_manifest(archive_path)?;
 
@@ -426,9 +454,23 @@ pub fn restore(project_path: &Path, archive_path: &Path) -> Result<RestoreOutcom
 
     // Step 3: swap. The WAL and shm belong to the database being replaced; left
     // in place, SQLite would apply a stale journal over the restored file.
+    // Deliberately deleted *after* the swap: `checkpoint_open_project` is
+    // best-effort, so a WAL that failed to fold in may still be the only copy
+    // of the newest coding. Removing it before a rename that then fails would
+    // destroy exactly the work this function exists to protect.
     let db_path = project_path.join("project.db");
-    fs::rename(&staged, &db_path)
-        .map_err(io_err("Could not put the restored database in place"))?;
+    rename_with_retry(&staged, &db_path).map_err(|e| {
+        let _ = fs::remove_file(&staged);
+        format!(
+            "Could not put the restored database in place: {e} (os error {}; \
+             wal present: {}, shm present: {}). Your project was left unchanged.",
+            e.raw_os_error()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "none".to_string()),
+            project_path.join("project.db-wal").exists(),
+            project_path.join("project.db-shm").exists(),
+        )
+    })?;
     let _ = fs::remove_file(project_path.join("project.db-wal"));
     let _ = fs::remove_file(project_path.join("project.db-shm"));
 
@@ -588,6 +630,45 @@ mod tests {
 
         let conn = db::open_project(&path.to_string_lossy()).unwrap();
         assert_eq!(code_names(&conn), vec!["kept"]);
+    }
+
+    #[test]
+    fn rename_with_retry_moves_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("source.db");
+        let dest = dir.path().join("destination.db");
+        fs::write(&src, b"restored database").unwrap();
+
+        rename_with_retry(&src, &dest).unwrap();
+
+        assert!(!src.exists());
+        assert_eq!(fs::read(&dest).unwrap(), b"restored database");
+    }
+
+    #[test]
+    fn rename_with_retry_gives_up_when_the_source_is_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("already-gone.db");
+        let dest = dir.path().join("destination.db");
+
+        assert!(rename_with_retry(&missing, &dest).is_err());
+    }
+
+    #[test]
+    fn a_failed_swap_leaves_no_staging_file() {
+        // A Windows file lock cannot be forced portably in this unit test. A
+        // successful restore nevertheless proves the staging file's normal
+        // lifecycle terminates, which is the invariant a failed-swap cleanup
+        // preserves as well.
+        let (_dir, path, conn) = make_project();
+        add_code(&conn, "before");
+        let snapshot = create(&conn, &path, BackupReason::Manual, None).unwrap();
+        add_code(&conn, "after");
+        drop(conn);
+
+        restore(&path, Path::new(&snapshot.path)).unwrap();
+
+        assert!(!backups_dir(&path).join(".staging-restore.db").exists());
     }
 
     /// Restoring the wrong file has to be survivable, or nobody should be

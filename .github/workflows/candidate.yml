@@ -40,8 +40,15 @@ jobs:
       # run block that only fires on a tag is not exercised until release day.
       - name: Workflow shell syntax (bash 5)
         run: bash scripts/verify-workflow-shell.sh
+      - name: PowerShell source encoding (ASCII)
+        run: bash scripts/verify-ps1-ascii.sh
       - name: Release-contract assertions (+ negative mutations)
         run: node --test scripts/release-contract.test.mjs
+
+      - name: macOS QA runner syntax
+        run: |
+          bash -n qa/macos/Invoke-FleuronQA.sh
+          bash qa/macos/Invoke-FleuronQA.sh --help
 
       - name: Static migration gate
         run: bash scripts/verify-supabase-migrations.sh
@@ -198,24 +205,34 @@ jobs:
           node scripts/nsis-template.test.mjs
           node scripts/windows-update-guard.test.mjs
 
+      - name: QA runner syntax + self-check
+        shell: pwsh
+        run: |
+          Get-ChildItem qa -Recurse -Filter *.ps1 | ForEach-Object {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors) | Out-Null
+            if ($errors) { throw "$($_.Name): $($errors[0].Message)" }
+          }
+          powershell -ExecutionPolicy Bypass -File qa/Invoke-FleuronQA.ps1 -SelfCheck
+
       - name: Build x64 app + NSIS installer
         run: npm run tauri build
 
-      # ── Real packaged-app selftest — FAIL-CLOSED ──────────────────────────
+      # ── Real packaged-app selftest (dev binary) — FAIL-CLOSED ───────────────
       - name: Packaged-app selftest (real backend)
         run: node scripts/run-selftest.mjs
 
-      - name: Download canonical v1.1.0 installer for upgrade matrix
+      - name: Download canonical v1.2.0 installer for upgrade matrix
         shell: pwsh
-        # The v1.1.0 asset shipped as Codemap_1.1.0_x64-setup.exe and keeps that
+        # The v1.2.0 asset shipped as Codemap_1.2.0_x64-setup.exe and keeps that
         # name forever — released filenames are immutable. Only the repo path
         # moves to wilson-taiwan/fleuron (GitHub would redirect, but be explicit).
         run: |
           New-Item -ItemType Directory -Path _prev -Force | Out-Null
           Invoke-WebRequest `
-            -Uri 'https://github.com/wilson-taiwan/fleuron/releases/download/v1.1.0/Codemap_1.1.0_x64-setup.exe' `
-            -OutFile '_prev/Codemap_1.1.0_x64-setup.exe'
-          Get-FileHash '_prev/Codemap_1.1.0_x64-setup.exe' -Algorithm SHA256 | Format-List
+            -Uri 'https://github.com/wilson-taiwan/fleuron/releases/download/v1.2.0/Codemap_1.2.0_x64-setup.exe' `
+            -OutFile '_prev/Codemap_1.2.0_x64-setup.exe'
+          Get-FileHash '_prev/Codemap_1.2.0_x64-setup.exe' -Algorithm SHA256 | Format-List
 
       - name: Installer matrix (upgrade / clean / rollback)
         shell: pwsh
@@ -223,8 +240,23 @@ jobs:
           $candidate = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
           powershell -ExecutionPolicy Bypass -File scripts/test-windows-installer.ps1 `
             -CandidateInstaller $candidate.FullName `
-            -PreviousInstaller '_prev/Codemap_1.1.0_x64-setup.exe' `
+            -PreviousInstaller '_prev/Codemap_1.2.0_x64-setup.exe' `
             -OutputDirectory '_installer-evidence'
+
+      # ── Real packaged-app selftest (NSIS-installed binary) — FAIL-CLOSED ────
+      - name: Install candidate for installed-binary selftest
+        shell: pwsh
+        run: |
+          $candidate = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
+          Start-Process -FilePath $candidate.FullName -ArgumentList "/S" -Wait
+
+      - name: Packaged-app selftest (installed binary)
+        run: node scripts/run-selftest.mjs --binary "$env:LOCALAPPDATA\Fleuron\Fleuron.exe"
+
+      - name: Verify no crashes on Windows
+        if: always()
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/check-no-crashes.ps1
 
       - name: Stage canonical artifacts
         shell: pwsh
@@ -234,9 +266,9 @@ jobs:
           Copy-Item 'src-tauri/target/release/bundle/nsis/*-setup.exe' 'staging/tmp-setup.exe'
           Move-Item 'staging/tmp-setup.exe' "staging/Fleuron_${version}_x64-setup.exe" -Force
           Copy-Item 'src-tauri/target/release/bundle/nsis/*.sig' staging/
-          # Canonical v2.0.0 names staged here match docs/INSTALLING.md:
-          #   Fleuron_2.0.0_universal.dmg (macOS leg)
-          #   Fleuron_2.0.0_x64-setup.exe (+ .sig)
+          # Canonical versioned names staged here match docs/INSTALLING.md:
+          #   Fleuron_<version>_universal.dmg (macOS leg)
+          #   Fleuron_<version>_x64-setup.exe (+ .sig)
           Get-ChildItem staging | Format-Table Name,Length
 
       - name: SHA-256 inventory

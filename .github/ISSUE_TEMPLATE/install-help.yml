@@ -30,7 +30,7 @@ body:
     attributes:
       label: Fleuron version + build commit + exact filename
       placeholder: |
-        Version 2.0.0, build commit from About → Copy build details, and the exact file downloaded.
+        Version 2.0.1, build commit from About → Copy build details, and the exact file downloaded.
   - type: dropdown
     id: stage
     attributes:

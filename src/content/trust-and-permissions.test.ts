@@ -149,8 +149,8 @@ describe("network, sign-in storage, and canonical assets", () => {
   });
 
   it("canonical assets are exactly the two manual downloads", () => {
-    expect(CANONICAL_ASSETS.macos).toBe("Fleuron_2.0.0_universal.dmg");
-    expect(CANONICAL_ASSETS.windows).toBe("Fleuron_2.0.0_x64-setup.exe");
+    expect(CANONICAL_ASSETS.macos).toBe("Fleuron_2.0.1_universal.dmg");
+    expect(CANONICAL_ASSETS.windows).toBe("Fleuron_2.0.1_x64-setup.exe");
     expect(OFFICIAL_URLS.releases).toContain("/releases");
   });
 });

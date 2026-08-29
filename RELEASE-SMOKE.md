@@ -8,7 +8,7 @@ release is not ready.
 > All evidence is redacted and synthetic: no real study data, participant text,
 > or account identifiers may be recorded here or in the release notes.
 
-- **Version:** 2.0.0
+- **Version:** 2.0.1
 - **Commit:** pending tag (see git log at release time)
 - **Platform / build:** macOS arm64 debug bundle (`Fleuron.app`, id `study.fleuron.desktop`); Windows unverified
 - **Date (last run):** 2026-08-28
@@ -66,7 +66,8 @@ release is not ready.
 ## 11. NSIS installer & update guards (v1.2.0 new)
 
 - [x] NSIS template pinned at CLI 2.11.3, security-mutation scan clean (`Last verified: 2026-08-28 — nsis-template.test.mjs 16/16; windows-update-guard.test.mjs 18/18 (static text assertions only)`)
-- [x] Release contract suite passes 49 tests (`Last verified: 2026-08-28 — release-contract.test.mjs 49/49`)
+- [x] Release contract suite passes (`Last verified: 2026-08-28 — release-contract.test.mjs validates the source, draft-only workflow, exact asset inventory, and per-OS QA runners`)
+- [x] Every release packages version-pinned QA runner assets for macOS and Windows (`Last verified: 2026-08-28 — release-contract.test.mjs asserts both archives, manifests, staging, upload, inventory, checksums, and runner source contracts`)
 
 ## 12. Sync salvage fix (v1.2.0 new)
 
@@ -83,12 +84,12 @@ release is not ready.
 
 ## 14. First launch / platforms
 
-- [ ] macOS fresh install reports 2.0.0 in About (`PENDING DRAFT ASSET — requires published release build`)
-- [ ] Windows fresh install reports 2.0.0 (`PENDING DRAFT ASSET — requires published release build`)
+- [ ] macOS fresh install reports 2.0.1 in About (`PENDING DRAFT ASSET — requires published release build`)
+- [ ] Windows fresh install reports 2.0.1 (`PENDING DRAFT ASSET — requires published release build`)
 
 ## 15. Updater path (previous release to this release)
 
-- [ ] The updater delivers 2.0.0 to windows and macOS and both restart cleanly with local project data intact (`PENDING POST-PUBLISH UPDATER — requires published release with updater artifacts`)
+- [ ] The updater delivers 2.0.1 to windows and macOS and both restart cleanly with local project data intact (`PENDING POST-PUBLISH UPDATER — requires published release with updater artifacts`)
 
 ## 16. Integration evidence (local/staging stack)
 

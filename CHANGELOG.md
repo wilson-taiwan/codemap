@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1]
+
+### Fixed
+
+- Backup restore retries the final database replacement when Windows briefly
+  holds an SQLite handle, removes failed staging files, and reports actionable
+  WAL/SHM diagnostics without deleting the live database.
+- Windows installer QA distinguishes a healthy silent install from its required
+  zero exit code and exercises the updater timeout-abort path before the real
+  updater transaction.
+
+### Infrastructure
+
+- Every draft release now includes two version-pinned verification assets:
+  `Fleuron_<version>_macos-qa-runner.zip` and
+  `Fleuron_<version>_windows-qa-runner.zip`. The release workflow stages,
+  uploads, inventories, checksums, and attests both archives.
+- The macOS runner verifies the DMG, bundle version, code signature, and
+  packaged-app self-test without installing the app. The Windows runner's
+  generated manifest pins it to the matching installer version.
+
 ## [2.0.0]
 
 Codemap is now **Fleuron**.

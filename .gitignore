@@ -35,3 +35,9 @@ test-results/
 # Env
 .env
 .env.*
+qa/qa.env.ps1
+*.env.ps1
+
+# QA Evidence
+qa/qa-evidence/
+qa-evidence/

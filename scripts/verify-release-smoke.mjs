@@ -11,12 +11,15 @@
 //   --pre-tag   Every real row is dated evidence; ONLY the two labeled
 //               pending rows may remain unchecked/unlabeled.
 //   --final     Zero pending markers, zero unchecked rows, zero NOT RUN,
-//               and the header must state version 2.0.0.
+//               and the header must state the current package version.
 
 import { readFileSync } from "node:fs";
 import process from "node:process";
 
 const ALLOWED_PENDING = ["PENDING DRAFT ASSET", "PENDING POST-PUBLISH UPDATER"];
+const EXPECTED_VERSION = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 
 function fail(msg) {
   console.error(`✗ ${msg}`);
@@ -42,7 +45,11 @@ function main() {
     body: m[2],
   }));
   if (rows.length < 20) {
-    fail(`RELEASE-SMOKE.md has only ${rows.length} rows; a v2.0.0 smoke list needs its full contract`);
+    fail(
+      "RELEASE-SMOKE.md has only " +
+        rows.length +
+        " rows; the current release smoke list needs its full contract",
+    );
   }
 
   const pendingAllowedInPreTag =
@@ -77,8 +84,8 @@ function main() {
   }
 
   const versionMatch = text.match(/\*\*Version:\*\*\s*(\S+)/);
-  if (!versionMatch || versionMatch[1] !== "2.0.0") {
-    problems.push('header "**Version:**" must say 2.0.0');
+  if (!versionMatch || versionMatch[1] !== EXPECTED_VERSION) {
+    problems.push('header "**Version:**" must say ' + EXPECTED_VERSION);
   }
 
   if (problems.length > 0) {

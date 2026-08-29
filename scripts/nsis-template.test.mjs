@@ -99,6 +99,75 @@ export function verifyUninstallCleanup(hooksText, nsiText) {
   }
 }
 
+export function verifySingleSilentGuardedQuit(nsiText) {
+  const lines = nsiText.split(/\r?\n/);
+  const onInstSuccess = lines.findIndex((line) => line.trim() === "Function .onInstSuccess");
+  if (onInstSuccess === -1) {
+    throw new Error("Missing Function .onInstSuccess callback");
+  }
+  const onInstSuccessEnd = lines.findIndex(
+    (line, index) => index > onInstSuccess && line.trim() === "FunctionEnd"
+  );
+  if (onInstSuccessEnd === -1) {
+    throw new Error("Function .onInstSuccess is missing FunctionEnd");
+  }
+
+  const silentGuardedQuits = [];
+  for (let start = 0; start < lines.length - 1; start += 1) {
+    const isSilentPassiveGuard =
+      /^\s*\$\{If\}\s+\$PassiveMode\s*=\s*1\s*$/.test(lines[start]) &&
+      /^\s*\$\{OrIf\}\s+\$\{Silent\}\s*$/.test(lines[start + 1]);
+    if (!isSilentPassiveGuard) continue;
+
+    const scopeEnd = lines.findIndex(
+      (line, index) => index > start && /^(FunctionEnd|SectionEnd)$/.test(line.trim())
+    );
+    if (scopeEnd === -1) {
+      throw new Error("$PassiveMode/${Silent} guard has no enclosing FunctionEnd or SectionEnd");
+    }
+
+    let depth = 1;
+    let end = -1;
+    let quitCount = 0;
+    for (let lineIndex = start + 2; lineIndex < scopeEnd; lineIndex += 1) {
+      const line = lines[lineIndex];
+      if (/^\s*Quit\s*$/.test(line)) quitCount += 1;
+      if (/^\s*\$\{(?:If|IfNot|IfThen)\}\s*/.test(line)) depth += 1;
+      if (/^\s*\$\{EndIf\}\s*$/.test(line)) {
+        depth -= 1;
+        if (depth === 0) {
+          end = lineIndex;
+          break;
+        }
+      }
+    }
+    if (end === -1) {
+      if (quitCount > 0) {
+        throw new Error("Unclosed $PassiveMode/${Silent} guard containing Quit in installer.nsi");
+      }
+      continue;
+    }
+    if (quitCount > 0) {
+      silentGuardedQuits.push({ start, end, quitCount });
+    }
+    start = end;
+  }
+
+  if (silentGuardedQuits.length !== 1) {
+    throw new Error(
+      `Expected exactly one Quit inside a $PassiveMode/\${Silent} guard, found ${silentGuardedQuits.length}`
+    );
+  }
+
+  const [guard] = silentGuardedQuits;
+  if (guard.quitCount !== 1) {
+    throw new Error(`Expected one Quit in the silent/passive guard, found ${guard.quitCount}`);
+  }
+  if (guard.start <= onInstSuccess || guard.end >= onInstSuccessEnd) {
+    throw new Error("The only silent/passive Quit must be inside Function .onInstSuccess");
+  }
+}
+
 // ----------------------
 // Tests
 // ----------------------
@@ -145,6 +214,11 @@ test("uninstaller cleans transaction directories without touching app data", () 
     ? readFileSync(`${root}src-tauri/installer.nsi`, "utf8")
     : "";
   verifyUninstallCleanup(hooks, nsi);
+});
+
+test("silent/passive relaunch has exactly one Quit in .onInstSuccess", () => {
+  const nsi = readFileSync(`${root}src-tauri/installer.nsi`, "utf8");
+  verifySingleSilentGuardedQuit(nsi);
 });
 
 // ----------------------
@@ -211,5 +285,23 @@ test("negative mutation: firewall allow rule in template fails scan", () => {
   assert.throws(
     () => verifyNoSecurityMutations('ExecWait \'netsh advfirewall firewall add rule name="Fleuron" dir=in\'', ""),
     /forbidden security mutation/
+  );
+});
+
+test("negative mutation: duplicate silent/passive Quit fails verification", () => {
+  const nsi = readFileSync(`${root}src-tauri/installer.nsi`, "utf8");
+  const duplicateGuard = [
+    "  ${If} $PassiveMode = 1",
+    "  ${OrIf} ${Silent}",
+    "    Quit",
+    "  ${EndIf}",
+  ].join("\n");
+  const withDuplicate = nsi.replace(
+    "SectionEnd\n\nFunction .onInstSuccess",
+    `${duplicateGuard}\nSectionEnd\n\nFunction .onInstSuccess`
+  );
+  assert.throws(
+    () => verifySingleSilentGuardedQuit(withDuplicate),
+    /Expected exactly one Quit/
   );
 });

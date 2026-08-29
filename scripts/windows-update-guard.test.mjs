@@ -94,6 +94,8 @@ const hooks = readFileSync(hooksPath, "utf8");
 const app = readFileSync(appPath, "utf8");
 const config = readFileSync(configPath, "utf8");
 const windowsConfig = readFileSync(windowsConfigPath, "utf8");
+const installerScriptPath = fileURLToPath(new URL("./test-windows-installer.ps1", import.meta.url));
+const installerScript = readFileSync(installerScriptPath, "utf8");
 const configJson = JSON.parse(config);
 const windowsConfigJson = JSON.parse(windowsConfig);
 
@@ -144,6 +146,16 @@ test("Windows installer arguments are optional and do not block manual/N-1 launc
 
 test("Windows installer cleanup is strictly scoped to INSTDIR transaction and legacy paths", () => {
   verifySafeCleanupRoots(hooks);
+});
+
+// NOTE: This is a text assertion and therefore NOT behavioral coverage.
+// Per RELEASE-SMOKE.md § 17's warning and `memory:never-run-code-paths`, template/script
+// text matches do not prove runtime execution. Real coverage is Case E running on CI windows-latest.
+test("installer matrix exercises all three real /FLEURON_* updater argument names in Case E", () => {
+  assert.match(installerScript, /\/FLEURON_PARENT_PID=/);
+  assert.match(installerScript, /\/FLEURON_PENDING_UPDATE=/);
+  assert.match(installerScript, /\/FLEURON_INSTALL_SENTINEL=/);
+  assert.match(installerScript, /Add-TestCaseResult -Name "real_updater_flags"/);
 });
 
 test("app uses a single-instance callback and passive updater mode", () => {

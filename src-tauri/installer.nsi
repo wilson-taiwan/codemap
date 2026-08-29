@@ -766,16 +766,6 @@ Section Install
     !insertmacro NSIS_HOOK_POSTINSTALL
   !endif
 
-  ; In passive or silent mode, handle /R relaunch and quit immediately
-  ${If} $PassiveMode = 1
-  ${OrIf} ${Silent}
-    ${GetOptions} $CMDLINE "/R" $R0
-    ${IfNot} ${Errors}
-      ${GetOptions} $CMDLINE "/ARGS" $R0
-      nsis_tauri_utils::RunAsUser "$INSTDIR\${MAINBINARYNAME}.exe" "$R0"
-    ${EndIf}
-    Quit
-  ${EndIf}
 SectionEnd
 
 Function .onInstSuccess

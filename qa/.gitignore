@@ -1,0 +1,4 @@
+qa.env.ps1
+*.env.ps1
+qa-evidence/
+*.bak/

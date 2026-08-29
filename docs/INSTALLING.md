@@ -10,11 +10,13 @@ Only these two files are manual downloads:
 
 | Your computer | Download this exact file |
 | --- | --- |
-| macOS (Intel or Apple Silicon) | `Fleuron_2.0.0_universal.dmg` |
-| Windows 11 x64 | `Fleuron_2.0.0_x64-setup.exe` |
+| macOS (Intel or Apple Silicon) | `Fleuron_2.0.1_universal.dmg` |
+| Windows 11 x64 | `Fleuron_2.0.1_x64-setup.exe` |
 
 You may also see these on a release page. They are **updater infrastructure — do not download them by hand**:
 `Fleuron_universal.app.tar.gz`, `.sig` signature files, `latest.json`, `SHA256SUMS.txt`.
+
+For release verification only, each release also carries an optional platform-specific QA runner: `Fleuron_2.0.1_macos-qa-runner.zip` or `Fleuron_2.0.1_windows-qa-runner.zip`. These runners do not install Fleuron or bypass OS security warnings.
 
 ## Three checks before you continue
 
@@ -33,7 +35,7 @@ Open Anyway stays available after the first run unless macOS re-prompts after an
 
 ## Install on Windows 11
 
-1. Double-click `Fleuron_2.0.0_x64-setup.exe`.
+1. Double-click `Fleuron_2.0.1_x64-setup.exe`.
 2. **Expected warning:** SmartScreen shows **“Windows protected your PC”** with *Unknown publisher*. Expected for a newly published, non-store app.
 3. Click **More info**, confirm *Unknown publisher*, then **Run anyway**.
 4. The installer installs for **your user account only**. It never asks for administrator credentials. There is no UAC prompt anywhere in this flow.
@@ -66,20 +68,20 @@ Optional steps. Normal installation never requires Terminal or checksums.
 
 ```bash
 # GitHub's per-asset digest, visible on the release page:
-shasum -a 256 Fleuron_2.0.0_universal.dmg
+shasum -a 256 Fleuron_2.0.1_universal.dmg
 ```
 
 Verify against the published `SHA256SUMS.txt` on the release page:
 
 ```bash
-gh release download v2.0.0 --repo wilson-taiwan/fleuron --dir .
+gh release download v2.0.1 --repo wilson-taiwan/fleuron --dir .
 shasum -a 256 -c SHA256SUMS.txt
 ```
 
 Artifact attestation proves which public repository, workflow, and commit produced each asset:
 
 ```bash
-gh attestation verify Fleuron_2.0.0_universal.dmg --repo wilson-taiwan/fleuron
+gh attestation verify Fleuron_2.0.1_universal.dmg --repo wilson-taiwan/fleuron
 ```
 
 None of these replaces an OS publisher identity; they prove byte-exactness and build origin.

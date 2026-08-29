@@ -12,7 +12,7 @@ Fleuron is a solo-maintained, open-source desktop application for qualitative co
 
 ## Installer facts (Windows)
 
-- Single x64 NSIS installer: `Fleuron_2.0.0_x64-setup.exe`
+- Single x64 NSIS installer: `Fleuron_2.0.1_x64-setup.exe`
 - **Current-user install only** (`RequestExecutionLevel user`, `installMode: currentUser`). No UAC prompt, no per-machine option, no elevation anywhere in install/update/uninstall
 - Installs beneath the user's LocalAppData per-user program path
 - **WebView2:** `webviewInstallMode: skip`. Fleuron never downloads, bundles, installs, or repairs WebView2. Windows 11 normally ships Evergreen already
@@ -24,7 +24,7 @@ Fleuron is a solo-maintained, open-source desktop application for qualitative co
 - Every release includes GitHub artifact attestations and a sorted `SHA256SUMS.txt`; verify with:
 
 ```bash
-gh attestation verify Fleuron_2.0.0_x64-setup.exe --repo wilson-taiwan/fleuron
+gh attestation verify Fleuron_2.0.1_x64-setup.exe --repo wilson-taiwan/fleuron
 shasum -a 256 -c SHA256SUMS.txt   # or sha256sum -c on Linux
 ```
 

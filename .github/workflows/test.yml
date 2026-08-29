@@ -35,6 +35,8 @@ jobs:
       # run block that only fires on a tag is not exercised until release day.
       - name: Workflow shell syntax (bash 5)
         run: bash scripts/verify-workflow-shell.sh
+      - name: PowerShell source encoding (ASCII)
+        run: bash scripts/verify-ps1-ascii.sh
       - name: Release-contract assertions (+ negative mutations)
         run: node --test scripts/release-contract.test.mjs
       - name: Static migration gate

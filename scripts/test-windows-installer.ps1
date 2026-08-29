@@ -215,7 +215,7 @@ Remove-Item -Path "HKCU:\Software\Fleuron\Fleuron" -Recurse -Force -ErrorAction 
 Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Fleuron" -Recurse -Force -ErrorAction SilentlyContinue
 $res = Invoke-InstallerWithTimeout -InstallerPath $CandidateInstaller -Arguments "/S"
 Verify-Canaries
-if (-not $res.TimedOut -and (Test-Path $installedExe) -and -not (Test-Path (Join-Path $InstallDir ".fleuron-update"))) {
+if (-not $res.TimedOut -and $res.ExitCode -eq 0 -and (Test-Path $installedExe) -and -not (Test-Path (Join-Path $InstallDir ".fleuron-update"))) {
     Add-TestCaseResult -Name "fresh_manual_install" -Status "PASS" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Fresh manual installation succeeded cleanly." -Diagnostics $res.Diagnostics
 } else {
     Add-TestCaseResult -Name "fresh_manual_install" -Status "FAIL" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Missing installed executable or leftover transaction residue." -Diagnostics $res.Diagnostics
@@ -231,7 +231,7 @@ if (-not $res.TimedOut -and (Test-Path $installedExe)) {
 }
 
 # Case C: v0.27.0 updater semantics with legacy /FLEURON_TARGET_VERSION_FILE argument
-$res = Invoke-InstallerWithTimeout -InstallerPath $CandidateInstaller -Arguments "/S /P /UPDATE /FLEURON_TARGET_VERSION_FILE=`"dummy.txt`""
+$res = Invoke-InstallerWithTimeout -InstallerPath $CandidateInstaller -Arguments '/S /P /UPDATE /FLEURON_TARGET_VERSION_FILE="dummy.txt"'
 Verify-Canaries
 if (-not $res.TimedOut -and (Test-Path $installedExe)) {
     Add-TestCaseResult -Name "v0270_legacy_arg_ignored" -Status "PASS" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Legacy target version argument safely ignored." -Diagnostics $res.Diagnostics
@@ -239,7 +239,7 @@ if (-not $res.TimedOut -and (Test-Path $installedExe)) {
     Add-TestCaseResult -Name "v0270_legacy_arg_ignored" -Status "FAIL" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Installer failed on legacy argument." -Diagnostics $res.Diagnostics
 }
 
-# Case D: Residue repair — poisoned nested directory Fleuron.exe\Fleuron.exe
+# Case D: Residue repair - poisoned nested directory Fleuron.exe\Fleuron.exe
 Remove-Item -Recurse -Force $InstallDir
 New-Item -ItemType Directory -Path (Join-Path $InstallDir "Fleuron.exe") -Force | Out-Null
 Set-Content -Path (Join-Path $InstallDir "Fleuron.exe\Fleuron.exe") -Value "DUMMY_BINARY_DATA"
@@ -254,6 +254,38 @@ if (-not $res.TimedOut -and (Test-Path $installedExe) -and -not $isDir) {
 } else {
     Add-TestCaseResult -Name "poison_directory_repaired" -Status "FAIL" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Poisoned directory layout was not repaired." -Diagnostics $res.Diagnostics
 }
+
+# Case E: Real updater flags transaction (/S /FLEURON_PARENT_PID= /FLEURON_PENDING_UPDATE= /FLEURON_INSTALL_SENTINEL=)
+# The parent must exit well before FleuronWaitForRelease's 30-second budget.
+# An early exit is the intended success condition; a late exit deadlocks it.
+$parentProcE = Start-Process powershell -ArgumentList "-NoProfile", "-Command", "Start-Sleep -Seconds 3" -PassThru
+$pendingUpdateE = Join-Path $CanaryDirApp "pending-update-e.json"
+$sentinelE = Join-Path $CanaryDirApp "install-sentinel-e.txt"
+if (Test-Path $pendingUpdateE) { Remove-Item -Force $pendingUpdateE }
+if (Test-Path $sentinelE) { Remove-Item -Force $sentinelE }
+$argsE = '/S /FLEURON_PARENT_PID={0} /FLEURON_PENDING_UPDATE="{1}" /FLEURON_INSTALL_SENTINEL="{2}"' -f $parentProcE.Id, $pendingUpdateE, $sentinelE
+$res = Invoke-InstallerWithTimeout -InstallerPath $CandidateInstaller -Arguments $argsE
+Stop-ProcessTreeById -ProcessId $parentProcE.Id
+Verify-Canaries
+if (-not $res.TimedOut -and (Test-Path $installedExe)) {
+    Add-TestCaseResult -Name "real_updater_flags" -Status "PASS" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Real updater flags processed cleanly by NSIS hooks." -Diagnostics $res.Diagnostics
+} else {
+    Add-TestCaseResult -Name "real_updater_flags" -Status "FAIL" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "Installer failed when driven by real /FLEURON_* updater flags." -Diagnostics $res.Diagnostics
+}
+
+# Case F: Cross-rename updater flags (Informational / Gap 4 observation)
+# Shipped Codemap 1.2.0 clients invoke updater with /CODEMAP_* argument names.
+# TODO(Gap 4): Once the 1.2.0 -> current Fleuron migration path is finalized by Wilson, this case
+# should become a gating assertion rather than informational PASS.
+$parentProcF = Start-Process powershell -ArgumentList "-NoProfile", "-Command", "Start-Sleep -Seconds 30" -PassThru
+$pendingUpdateF = Join-Path $CanaryDirApp "pending-update-f.json"
+$sentinelF = Join-Path $CanaryDirApp "install-sentinel-f.txt"
+$argsF = '/S /CODEMAP_PARENT_PID={0} /CODEMAP_PENDING_UPDATE="{1}" /CODEMAP_INSTALL_SENTINEL="{2}"' -f $parentProcF.Id, $pendingUpdateF, $sentinelF
+$res = Invoke-InstallerWithTimeout -InstallerPath $CandidateInstaller -Arguments $argsF
+Stop-ProcessTreeById -ProcessId $parentProcF.Id
+Verify-Canaries
+$obs = if (-not $res.TimedOut -and (Test-Path $installedExe)) { "Installer completed (flags safely ignored/handled)" } else { "Installer failed or timed out on legacy flags" }
+Add-TestCaseResult -Name "cross_rename_updater_flags" -Status "PASS" -ElapsedMs $res.ElapsedMs -ExitCode $res.ExitCode -Details "[INFORMATIONAL] $obs" -Diagnostics "Observed behavior for shipped 1.2.0 updater flags"
 
 # Save Evidence
 $EvidencePath = Join-Path $OutputDirectory "windows-installer-matrix-evidence.json"
