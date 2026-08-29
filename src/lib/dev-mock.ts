@@ -1636,6 +1636,47 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
       return 10;
     case "read_crash_log":
       return "";
+    case "generate_diagnostic_report":
+      return `=== Fleuron Diagnostic Report ===
+Generated: 2026-08-29T12:00:00Z
+Notice: This report contains no transcript text, participant labels, or code names.
+
+--- Application ---
+Name: Fleuron
+Version: 2.0.1
+Build commit: dev
+Source URL: https://github.com/wilson-taiwan/fleuron
+OS: macos
+Arch: aarch64
+
+--- Install ---
+Executable directory: <home>/Applications/Fleuron.app/Contents/MacOS
+Per-user install: true
+Poisoned nested directory: clean
+
+--- Library ---
+Library directory: <library>
+Exists: true
+Writable: true
+Project folders count: 1
+
+--- Sync ---
+Protocol: v2 (Lossless log)
+Outbox: 0
+
+--- Storage ---
+Project directory: <library>/<name>.fleuron
+project.db: present (131072 bytes)
+project.db-wal: absent
+project.db-shm: absent
+Stranded staging restore: clean
+
+--- Updater ---
+Status: idle
+Staged update residue: clean
+
+--- Crashes ---
+Records count: 0 (clean)`;
     case "take_unclean_exit_notice":
       return false;
     case "selftest_online_status":

@@ -458,6 +458,9 @@ export const api = {
   syncReconcilePendingUnbind: () =>
     invoke<void>("sync_reconcile_pending_unbind"),
 
+  /** Generate redacted, in-app diagnostic report. */
+  generateDiagnosticReport: () => invoke<string>("generate_diagnostic_report"),
+
   /** Read active crash log text. */
   readCrashLog: () => invoke<string>("read_crash_log"),
 

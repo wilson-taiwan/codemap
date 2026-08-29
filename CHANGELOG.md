@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.0]
+
+### Added
+
+- **In-app diagnostic report:** In About modal, users can generate a comprehensive plain-text diagnostic report covering application version, install integrity (poisoned nested directory detection), library project counts, sync status, storage health (WAL/SHM and stranded staging DB detection), updater state, and redacted crash logs. A mandatory scrollable preview is displayed before copying or saving to file.
+- **External read-only diagnostic probe:** Added `support/` directory with `support/fleuron-probe.sh` (macOS) and `support/Get-FleuronProbe.ps1` (Windows PowerShell 5.1/pwsh) for users whose app fails to start. Both probes are strictly read-only, make zero network calls, and enforce the same 120-character allowlist redaction rule on crash payloads.
+- **Diagnostics intake:** Updated install-help issue template with an optional diagnostic report field and linked troubleshooting instructions in installation and support guides.
+
+### Infrastructure
+
+- Clarified separation between user diagnostics (`support/` and in-app) and destructive maintainer test suites (`qa/`). The QA runners remain maintainer-only and are never published as release assets.
+
 ## [2.0.1]
 
 ### Fixed

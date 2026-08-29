@@ -1243,16 +1243,9 @@ struct V2DiagnosticsSnapshot {
 }
 
 fn safe_identifier_suffix(value: Option<String>) -> Option<String> {
-    value.filter(|value| !value.is_empty()).map(|value| {
-        value
-            .chars()
-            .rev()
-            .take(8)
-            .collect::<String>()
-            .chars()
-            .rev()
-            .collect()
-    })
+    value
+        .filter(|value| !value.is_empty())
+        .map(|value| crate::diagnostics::safe_suffix(&value))
 }
 
 fn elapsed_seconds_from_rfc3339(value: Option<String>) -> Option<i64> {
@@ -3056,6 +3049,157 @@ pub async fn sync_diagnostics_dump(
 }
 
 #[tauri::command]
+pub async fn generate_diagnostic_report(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // 1. Header
+    let header = format!(
+        "=== Fleuron Diagnostic Report ===\nGenerated: {}\nNotice: This report contains no transcript text, participant labels, or code names.",
+        now
+    );
+
+    // 2. Application
+    let app_version = get_app_version(app.clone())?;
+    let app_section = format!(
+        "--- Application ---\nName: {}\nVersion: {}\nBuild commit: {}\nSource URL: {}\nOS: {}\nArch: {}",
+        app_version.name,
+        app_version.version,
+        app_version.build_commit.unwrap_or_else(|| "unknown".into()),
+        app_version.source_url.unwrap_or_else(|| "unknown".into()),
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
+
+    // 3. Install
+    let install_section = match std::env::current_exe() {
+        Ok(exe_path) => {
+            let exe_dir = exe_path.parent().unwrap_or(&exe_path);
+            let redacted = crate::diagnostics::redact_path(exe_dir);
+            let per_user = {
+                let s = exe_dir.to_string_lossy();
+                #[cfg(windows)]
+                {
+                    let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
+                    let userprofile = std::env::var("USERPROFILE").unwrap_or_default();
+                    (!localappdata.is_empty() && s.starts_with(&localappdata))
+                        || (!userprofile.is_empty() && s.starts_with(&userprofile))
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let home = std::env::var("HOME").unwrap_or_default();
+                    s.starts_with("/Applications") || (!home.is_empty() && s.starts_with(&home))
+                }
+                #[cfg(not(any(windows, target_os = "macos")))]
+                {
+                    true
+                }
+            };
+            let (_, poisoned_status) = crate::diagnostics::check_poisoned_install(exe_dir);
+            format!(
+                "--- Install ---\nExecutable directory: {}\nPer-user install: {}\nPoisoned nested directory: {}",
+                redacted, per_user, poisoned_status
+            )
+        }
+        Err(e) => format!("--- Install ---\nunavailable: {}", e),
+    };
+
+    // 4. Library
+    let library_section = match crate::app_data::projects_library_dir(&app) {
+        Ok(lib_dir) => {
+            let redacted = crate::diagnostics::redact_path(&lib_dir);
+            let exists = lib_dir.exists();
+            match crate::diagnostics::scan_library_counts(&lib_dir) {
+                Ok((count, writable)) => format!(
+                    "--- Library ---\nLibrary directory: {}\nExists: {}\nWritable: {}\nProject folders count: {}",
+                    redacted, exists, writable, count
+                ),
+                Err(err) => format!(
+                    "--- Library ---\nLibrary directory: {}\nExists: {}\nunavailable: {}",
+                    redacted, exists, err
+                ),
+            }
+        }
+        Err(e) => format!("--- Library ---\nunavailable: {}", e),
+    };
+
+    // 5. Sync
+    let sync_content = match sync_diagnostics_dump(app.clone(), state.clone()).await {
+        Ok(dump) => dump,
+        Err(e) => format!("unavailable: {}", e),
+    };
+    let sync_section = format!("--- Sync ---\n{}", sync_content.trim());
+
+    // 6. Storage
+    let storage_section = {
+        let guard = state.project_path.lock().map_err(|e| e.to_string())?;
+        match guard.as_ref() {
+            Some(p) => {
+                let diag = crate::diagnostics::check_storage_status(p);
+                format!(
+                    "--- Storage ---\n{}",
+                    crate::diagnostics::format_storage_diagnostics(&diag)
+                )
+            }
+            None => "--- Storage ---\nunavailable: No project is open".to_string(),
+        }
+    };
+
+    // 7. Updater
+    let updater_section = {
+        let update_status = state.update_coordinator.status();
+        let status_summary = match update_status.phase {
+            crate::update_coordinator::UpdatePhase::Idle => "idle",
+            crate::update_coordinator::UpdatePhase::Checking => "checking",
+            crate::update_coordinator::UpdatePhase::Available => "available",
+            crate::update_coordinator::UpdatePhase::Downloading => "downloading",
+            crate::update_coordinator::UpdatePhase::ReadyToInstall => "ready-to-install",
+            crate::update_coordinator::UpdatePhase::Preparing => "preparing",
+            crate::update_coordinator::UpdatePhase::Installing => "installing",
+            crate::update_coordinator::UpdatePhase::Failed => "failed",
+        };
+
+        let residue = match crate::app_data::app_data_dir(&app) {
+            Ok(dir) => {
+                let (_, status) = crate::diagnostics::check_staged_updater_residue(&dir);
+                status
+            }
+            Err(e) => format!("unavailable: {}", e),
+        };
+
+        format!(
+            "--- Updater ---\nStatus: {}\nStaged update residue: {}",
+            status_summary, residue
+        )
+    };
+
+    // 8. Crashes
+    let crashes_section = match crate::crash_report::read_crash_log_file(&app) {
+        Ok(raw_log) => format!(
+            "--- Crashes ---\n{}",
+            crate::diagnostics::parse_and_redact_crash_log(&raw_log).trim()
+        ),
+        Err(e) => format!("--- Crashes ---\nunavailable: {}", e),
+    };
+
+    let report = [
+        header,
+        app_section,
+        install_section,
+        library_section,
+        sync_section,
+        storage_section,
+        updater_section,
+        crashes_section,
+    ]
+    .join("\n\n");
+
+    Ok(report)
+}
+
+#[tauri::command]
 pub fn read_crash_log(app: tauri::AppHandle) -> Result<String, String> {
     crate::crash_report::read_crash_log_file(&app)
 }
@@ -3173,5 +3317,58 @@ mod command_contract_tests {
         }
         assert!(output.contains("Generation suffix: a1b2c3d4"));
         assert!(output.contains("Outbox: 2"));
+    }
+
+    #[test]
+    fn diagnostic_report_seeded_identifiers_are_redacted() {
+        let temp = tempfile::tempdir().unwrap();
+        let lib_dir = temp.path().join("P07-Camouflaging");
+        std::fs::create_dir_all(&lib_dir).unwrap();
+        let study_dir = lib_dir.join("P07-Interview-Study.fleuron");
+        std::fs::create_dir_all(&study_dir).unwrap();
+        std::fs::write(study_dir.join("project.db"), b"sqlite").unwrap();
+
+        // 1. Library scan count only
+        let (count, writable) = crate::diagnostics::scan_library_counts(&lib_dir).unwrap();
+        assert_eq!(count, 1);
+        assert!(writable);
+
+        // 2. Storage status
+        let storage = crate::diagnostics::check_storage_status(&study_dir);
+        let formatted = crate::diagnostics::format_storage_diagnostics(&storage);
+
+        assert!(!formatted.contains("P07"));
+        assert!(!formatted.contains("Camouflaging"));
+        assert!(!formatted.contains("Interview-Study"));
+        assert!(formatted.contains("<name>.fleuron"));
+        assert!(formatted.contains("project.db"));
+    }
+
+    #[test]
+    fn diagnostic_report_stranded_staging_is_detected() {
+        let temp = tempfile::tempdir().unwrap();
+        let study_dir = temp.path();
+        std::fs::write(study_dir.join("project.db"), b"sqlite").unwrap();
+        std::fs::write(study_dir.join(".staging-restore.db"), b"stranded").unwrap();
+
+        let storage = crate::diagnostics::check_storage_status(study_dir);
+        assert!(storage.stranded_staging_restore);
+        let formatted = crate::diagnostics::format_storage_diagnostics(&storage);
+        assert!(formatted.contains("detected (.staging-restore.db is stranded)"));
+    }
+
+    #[test]
+    fn diagnostic_report_poisoned_install_detected() {
+        let temp = tempfile::tempdir().unwrap();
+        let exe_dir = temp.path();
+        let (poisoned, status) = crate::diagnostics::check_poisoned_install(exe_dir);
+        assert!(!poisoned);
+        assert_eq!(status, "clean");
+
+        let nested = exe_dir.join("Fleuron.exe");
+        std::fs::create_dir(&nested).unwrap();
+        let (poisoned, status) = crate::diagnostics::check_poisoned_install(exe_dir);
+        assert!(poisoned);
+        assert!(status.contains("directory"));
     }
 }

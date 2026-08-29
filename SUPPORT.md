@@ -11,6 +11,10 @@ Open a GitHub Issue using the guided forms:
 
 Forms collect OS version/build, Fleuron version and build commit (About → Copy build details), the exact filename and download URL, and the exact warning text.
 
+To provide diagnostics safely:
+- **In-app:** About → **Generate diagnostic report** to copy or save a fully redacted summary of installation, storage, and sync state.
+- **When the app will not start:** Run the standalone read-only probe from the repository's `support/` folder (`bash support/fleuron-probe.sh` on macOS or `powershell -NoProfile -File support\Get-FleuronProbe.ps1` on Windows).
+
 **Before attaching anything:** do not upload transcripts, quotes, participant/study identifiers, project databases, tokens, private URLs, or unredacted crash logs/screenshots. Crash logs may contain file paths — review and redact first.
 
 ## Security vulnerabilities

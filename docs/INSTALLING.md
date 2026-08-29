@@ -84,6 +84,16 @@ gh attestation verify Fleuron_2.0.1_universal.dmg --repo wilson-taiwan/fleuron
 
 None of these replaces an OS publisher identity; they prove byte-exactness and build origin.
 
+## Troubleshooting & diagnostics
+
+If you encounter unexpected behavior or errors:
+
+1. **In-app diagnostic report:** If Fleuron launches, open **About → Generate diagnostic report**. You can preview the full plain-text report, copy it, or save it to a file. It contains only allowlisted installation and sync metadata, with strictly no transcript text, participant IDs, or code names.
+2. **External read-only probe:** If the application fails to launch at all, run the standalone diagnostic probe from the `support/` directory in the repository:
+   - macOS: `bash support/fleuron-probe.sh --output fleuron-diag.txt`
+   - Windows: `powershell -NoProfile -File support\Get-FleuronProbe.ps1 -OutputFilePath fleuron-diag.txt`
+   Both probes are strictly read-only and never modify your system or study files.
+
 ## Still stuck?
 
 [Open an install-help issue](https://github.com/wilson-taiwan/fleuron/issues/new?template=install-help.yml). Do not attach transcripts, quotes, participant/study identifiers, project databases, tokens, or unredacted crash logs/screenshots.

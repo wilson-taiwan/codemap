@@ -54,3 +54,12 @@ body:
       label: Steps to reproduce
     validations:
       required: true
+  - type: textarea
+    id: diagnostic-report
+    attributes:
+      label: Diagnostic report (optional)
+      description: |
+        If the app opens: About → Generate diagnostic report → Copy report and paste here.
+        If the app fails to start: run the read-only probe script from the support/ directory (macOS: bash support/fleuron-probe.sh / Windows: powershell -NoProfile -File support\Get-FleuronProbe.ps1) and paste its output here.
+        Remember: Do not upload transcripts, quotes, participant/study identifiers, project databases, tokens, private URLs, or unredacted crash logs.
+      placeholder: Paste the redacted report output here...

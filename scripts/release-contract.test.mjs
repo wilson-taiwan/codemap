@@ -302,6 +302,15 @@ test("release.yml keeps the QA runners out of the published assets", () => {
   assertQaRunnersNotShipped(readWf("release"));
 });
 
+test("release.yml and candidate.yml keep support/ probe tools out of published release assets", () => {
+  const rel = readWf("release");
+  const cand = readWf("candidate");
+  assert.ok(!/support\//.test(rel), "release.yml must not upload support/ as an asset");
+  assert.ok(!/support\//.test(cand), "candidate.yml must not upload support/ as an asset");
+  assert.ok(existsSync(`${root}support/fleuron-probe.sh`), "support/fleuron-probe.sh must exist in repo");
+  assert.ok(existsSync(`${root}support/Get-FleuronProbe.ps1`), "support/Get-FleuronProbe.ps1 must exist in repo");
+});
+
 test("negative mutation: re-adding a QA runner asset fails", () => {
   const mutated = readWf("release").replace(
     '"$(echo assets/*.app.tar.gz.sig)" \\',

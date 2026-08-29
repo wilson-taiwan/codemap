@@ -314,7 +314,10 @@ export function TrustCenterPanel() {
               </div>
             ))}
           </div>
-          <p className="hint mt-3">{CRASH_LOG_CAUTION}</p>
+          <p className="hint mt-3">
+            Need to share diagnostics? Generate a safe, redacted report from About → Generate diagnostic report. It inspects install state, local sync progress, and crashes while strictly guaranteeing no transcript text, participant labels, or code names are included.
+          </p>
+          <p className="hint mt-2">{CRASH_LOG_CAUTION}</p>
           <p className="hint mt-2">
             Downloads live only at{" "}
             <a href={OFFICIAL_URLS.releases} target="_blank" rel="noreferrer" className="underline">

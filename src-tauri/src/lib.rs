@@ -25,6 +25,7 @@ mod backup;
 mod commands;
 pub mod crash_report;
 mod db;
+pub mod diagnostics;
 mod docx;
 mod file_error;
 mod ids;
@@ -268,6 +269,7 @@ pub fn run() {
             commands::sync_diagnostics_dump,
             commands::sync_refresh_server_schema,
             commands::sync_reconcile_pending_unbind,
+            commands::generate_diagnostic_report,
             commands::read_crash_log,
             commands::take_unclean_exit_notice,
             commands::render_report_pdf,
