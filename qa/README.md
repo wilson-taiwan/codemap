@@ -37,8 +37,8 @@ The runner derives the expected version from a canonical `Fleuron_X.Y.Z_x64-setu
 |---|---|---|
 | `-Candidate <path>` | Path to the candidate installer executable (`Fleuron_X.Y.Z_x64-setup.exe`). | Mandatory |
 | `-ExpectedVersion <ver>` | Expected candidate version when the filename is noncanonical; release assets normally resolve this from `release.json`. | Optional |
-| `-Previous <path>` | Path to the previous release installer (`Codemap_1.2.0_x64-setup.exe`). If omitted, downloaded from GitHub. | Optional |
-| `-PreviousVersion <ver>` | Version tag of the baseline installer to download when `-Previous` is omitted. | `"1.2.0"` |
+| `-Previous <path>` | Path to the previous release installer (`Codemap_1.2.0_x64-setup.exe`). **Required for the updater leg** — see note below. | Required for leg 6 |
+| `-PreviousVersion <ver>` | Version tag of the baseline installer. Fleuron-era versions (2.x) auto-download; Codemap-era versions (0.x/1.x) cannot. | `"1.2.0"` |
 | `-OutputDirectory <path>` | Target folder for `SUMMARY.md`, `evidence.json`, and `raw/`. Rotates existing folders if present. | `qa-evidence` |
 | `-Online` | Opt-in switch to run cloud/sync selftests against staging Supabase. Requires `qa.env.ps1` in the runner folder. | Disabled |
 | `-SkipUpdater` | Skip the simulated updater transaction leg. | Disabled |
@@ -52,6 +52,14 @@ The runner derives the expected version from a canonical `Fleuron_X.Y.Z_x64-setu
 4. **Relaunch (`relaunch`):** Confirms installed binary boots cleanly and closes without hanging.
 5. **Legacy Projects (`legacy`):** Synthesizes flat and nested `.codemap` study folders under paths with spaces and verifies command-line opening.
 6. **Updater Simulation (`updater`):** Installs Codemap 1.2.0, seeds user project data, and drives candidate upgrade with real `/FLEURON_*` parameters. Captures full end-state diagnostics.
+
+   > **`-Previous` is required for this leg.** The Codemap v1.0.0/v1.1.0/v1.2.0 GitHub release records were removed by intent on 2026-08-28, so no Codemap installer is downloadable — the surviving git tags serve only auto-generated *source* archives, never the built `.exe`. The runner now fails this leg fast with an instruction rather than reporting a confusing 404. Supply a local copy:
+   >
+   > ```
+   > -Previous C:\path\to\Codemap_1.2.0_x64-setup.exe
+   > ```
+   >
+   > Reference copy: 5,570,391 bytes, SHA-256 `9437b5c2…`. This leg is purpose-built as the Gap 4 instrument (it asserts against `Codemap\Codemap.exe`, `app.codemap.desktop`, and a 1.2.0 `FileVersion`), so it is not retargetable at a Fleuron baseline without rewriting those assertions.
 7. **Online (`online`):** Dot-sources `qa.env.ps1`, passes `--require-online`, and tests real-time collaboration and DPAPI token persistence across restarts.
 
 ## Online Staging Setup (`qa.env.ps1` in the runner folder)

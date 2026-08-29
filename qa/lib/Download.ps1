@@ -19,12 +19,20 @@ function Get-PreviousReleaseInstaller {
         New-Item -ItemType Directory -Path $DownloadDirectory -Force | Out-Null
     }
 
-    # Immutable released filename for 1.2.0 was Codemap_1.2.0_x64-setup.exe
-    $fileName = if ($Version -eq "1.2.0" -or $Version -eq "1.1.0" -or $Version -eq "1.0.0") {
-        "Codemap_${Version}_x64-setup.exe"
-    } else {
-        "Fleuron_${Version}_x64-setup.exe"
+    # Codemap-era baselines (0.x / 1.x) are deliberately NOT available online.
+    # The v1.0.0 / v1.1.0 / v1.2.0 GitHub release records were removed on
+    # 2026-08-28 by intent, so the release-asset URL returns 404. The git tags
+    # survive, but GitHub serves only auto-generated SOURCE archives from a tag,
+    # never the built installer -- there is no online source for a Codemap
+    # installer and there is not meant to be one. Fail fast with an actionable
+    # instruction instead of reporting a confusing download error.
+    if ($Version -like "0.*" -or $Version -like "1.*") {
+        $want = "Codemap_${Version}_x64-setup.exe"
+        Add-QATestCaseResult -Evidence $Evidence -Name "previous_installer_download" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Codemap $Version is not downloadable: its GitHub release record was intentionally removed. Re-run with -Previous pointing at a local copy of $want to exercise this leg." -Diagnostics "No online source for Codemap-era installers exists by design."
+        return $null
     }
+
+    $fileName = "Fleuron_${Version}_x64-setup.exe"
 
     $destPath = Join-Path $DownloadDirectory $fileName
     $downloadUrl = "https://github.com/wilson-taiwan/fleuron/releases/download/v${Version}/${fileName}"

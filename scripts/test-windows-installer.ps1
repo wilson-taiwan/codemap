@@ -18,9 +18,6 @@ param (
     [Parameter(Mandatory = $true)]
     [string]$CandidateInstaller,
 
-    [Parameter(Mandatory = $false)]
-    [string]$PreviousInstaller,
-
     [Parameter(Mandatory = $true)]
     [string]$OutputDirectory
 )

@@ -994,15 +994,28 @@ fn test_sync_fuzz_200_seeds() {
     println!("Sync fuzzer completed {} seeds in {:?}", num_seeds, elapsed);
     // Guard against a pathological convergence blowup (an infinite sync loop or a
     // regression that makes convergence take orders of magnitude longer), not
-    // against normal runtime. Shared CI runners vary wildly in speed — the same
-    // 200 seeds have been measured from ~20s to ~56s on healthy macos-latest
-    // builds — so a tight wall-clock budget produced flaky release failures.
-    // Keep a generous ceiling that still trips on a true regression, tunable via
-    // env for slower/faster machines. Mirrors the FLEURON_FUZZ_SEEDS idiom above.
+    // against normal runtime.
+    //
+    // CORRECTNESS DOES NOT DEPEND ON THIS NUMBER. Every seed's convergence is
+    // asserted by `assert_converged`, and a sync that never settles already
+    // panics inside `sync_until_quiescence` after 10 bounded rounds. Both are
+    // deterministic and unaffected by the budget. This assert catches exactly one
+    // thing those cannot: "everything still converged, but got much slower".
+    //
+    // Shared CI runners vary wildly in speed — the same 200 seeds measure ~20s to
+    // ~56s on healthy macos-latest, but healthy windows-latest runs have been
+    // observed at 150s, 187s, 228s and 438s. A 180s ceiling therefore sat *inside*
+    // the normal Windows noise band: it failed the suite on runner variance
+    // repeatedly (438.8s on 2026-08-28, 187.2s on 2026-08-29) without ever having
+    // caught a real regression. 600s is ~10x the healthy macOS ceiling and clears
+    // every healthy Windows run observed, so it still trips on the
+    // order-of-magnitude blowup it exists to catch.
+    //
+    // Tunable via env for slower/faster machines. Mirrors FLEURON_FUZZ_SEEDS above.
     let budget_secs = std::env::var("FLEURON_FUZZ_BUDGET_SECS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(180);
+        .unwrap_or(600);
     assert!(
         elapsed.as_secs() < budget_secs,
         "Fuzzer exceeded {}-second budget: {:?} (set FLEURON_FUZZ_BUDGET_SECS to adjust)",

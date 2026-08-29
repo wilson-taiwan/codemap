@@ -222,25 +222,16 @@ jobs:
       - name: Packaged-app selftest (real backend)
         run: node scripts/run-selftest.mjs
 
-      - name: Download canonical v1.2.0 installer for upgrade matrix
-        shell: pwsh
-        # The v1.2.0 asset shipped as Codemap_1.2.0_x64-setup.exe and keeps that
-        # name forever — released filenames are immutable. Only the repo path
-        # moves to wilson-taiwan/fleuron (GitHub would redirect, but be explicit).
-        run: |
-          New-Item -ItemType Directory -Path _prev -Force | Out-Null
-          Invoke-WebRequest `
-            -Uri 'https://github.com/wilson-taiwan/fleuron/releases/download/v1.2.0/Codemap_1.2.0_x64-setup.exe' `
-            -OutFile '_prev/Codemap_1.2.0_x64-setup.exe'
-          Get-FileHash '_prev/Codemap_1.2.0_x64-setup.exe' -Algorithm SHA256 | Format-List
-
       - name: Installer matrix (upgrade / clean / rollback)
         shell: pwsh
+        # No Codemap-era baseline is fetched. The v1.x GitHub release records were
+        # deliberately removed, so that download URL 404s. Nothing is lost:
+        # -PreviousInstaller was a declared-but-never-read parameter, and every
+        # case in the matrix (A-F) drives the candidate installer only.
         run: |
           $candidate = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
           powershell -ExecutionPolicy Bypass -File scripts/test-windows-installer.ps1 `
             -CandidateInstaller $candidate.FullName `
-            -PreviousInstaller '_prev/Codemap_1.2.0_x64-setup.exe' `
             -OutputDirectory '_installer-evidence'
 
       # ── Real packaged-app selftest (NSIS-installed binary) — FAIL-CLOSED ────
