@@ -46,11 +46,8 @@ describe("beta disclosure", () => {
     checkDir(srcDir);
   }, 30_000);
 
-  it("no public source comment references HQ or private planning paths", () => {
-    const notice = fs.readFileSync(
-      path.resolve(ROOT, "src/components/BetaNotice.tsx"),
-      "utf8",
-    ).replace(/\s+/g, " ").replace(/--/g, "\u2014");
-    expect(notice).not.toMatch(/HQ|plans\/|Wilson|UCLA|Camouflaging/i);
-  });
+  // The private-planning-leak check that used to live here read only
+  // BetaNotice.tsx. It is superseded by src/lib/repo-privacy-guard.test.ts,
+  // which runs the same class of check over every tracked file — including the
+  // Rust and SQL where the 2026-08-29 audit actually found leaks.
 });

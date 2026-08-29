@@ -88,7 +88,7 @@ create trigger on_auth_user_created_grant_beta
 revoke execute on function public.grant_beta_entitlement() from public, anon, authenticated;
 
 -- Backfill every EXISTING account as active beta, so the gate added below
--- never blocks a current user (including the Camouflaging study team).
+-- never blocks a current user (including the existing study team).
 insert into public.entitlements (user_id, status, plan, source)
 select id, 'active', 'beta', 'beta_backfill' from auth.users
 on conflict (user_id) do nothing;

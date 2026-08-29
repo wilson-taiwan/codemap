@@ -3322,7 +3322,7 @@ mod command_contract_tests {
     #[test]
     fn diagnostic_report_seeded_identifiers_are_redacted() {
         let temp = tempfile::tempdir().unwrap();
-        let lib_dir = temp.path().join("P07-Camouflaging");
+        let lib_dir = temp.path().join("P07-Grief-Study");
         std::fs::create_dir_all(&lib_dir).unwrap();
         let study_dir = lib_dir.join("P07-Interview-Study.fleuron");
         std::fs::create_dir_all(&study_dir).unwrap();
@@ -3338,7 +3338,7 @@ mod command_contract_tests {
         let formatted = crate::diagnostics::format_storage_diagnostics(&storage);
 
         assert!(!formatted.contains("P07"));
-        assert!(!formatted.contains("Camouflaging"));
+        assert!(!formatted.contains("Grief"));
         assert!(!formatted.contains("Interview-Study"));
         assert!(formatted.contains("<name>.fleuron"));
         assert!(formatted.contains("project.db"));

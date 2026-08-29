@@ -494,19 +494,26 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    // The adversarial fixtures below are deliberately *fictional*: an invented
+    // username, an invented study name, an invented participant label. What
+    // makes them adversarial is their shape — a real username segment, a study
+    // name that is itself disclosive, a participant identifier in the panic
+    // payload — not whose they are. Do not "improve" them by substituting a
+    // real machine's username or a real study's title: this repository is
+    // public, and a redaction test is a strange place to publish the thing you
+    // are proving you redact. `src/lib/repo-privacy-guard.test.ts` fails the
+    // build if that happens.
+
     #[test]
     fn redact_path_adversarial_mac_study() {
-        let p = PathBuf::from("/Users/wilsonyeh/Fleuron/Autistic Camouflaging P07/project.db");
+        let p = PathBuf::from("/Users/jrivera/Fleuron/Adolescent Grief Narratives P07/project.db");
         let redacted = redact_path(&p);
-        assert!(!redacted.contains("wilsonyeh"), "must not contain username");
+        assert!(!redacted.contains("jrivera"), "must not contain username");
         assert!(
-            !redacted.contains("Autistic"),
+            !redacted.contains("Adolescent"),
             "must not contain study term"
         );
-        assert!(
-            !redacted.contains("Camouflaging"),
-            "must not contain study term"
-        );
+        assert!(!redacted.contains("Grief"), "must not contain study term");
         assert!(
             !redacted.contains("P07"),
             "must not contain participant identifier"
@@ -553,9 +560,9 @@ mod tests {
 
     #[test]
     fn redact_panic_payload_adversarial_seeded_identifier() {
-        let raw = "Panicked at 'duplicate label': already has an interview labelled P07. This was encountered while processing /Users/wilsonyeh/Fleuron/SensitiveStudy/project.db";
+        let raw = "Panicked at 'duplicate label': already has an interview labelled P07. This was encountered while processing /Users/jrivera/Fleuron/SensitiveStudy/project.db";
         let redacted = redact_panic_payload(raw);
-        assert!(!redacted.contains("wilsonyeh"));
+        assert!(!redacted.contains("jrivera"));
         assert!(!redacted.contains("SensitiveStudy"));
         // Truncated at 120 chars
         assert!(redacted.contains("withheld"));
@@ -568,10 +575,10 @@ mod tests {
         let naive_payload = |s: &str| -> String { s.to_string() };
 
         let bad_path = naive_path(Path::new(
-            "/Users/wilsonyeh/Fleuron/Autistic Camouflaging P07/project.db",
+            "/Users/jrivera/Fleuron/Adolescent Grief Narratives P07/project.db",
         ));
-        assert!(bad_path.contains("wilsonyeh"));
-        assert!(bad_path.contains("Autistic"));
+        assert!(bad_path.contains("jrivera"));
+        assert!(bad_path.contains("Adolescent"));
         assert!(bad_path.contains("P07"));
 
         let bad_payload = naive_payload("Panicked: duplicate interview P07");
@@ -596,7 +603,7 @@ Backtrace:
 --- END RECORD ---
 "#;
         let output = parse_and_redact_crash_log(raw);
-        assert!(!output.contains("wilsonyeh"));
+        assert!(!output.contains("jrivera"));
         assert!(!output.contains("SecretStudy"));
         assert!(output.contains("Records count: 1"));
         assert!(output.contains("[Record 1]"));
