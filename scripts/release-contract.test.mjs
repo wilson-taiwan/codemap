@@ -25,8 +25,11 @@ const RELEASE_VERSION = readJson("package.json").version;
 const VERSION_TOKEN = "$" + "{VERSION}";
 const CANONICAL_MAC_DMG = "Fleuron_" + RELEASE_VERSION + "_universal.dmg";
 const CANONICAL_WIN_EXE = "Fleuron_" + RELEASE_VERSION + "_x64-setup.exe";
-const MAC_QA_RUNNER = "Fleuron_" + RELEASE_VERSION + "_macos-qa-runner.zip";
-const WIN_QA_RUNNER = "Fleuron_" + RELEASE_VERSION + "_windows-qa-runner.zip";
+// The QA runners are maintainer tools, NOT release assets. They wipe
+// %USERPROFILE%\Fleuron / ~/Fleuron -- the default study library -- with no
+// confirmation prompt, so a researcher who downloads one from a release page
+// loses their coding. Match a release to its runner by checking out the tag
+// instead: github.com/wilson-taiwan/fleuron/archive/refs/tags/v<version>.zip
 const MAC_QA_RUNNER_TEMPLATE = "Fleuron_" + VERSION_TOKEN + "_macos-qa-runner.zip";
 const WIN_QA_RUNNER_TEMPLATE = "Fleuron_" + VERSION_TOKEN + "_windows-qa-runner.zip";
 const DISCLOSURE_SNIPPET =
@@ -55,36 +58,29 @@ function expectNoContinueOnError(yaml, label) {
   assert.doesNotMatch(yaml, /continue-on-error/, `${label}: must never swallow failures`);
 }
 
-function assertQaRunnerReleaseContract(yaml) {
-  for (const asset of [MAC_QA_RUNNER_TEMPLATE, WIN_QA_RUNNER_TEMPLATE]) {
-    assert.ok(yaml.includes(asset), "QA runner asset missing from release workflow: " + asset);
+function assertQaRunnersNotShipped(yaml) {
+  // 1. No runner archive may appear anywhere in the release pipeline.
+  for (const asset of [MAC_QA_RUNNER_TEMPLATE, WIN_QA_RUNNER_TEMPLATE, "qa-runner"]) {
+    assert.ok(
+      !yaml.includes(asset),
+      "QA runner must not be a release asset (found " + asset + " in release.yml)",
+    );
   }
-  assert.match(yaml, /qa\/macos\/Invoke-FleuronQA\.sh/);
-  assert.match(yaml, /qa\/macos\/README\.md/);
-  assert.match(yaml, /Fleuron-Windows-QA-Runner/);
-  assert.match(yaml, /qa\/Invoke-FleuronQA\.ps1/);
-  assert.match(yaml, /release\.json/);
-  assert.match(yaml, /platform": "macos"/);
-  assert.match(yaml, /platform = 'windows'/);
-  assert.match(yaml, /actions\/upload-artifact@v4/);
+  // 2. Nor may anything archive one.
   const buildAssets = jobBlock(yaml, "build-draft-assets");
-  assert.ok(buildAssets.includes("zip -qr"), "macOS runner must be archived");
-  assert.ok(buildAssets.includes("Compress-Archive"), "Windows runner must be archived");
+  assert.ok(!buildAssets.includes("zip -qr"), "release must not archive a QA runner");
+  assert.ok(!buildAssets.includes("Compress-Archive"), "release must not archive a QA runner");
+  // 3. The release notes must not advertise one.
+  const finalize = jobBlock(yaml, "finalize-draft");
+  assert.ok(
+    !/verification runners/i.test(finalize),
+    "release notes must not advertise QA runners as downloadable",
+  );
+  // 4. But the runner sources still ship in-repo and must still be gated,
+  //    because Wilson runs them against every candidate.
   assert.ok(buildAssets.includes("qa/Test-Parse.ps1"), "Windows runner must be syntax-checked");
   assert.ok(buildAssets.includes("qa/Invoke-FleuronQA.ps1 -SelfCheck"), "Windows runner must self-check");
-  assert.ok(buildAssets.includes(MAC_QA_RUNNER_TEMPLATE));
-  assert.ok(buildAssets.includes("Fleuron_$($version)_windows-qa-runner.zip"));
-  const finalize = jobBlock(yaml, "finalize-draft");
-  assert.ok(finalize.includes(MAC_QA_RUNNER_TEMPLATE));
-  assert.ok(finalize.includes(WIN_QA_RUNNER_TEMPLATE));
-  const uploadIndex = finalize.indexOf("gh release upload");
-  assert.ok(uploadIndex !== -1, "draft asset upload step missing");
-  const uploadBlock = finalize.slice(uploadIndex);
-  assert.ok(uploadBlock.includes("assets/Fleuron_" + VERSION_TOKEN + "_macos-qa-runner.zip"));
-  assert.ok(uploadBlock.includes("assets/Fleuron_" + VERSION_TOKEN + "_windows-qa-runner.zip"));
-  const provenance = jobBlock(yaml, "provenance");
-  assert.ok(provenance.includes(MAC_QA_RUNNER_TEMPLATE));
-  assert.ok(provenance.includes(WIN_QA_RUNNER_TEMPLATE));
+  assert.match(yaml, /qa\/macos\/Invoke-FleuronQA\.sh/);
   assert.ok(existsSync(root + "qa/macos/Invoke-FleuronQA.sh"), "macOS QA runner source missing");
   assert.ok(existsSync(root + "qa/macos/README.md"), "macOS QA runner guide missing");
   assert.ok(existsSync(root + "qa/Invoke-FleuronQA.ps1"), "Windows QA runner source missing");
@@ -288,7 +284,7 @@ test("release.yml provenance job holds the right scopes and pins actions/attest@
   assert.match(yaml, /actions\/attest@v4/);
 });
 
-test("release.yml enforces the exact eight-asset inventory before any further step", () => {
+test("release.yml enforces the exact six-asset inventory before any further step", () => {
   const yaml = readWf("release");
   for (const asset of [
     "Fleuron_" + VERSION_TOKEN + "_universal.dmg",
@@ -296,21 +292,23 @@ test("release.yml enforces the exact eight-asset inventory before any further st
     "Fleuron_" + VERSION_TOKEN + "_x64-setup.exe.sig",
     "Fleuron_universal.app.tar.gz",
     "Fleuron_universal.app.tar.gz.sig",
-    MAC_QA_RUNNER_TEMPLATE,
-    WIN_QA_RUNNER_TEMPLATE,
     "latest.json",
   ]) {
     assert.ok(yaml.includes(asset), "inventory must reference " + asset);
   }
 });
 
-test("release.yml packages one version-pinned QA runner for each shipped OS", () => {
-  assertQaRunnerReleaseContract(readWf("release"));
+test("release.yml keeps the QA runners out of the published assets", () => {
+  assertQaRunnersNotShipped(readWf("release"));
 });
 
-test("negative mutation: removing a platform QA runner fails", () => {
-  const mutated = readWf("release").replaceAll("macos-qa-runner", "macos-runner-removed");
-  assert.throws(() => assertQaRunnerReleaseContract(mutated), /QA runner|macos-qa-runner/);
+test("negative mutation: re-adding a QA runner asset fails", () => {
+  const mutated = readWf("release").replace(
+    '"$(echo assets/*.app.tar.gz.sig)" \\',
+    '"$(echo assets/*.app.tar.gz.sig)" \\\n            "assets/' + MAC_QA_RUNNER_TEMPLATE + '" \\',
+  );
+  assert.ok(mutated.includes(MAC_QA_RUNNER_TEMPLATE), "mutation must actually land");
+  assert.throws(() => assertQaRunnersNotShipped(mutated), /must not be a release asset/);
 });
 
 test("release.yml validates latest.json version/platform/urls/signatures", () => {
@@ -403,8 +401,10 @@ test("current install materials use the package version's asset names", () => {
   const installing = readFile("docs/INSTALLING.md");
   assert.ok(installing.includes(CANONICAL_MAC_DMG));
   assert.ok(installing.includes(CANONICAL_WIN_EXE));
-  assert.ok(installing.includes(MAC_QA_RUNNER));
-  assert.ok(installing.includes(WIN_QA_RUNNER));
+  // Install materials must never point a user at a QA runner: running one
+  // wipes the default study library without asking.
+  assert.ok(!/qa-runner/.test(installing), "INSTALLING.md must not advertise a QA runner");
+  assert.ok(!/qa-runner/.test(readFile("README.md")), "README.md must not advertise a QA runner");
 
   const trust = readFile("src/content/trust-and-permissions.ts");
   assert.ok(trust.includes(CANONICAL_MAC_DMG));

@@ -8,11 +8,19 @@ The QA runner is written in pure PowerShell 5.1 (standard with Windows 11) with 
 
 ## Release asset
 
-Every release includes this runner as `Fleuron_<version>_windows-qa-runner.zip`. Unzip it beside the matching installer and keep its generated `release.json` file in place: the runner reads that file and refuses a candidate whose canonical filename indicates a different version. When running from the repository rather than a release asset, it derives the expected version from `Fleuron_X.Y.Z_x64-setup.exe` or accepts `-ExpectedVersion X.Y.Z`.
+**This runner is a maintainer tool and is deliberately not published as a release asset.** It wipes `%USERPROFILE%\Fleuron` -- the default study library -- along with all app state, with no confirmation prompt. Never run it on a machine holding real coding.
+
+To verify a specific release, check out that release's tag and use the `qa/` directory from that commit:
+
+```
+https://github.com/wilson-taiwan/fleuron/archive/refs/tags/v<version>.zip
+```
+
+The runner derives the expected version from a canonical `Fleuron_X.Y.Z_x64-setup.exe` filename, or accepts `-ExpectedVersion X.Y.Z`. (A `release.json` beside the script also pins it, but nothing generates one any more.)
 
 ## Quick Start (VM Execution)
 
-1. **Copy runner to VM:** Drag the unpacked `Fleuron-Windows-QA-Runner/` folder into your Windows 11 VM.
+1. **Copy runner to VM:** Drag the repository's `qa/` folder into your Windows 11 VM. Use a throwaway VM snapshot -- leg 1 wipes all Fleuron and Codemap state, including the study library.
 2. **Obtain Candidate Installer:** Place the matching `Fleuron_X.Y.Z_x64-setup.exe` in the VM.
 3. **Run in PowerShell:**
    ```powershell

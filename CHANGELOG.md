@@ -20,13 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Infrastructure
 
-- Every draft release now includes two version-pinned verification assets:
-  `Fleuron_<version>_macos-qa-runner.zip` and
-  `Fleuron_<version>_windows-qa-runner.zip`. The release workflow stages,
-  uploads, inventories, checksums, and attests both archives.
-- The macOS runner verifies the DMG, bundle version, code signature, and
-  packaged-app self-test without installing the app. The Windows runner's
-  generated manifest pins it to the matching installer version.
+- The QA runners are maintainer tools and are deliberately **not** published as
+  release assets. Each one begins by wiping the default study library
+  (`~/Fleuron` / `%USERPROFILE%\Fleuron`) with no confirmation prompt, so a
+  release page is the wrong place to offer them. To verify a specific release,
+  check out its tag and use the `qa/` directory from that commit. A contract
+  test fails the build if a runner archive is added back to the release
+  inventory or advertised in the release notes.
+- The release inventory is therefore six assets, not eight.
 
 ## [2.0.0]
 

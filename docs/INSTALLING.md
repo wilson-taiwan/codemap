@@ -16,8 +16,6 @@ Only these two files are manual downloads:
 You may also see these on a release page. They are **updater infrastructure — do not download them by hand**:
 `Fleuron_universal.app.tar.gz`, `.sig` signature files, `latest.json`, `SHA256SUMS.txt`.
 
-For release verification only, each release also carries an optional platform-specific QA runner: `Fleuron_2.0.1_macos-qa-runner.zip` or `Fleuron_2.0.1_windows-qa-runner.zip`. These runners do not install Fleuron or bypass OS security warnings.
-
 ## Three checks before you continue
 
 1. **Official source:** you are on `https://github.com/wilson-taiwan/fleuron/releases`, not a mirror or ad link.

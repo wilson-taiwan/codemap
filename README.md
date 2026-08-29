@@ -33,8 +33,6 @@ Downloads live only on the [official Releases page](https://github.com/wilson-ta
 | macOS (Intel + Apple Silicon) | `Fleuron_2.0.1_universal.dmg` |
 | Windows 11 x64 | `Fleuron_2.0.1_x64-setup.exe` |
 
-Each release also includes optional, platform-specific QA runner archives for release verification. They are not required to install Fleuron.
-
 New studies default to a local working library (`~/Fleuron` / `%USERPROFILE%\Fleuron`). Windows installs per-user with no administrator prompt; macOS uses System Settings → Privacy & Security → Open Anyway once.
 
 For detailed usage instructions and workflow tips, see the [User Guide](docs/USER-GUIDE.md).

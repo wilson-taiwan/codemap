@@ -174,15 +174,6 @@ jobs:
           cp -f "$B/dmg/Fleuron_${VERSION}_universal.dmg" staging/
           cp -f "$B/macos/Fleuron.app.tar.gz" staging/Fleuron_universal.app.tar.gz
           cp -f "$B/macos/Fleuron.app.tar.gz.sig" staging/Fleuron_universal.app.tar.gz.sig
-          RUNNER="qa-runner/Fleuron-macOS-QA-Runner"
-          mkdir -p "$RUNNER"
-          cp qa/macos/Invoke-FleuronQA.sh qa/macos/README.md "$RUNNER/"
-          chmod +x "$RUNNER/Invoke-FleuronQA.sh"
-          printf '{\n  "app": "Fleuron",\n  "version": "%s",\n  "platform": "macos",\n  "candidate": "Fleuron_%s_universal.dmg"\n}\n' "$VERSION" "$VERSION" > "$RUNNER/release.json"
-          (
-            cd qa-runner
-            zip -qr "../staging/Fleuron_${VERSION}_macos-qa-runner.zip" "Fleuron-macOS-QA-Runner"
-          )
           find staging -type f | sort
 
       - name: Stage canonical artifacts (Windows)
@@ -193,17 +184,6 @@ jobs:
           New-Item -ItemType Directory -Path staging -Force | Out-Null
           Copy-Item 'src-tauri/target/release/bundle/nsis/*-setup.exe' staging/
           Copy-Item 'src-tauri/target/release/bundle/nsis/*.sig' staging/
-          $runnerRoot = Join-Path (Join-Path $PWD 'qa-runner') 'Fleuron-Windows-QA-Runner'
-          New-Item -ItemType Directory -Path $runnerRoot -Force | Out-Null
-          Copy-Item -LiteralPath 'qa/Invoke-FleuronQA.ps1', 'qa/Test-Parse.ps1', 'qa/README.md' -Destination $runnerRoot -Force
-          Copy-Item -LiteralPath 'qa/lib', 'qa/fixtures' -Destination $runnerRoot -Recurse -Force
-          @{
-            app = 'Fleuron'
-            version = $version
-            platform = 'windows'
-            candidate = "Fleuron_$($version)_x64-setup.exe"
-          } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runnerRoot 'release.json') -Encoding ascii
-          Compress-Archive -Path $runnerRoot -DestinationPath "staging/Fleuron_$($version)_windows-qa-runner.zip" -Force
           Get-ChildItem staging | Format-Table Name,Length
 
       - uses: actions/upload-artifact@v4
@@ -242,10 +222,8 @@ jobs:
           mv "artifacts/Fleuron_${VERSION}_x64-setup.exe.sig" assets/
           mv artifacts/Fleuron_universal.app.tar.gz assets/
           mv artifacts/Fleuron_universal.app.tar.gz.sig assets/
-          mv "artifacts/Fleuron_${VERSION}_macos-qa-runner.zip" assets/
-          mv "artifacts/Fleuron_${VERSION}_windows-qa-runner.zip" assets/
           find assets -type f | sort
-          EXPECTED=7
+          EXPECTED=5
           COUNT=$(find assets -type f | wc -l)
           test "$COUNT" = "$EXPECTED" || { echo "expected $EXPECTED staged files before latest.json, got $COUNT"; exit 1; }
 
@@ -288,8 +266,6 @@ jobs:
           #   Fleuron_<version>_x64-setup.exe.sig
           #   Fleuron_universal.app.tar.gz
           #   Fleuron_universal.app.tar.gz.sig
-          #   Fleuron_<version>_macos-qa-runner.zip
-          #   Fleuron_<version>_windows-qa-runner.zip
           #   latest.json
           gh release delete "$TAG" --yes --cleanup-tag=false 2>/dev/null || true
           # Resolve the version ONCE. Inlining $(node -p \"...\") inside a
@@ -314,8 +290,6 @@ jobs:
             echo "- Changelog: CHANGELOG.md"
             echo ""
             echo "**Updater infrastructure — do not download manually:** \`Fleuron_universal.app.tar.gz\`, \`.sig\` files, \`latest.json\`, \`SHA256SUMS.txt\`."
-            echo ""
-            echo "**Optional verification runners:** Fleuron_${VERSION}_macos-qa-runner.zip and Fleuron_${VERSION}_windows-qa-runner.zip. They verify the matching release package; they do not install Fleuron or bypass OS security controls."
           } > body.md
           gh release create "$TAG" --draft --title "Fleuron $TAG" --notes-file body.md
           gh release upload "$TAG" \
@@ -325,8 +299,6 @@ jobs:
             "$(echo assets/*-setup.exe.sig)" \
             "$(echo assets/*.app.tar.gz)" \
             "$(echo assets/*.app.tar.gz.sig)" \
-            "assets/Fleuron_${VERSION}_macos-qa-runner.zip" \
-            "assets/Fleuron_${VERSION}_windows-qa-runner.zip" \
             --clobber
 
   provenance:
@@ -361,10 +333,8 @@ jobs:
           mv "artifacts/Fleuron_${VERSION}_x64-setup.exe.sig" verify/
           mv artifacts/Fleuron_universal.app.tar.gz verify/
           mv artifacts/Fleuron_universal.app.tar.gz.sig verify/
-          mv "artifacts/Fleuron_${VERSION}_macos-qa-runner.zip" verify/
-          mv "artifacts/Fleuron_${VERSION}_windows-qa-runner.zip" verify/
 
-      # The eight-asset inventory is fail-closed after both platform uploads.
+      # The six-asset inventory is fail-closed after both platform uploads.
       - name: Validate exact draft inventory + drafts stay drafts
         shell: bash
         env:
@@ -372,7 +342,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          EXPECTED="Fleuron_${VERSION}_universal.dmg Fleuron_${VERSION}_x64-setup.exe Fleuron_${VERSION}_x64-setup.exe.sig Fleuron_universal.app.tar.gz Fleuron_universal.app.tar.gz.sig Fleuron_${VERSION}_macos-qa-runner.zip Fleuron_${VERSION}_windows-qa-runner.zip latest.json"
+          EXPECTED="Fleuron_${VERSION}_universal.dmg Fleuron_${VERSION}_x64-setup.exe Fleuron_${VERSION}_x64-setup.exe.sig Fleuron_universal.app.tar.gz Fleuron_universal.app.tar.gz.sig latest.json"
           VIEW="$(gh release view "$TAG" --repo wilson-taiwan/fleuron --json isDraft,isPrerelease,targetCommitish)"
           echo "$VIEW" | grep -q '"isDraft":true' || { echo "release must be a draft"; exit 1; }
           echo "$VIEW" | grep -q '"isPrerelease":false' || { echo "must not be a prerelease"; exit 1; }
@@ -412,7 +382,7 @@ jobs:
             console.log("latest.json OK");
           ' "$VERSION" "$TAG"
 
-      - name: Generate sorted SHA256SUMS.txt for the eight assets
+      - name: Generate sorted SHA256SUMS.txt for the six assets
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -424,9 +394,7 @@ jobs:
                    "Fleuron_universal.app.tar.gz" \
                    "Fleuron_universal.app.tar.gz.sig" \
                    "Fleuron_${VERSION}_x64-setup.exe" \
-                   "Fleuron_${VERSION}_x64-setup.exe.sig" \
-                   "Fleuron_${VERSION}_macos-qa-runner.zip" \
-                   "Fleuron_${VERSION}_windows-qa-runner.zip"; do
+                   "Fleuron_${VERSION}_x64-setup.exe.sig"; do
             test -f "$f" || { echo "missing local copy: $f"; exit 1; }
             shasum -a 256 "$f"
           done > SHA256SUMS.raw.txt
