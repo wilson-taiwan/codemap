@@ -85,6 +85,10 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Rust tests
+        # See test.yml: the fuzzer's wall-clock assert is a stable-hardware
+        # instrument and must never fail a release on runner variance.
+        env:
+          FLEURON_FUZZ_BUDGET_SECS: "3600"
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
   build-draft-assets:

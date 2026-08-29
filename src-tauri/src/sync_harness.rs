@@ -1002,16 +1002,21 @@ fn test_sync_fuzz_200_seeds() {
     // deterministic and unaffected by the budget. This assert catches exactly one
     // thing those cannot: "everything still converged, but got much slower".
     //
-    // Shared CI runners vary wildly in speed — the same 200 seeds measure ~20s to
-    // ~56s on healthy macos-latest, but healthy windows-latest runs have been
-    // observed at 150s, 187s, 228s and 438s. A 180s ceiling therefore sat *inside*
-    // the normal Windows noise band: it failed the suite on runner variance
-    // repeatedly (438.8s on 2026-08-28, 187.2s on 2026-08-29) without ever having
-    // caught a real regression. 600s is ~10x the healthy macOS ceiling and clears
-    // every healthy Windows run observed, so it still trips on the
-    // order-of-magnitude blowup it exists to catch.
+    // IT IS ONLY MEANINGFUL ON STABLE HARDWARE. The same 200 seeds run in ~9s on a
+    // developer Mac and ~20-56s on healthy macos-latest, but healthy
+    // windows-latest runs have been clocked at 150s, 187s, 228s, 438s and 723.6s
+    // — a ~5x spread on identical work, with no stable ceiling. Two attempts to
+    // pick a threshold that fits inside that spread (180s, then 600s) each failed
+    // CI on pure runner variance while all 263 other tests passed, and neither
+    // ever caught a real regression. A stopwatch cannot tell a slow runner from
+    // slow code on shared infrastructure, so raising the number again is
+    // whack-a-mole: CI now opts out explicitly by setting
+    // FLEURON_FUZZ_BUDGET_SECS on each `cargo test` step, and leans on the job
+    // timeout to catch a true hang.
     //
-    // Tunable via env for slower/faster machines. Mirrors FLEURON_FUZZ_SEEDS above.
+    // The 600s default is for local runs, where it is ~65x a healthy pass and a
+    // genuine order-of-magnitude blowup would still trip it. Mirrors the
+    // FLEURON_FUZZ_SEEDS idiom above.
     let budget_secs = std::env::var("FLEURON_FUZZ_BUDGET_SECS")
         .ok()
         .and_then(|s| s.parse().ok())
