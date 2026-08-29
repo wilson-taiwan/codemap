@@ -582,7 +582,7 @@ mod tests {
     fn parse_and_redact_crash_log_bounds_backtrace_and_redacts_message() {
         let raw = r#"--- CRASH RECORD ---
 Timestamp: 2026-08-29T12:00:00Z
-Version: 2.0.1
+Version: 2.1.0
 OS: macos aarch64
 Thread: main
 Location: src/db.rs:1008:9
