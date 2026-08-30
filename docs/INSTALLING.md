@@ -1,11 +1,11 @@
 # Installing Fleuron
 
 > **Publisher verification notice**
-> Fleuron is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from the official release page at `https://github.com/wilson-taiwan/fleuron/releases`. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.
+> Fleuron is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from `https://fleuron.study` or the official release page at `https://github.com/wilson-taiwan/fleuron/releases`. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.
 
 ## Choose your file
 
-Everything Fleuron ships lives on the [official Releases page](https://github.com/wilson-taiwan/fleuron/releases).
+Fleuron is distributed from `https://fleuron.study` and the [official Releases page](https://github.com/wilson-taiwan/fleuron/releases); website buttons link directly to binaries hosted on that release page.
 Only these two files are manual downloads:
 
 | Your computer | Download this exact file |
@@ -18,7 +18,7 @@ You may also see these on a release page. They are **updater infrastructure — 
 
 ## Three checks before you continue
 
-1. **Official source:** you are on `https://github.com/wilson-taiwan/fleuron/releases`, not a mirror or ad link.
+1. **Official source:** you are on `https://fleuron.study` or `https://github.com/wilson-taiwan/fleuron/releases`, and the download link points to `github.com/wilson-taiwan/fleuron/releases`, not a mirror or ad link.
 2. **Version and filename:** the file matches the exact name above for your platform.
 3. **Expected warning:** the warning your OS shows matches the *expected* text below.
 

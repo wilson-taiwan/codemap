@@ -1,0 +1,14 @@
+name: Rebuild fleuron.study
+on:
+  release:
+    types: [published]
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Cloudflare Pages deploy
+        env:
+          HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK }}
+        run: |
+          test -n "$HOOK" || { echo "CLOUDFLARE_PAGES_DEPLOY_HOOK is not set"; exit 1; }
+          curl -fsS -X POST "$HOOK"

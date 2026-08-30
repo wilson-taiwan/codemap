@@ -27,6 +27,9 @@ import { isMac } from "../lib/platform";
 const REPO = "https://github.com/wilson-taiwan/fleuron";
 
 export const OFFICIAL_URLS = {
+  website: "https://fleuron.study",
+  installGuideWeb: "https://fleuron.study/install",
+  privacyWeb: "https://fleuron.study/privacy",
   repository: REPO,
   releases: `${REPO}/releases`,
   latestRelease: `${REPO}/releases/latest`,
