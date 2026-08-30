@@ -203,6 +203,9 @@ export function AboutModal() {
           <span className="font-mono break-all">{info?.build_commit ?? "…"}</span>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px]">
+          <a href={OFFICIAL_URLS.website} target="_blank" rel="noreferrer" className="underline">
+            Website
+          </a>
           <a href={info?.source_url ?? undefined} target="_blank" rel="noreferrer" className="underline">
             Source
           </a>

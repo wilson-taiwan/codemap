@@ -27,5 +27,5 @@ Start with [docs/IT-DEPLOYMENT.md](docs/IT-DEPLOYMENT.md), then Issues if someth
 
 ## Documentation
 
-- [Installing](docs/INSTALLING.md) — canonical downloads + expected OS warnings
-- [Privacy and permissions](docs/PRIVACY-AND-PERMISSIONS.md) — exact data boundary
+- [Installing](docs/INSTALLING.md) ([fleuron.study/install](https://fleuron.study/install)) — canonical downloads + expected OS warnings
+- [Privacy and permissions](docs/PRIVACY-AND-PERMISSIONS.md) ([fleuron.study/privacy](https://fleuron.study/privacy)) — exact data boundary
