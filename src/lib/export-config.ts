@@ -3,7 +3,7 @@
  *
  * Qualitative methodologies have distinct evidentiary requirements for artifacts:
  * - Reflexive Thematic Analysis (Braun & Clarke 2006, 2019, 2021): Focuses on organic,
- *   meaning-based patterns. Coding frequencies / counts are intentionally omitted by default
+ *   meaning-based patterns. Code-frequency tables are omitted by default (overview and extract totals remain)
  *   because frequency does not equal importance and invites misleading quantitative readings.
  * - Qualitative Content Analysis (Schreier 2012, Hsieh & Shannon 2005): Systematically
  *   describes the meaning of qualitative material through categories and frequencies.
@@ -44,9 +44,9 @@ export const PRESETS: Record<PresetId, PresetDescription> = {
   "reflexive-ta": {
     id: "reflexive-ta",
     label: "Reflexive thematic analysis",
-    subtitle: "Narrative report with extracts and code definitions. Coding counts omitted.",
+    subtitle: "Narrative report with extracts and code definitions. Code-frequency tables omitted; overview and extract totals remain.",
     rationale:
-      "Braun & Clarke (2006, 2019, 2021) emphasize that in reflexive TA, frequency of coding does not indicate theme importance. Coding counts are omitted to avoid misleading quantitative inferences.",
+      "Braun & Clarke (2006, 2019, 2021) emphasize that in reflexive TA, frequency of coding does not indicate theme importance. Code-frequency tables are omitted to avoid misleading quantitative inferences; overview and extract totals still appear.",
     defaultItems: ["report-html", "report-pdf", "coded-segments", "codebook", "memos"],
   },
   "content-analysis": {

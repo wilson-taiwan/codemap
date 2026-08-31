@@ -21,10 +21,11 @@ describe("beta disclosure", () => {
       "utf8",
     ).replace(/\s+/g, " ").replace(/--/g, "\u2014");
     expect(notice).toContain("Free beta.");
-    expect(notice).toContain("hosted sync will require a subscription");
-    expect(notice).toContain("Your transcripts stay on your computer");
-    expect(notice).toContain("local/offline coding tools remain free");
-    expect(notice).toContain("founder pricing");
+    expect(notice).toContain("Offline coding is free forever");
+    expect(notice).toContain("beta users will be announced before charging begins");
+    expect(notice).toContain("Collaboration sync excludes transcript text and memo fields");
+    expect(notice).toContain("infrastructure and administration costs");
+    expect(notice).not.toContain("founder pricing");
   });
 
   it("the inaccurate always-stays sentence cannot return to the app", () => {

@@ -323,7 +323,7 @@ export function ExportDialog({
 
             {config.preset === "reflexive-ta" && !config.items.includes("counts") && (
               <p className="mt-2 text-[12px] text-[var(--ink-3)] italic leading-relaxed">
-                Note (Braun &amp; Clarke): Code frequencies are omitted by default in Reflexive Thematic Analysis to avoid implying quantitative significance.
+                Note (Braun &amp; Clarke): Code-frequency tables are omitted by default in this Reflexive Thematic Analysis preset to avoid implying quantitative significance. Overview and extract totals still appear.
               </p>
             )}
           </div>

@@ -59,8 +59,7 @@ export function InterviewMemoPanel() {
     >
       <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
         <p className="hint text-[11.5px]">
-          About the interview as a whole, not any one passage. Notes never leave
-          this computer.
+          About the interview as a whole, not any one passage. Memo fields are excluded from collaboration sync. Exports may include them.
         </p>
         <textarea
           value={hubMemo}

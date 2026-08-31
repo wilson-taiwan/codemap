@@ -67,7 +67,7 @@
     ],
     "category": "Productivity",
     "shortDescription": "Qualitative coding for reflexive thematic analysis",
-    "longDescription": "Offline-first qualitative coding for reflexive thematic analysis. Import transcripts, code passages with a living codebook, memo as you go, and export coded segments. Work fully locally, or collaborate over encrypted hosted sync — transcript text and memos always stay on your computer.",
+    "longDescription": "Offline-first qualitative coding for reflexive thematic analysis. Import transcripts, code passages with a living codebook, memo as you go, and export coded segments. Work fully locally, or collaborate over encrypted hosted sync — collaboration sync excludes transcript text and memo fields.",
     "copyright": "Fleuron contributors",
     "macOS": {
       "minimumSystemVersion": "10.15",

@@ -10,13 +10,13 @@ Built with **Tauri v2**, **React 19**, **TypeScript**, **Tailwind CSS**, and **S
 
 ## Key Features
 
-- **Offline-First Privacy**: Project data is stored in a local SQLite database (`.fleuron`). Transcripts and private memos never leave your local machine without your explicit action.
+- **Offline-First Privacy**: Project data is stored in a local SQLite database (`.fleuron`). Collaboration sync excludes transcript text and memo fields. Shared exports and cloud-synced folders can take local files off the device.
 - **Span & Whole-Turn Coding**: Drag across words to highlight a specific phrase or click a passage to code the whole turn.
 - **Living Codebook**: Create, merge, split, recode, color-code, and organize codes hierarchically. Click any code to inspect all associated passages.
-- **Collaborative Sync (Optional)**: Connect via self-hosted or managed Supabase using Sync Protocol v2. Coded spans, codebook structure, memberships, and your de-identified labels sync over encrypted transport; transcript text and memos never do. Sync on the hosted service is **free during the beta**; once the beta ends it will require a subscription, while offline/local coding stays free forever and people who join during the beta keep founder pricing. (Self-hosting your own Supabase is always free.)
+- **Collaborative Sync (Optional)**: Connect via self-hosted or managed Supabase using Sync Protocol v2. Coded spans, codebook structure, memberships, and your de-identified labels sync over encrypted transport; transcript text and memo fields are excluded. Offline coding is free forever. Hosted collaboration is optional and free during beta. Paid plans and terms for beta users will be announced before charging begins. There is no Fleuron software fee for self-hosting; you are responsible for infrastructure and administration costs.
 - **Multi-Format Import**: Native parsing for WebVTT, SRT, plain text with speaker labels, Microsoft Word (`.docx`), and CSV transcripts.
-- **Rich Exports**: Export your project to structured CSV datasets, formatted Markdown, standalone HTML summaries, and DOCX reports.
-- **Native Experience**: Native desktop app for macOS (Universal / Apple Silicon & Intel) and Windows 10/11.
+- **Rich Exports**: Export your project to CSV coded passages and framework matrices, standalone HTML reports, and PDF reports.
+- **Native Experience**: Native desktop app for macOS 14+ (Universal / Apple Silicon & Intel) and Windows 11 x64. macOS 10.15–13 and Windows 10 are best effort; see the [support matrix](docs/IT-DEPLOYMENT.md).
 
 ---
 
@@ -24,9 +24,9 @@ Built with **Tauri v2**, **React 19**, **TypeScript**, **Tailwind CSS**, and **S
 
 ### Installation
 
-Downloads are distributed from [fleuron.study](https://fleuron.study) and the [official Releases page](https://github.com/wilson-taiwan/fleuron/releases/latest) (with website downloads pointing directly at files hosted on the GitHub release page). Full step-by-step guidance — including the **expected first-launch warnings** for unsigned-but-official builds and the "stop here" signals — lives in [docs/INSTALLING.md](docs/INSTALLING.md):
+Downloads are distributed from [fleuron.study](https://fleuron.study/) and the [official Releases page](https://github.com/wilson-taiwan/fleuron/releases/latest) (with website downloads pointing directly at files hosted on the GitHub release page). Full step-by-step guidance — including the **expected first-launch warnings** for unsigned-but-official builds and the "stop here" signals — lives in [docs/INSTALLING.md](docs/INSTALLING.md):
 
-> Fleuron is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from `https://fleuron.study` or the official release page at `https://github.com/wilson-taiwan/fleuron/releases`. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.
+> Fleuron is an independent open-source application. This build does not yet carry an Apple Developer ID/notarization or Windows Authenticode publisher signature, so your operating system cannot verify its publisher automatically. Download only from `https://fleuron.study/` or the official release page at `https://github.com/wilson-taiwan/fleuron/releases`. Continue only when the version, filename, and warning match this guide. A malware warning, checksum mismatch, or unexpected administrator request means stop.
 
 | Platform | File |
 | --- | --- |
@@ -35,7 +35,7 @@ Downloads are distributed from [fleuron.study](https://fleuron.study) and the [o
 
 New studies default to a local working library (`~/Fleuron` / `%USERPROFILE%\Fleuron`). Windows installs per-user with no administrator prompt; macOS uses System Settings → Privacy & Security → Open Anyway once.
 
-For detailed usage instructions and workflow tips, see the [User Guide](docs/USER-GUIDE.md).
+For detailed usage instructions and workflow tips, see the [User Guide](docs/USER-GUIDE.md), [synthetic transcript-coding tutorial](https://fleuron.study/guides/code-interview-transcripts/) and [reflexive thematic analysis workflow](https://fleuron.study/guides/reflexive-thematic-analysis/).
 
 ---
 
@@ -58,11 +58,11 @@ Project Folder (my-study.fleuron/)
 ├── project.json       # Project configuration and metadata
 ├── project.db         # Local SQLite database (transcripts, segments, codes, memos, sync log)
 ├── interviews/        # Raw source transcripts (stored locally)
-└── exports/           # Generated CSV, Markdown, HTML, and DOCX exports
+└── exports/           # Generated CSV, HTML, and PDF exports
 ```
 
-- **Local-First Boundary**: Transcript files/text, verbatim quotes, filenames, and all memos stay on this computer. Always.
-- **Sync Protocol v2**: Collaboration syncs account email + study/codebook/coding metadata over encrypted HTTPS/WSS — including codebook definitions, criteria, and examples and your de-identified study/participant labels. Author them de-identified from the start. The exact field table lives in [docs/PRIVACY-AND-PERMISSIONS.md](docs/PRIVACY-AND-PERMISSIONS.md).
+- **Local-First Boundary**: Collaboration sync excludes transcript files/text, quote fields, filenames, and memos. Quotes copied into codebook fields sync as written. Exports and backups are saved where you choose and can leave the device through sharing or a synced folder.
+- **Sync Protocol v2**: Collaboration syncs account email + study/codebook/coding metadata over encrypted HTTPS/WSS — including codebook definitions, criteria, and examples and your de-identified study/participant labels. Author them de-identified from the start. Automatic update checks contact GitHub at startup and periodically; disable them in Settings if needed. Sign-in and session renewal use credential values with the configured authentication service. The exact field table lives in [docs/PRIVACY-AND-PERMISSIONS.md](docs/PRIVACY-AND-PERMISSIONS.md).
 - **No compliance promises**: Fleuron can support a protocol; it does not certify anything.
 
 ---

@@ -27,9 +27,9 @@ import { isMac } from "../lib/platform";
 const REPO = "https://github.com/wilson-taiwan/fleuron";
 
 export const OFFICIAL_URLS = {
-  website: "https://fleuron.study",
-  installGuideWeb: "https://fleuron.study/install",
-  privacyWeb: "https://fleuron.study/privacy",
+  website: "https://fleuron.study/",
+  installGuideWeb: "https://fleuron.study/install/",
+  privacyWeb: "https://fleuron.study/privacy/",
   repository: REPO,
   releases: `${REPO}/releases`,
   latestRelease: `${REPO}/releases/latest`,
@@ -311,14 +311,14 @@ export interface DataBoundaryRow {
 }
 
 export const DATA_BOUNDARY_SUMMARY =
-  "Transcript text and memos stay local. Collaboration syncs your account, study, codebook, and coding metadata over encrypted HTTPS/WSS.";
+  "Collaboration sync excludes transcript text and memo fields. It shares account, study, codebook, and coding metadata over encrypted HTTPS/WSS. Quotes copied into codebook fields sync as written; exports may leave your device through sharing or a synced folder.";
 
 export const DATA_BOUNDARY: DataBoundaryRow[] = [
   {
     category: "Account and access",
     syncedWhenCollaborating:
       "Account email and Supabase authentication metadata; entitlement state; study membership, role, coder display name, device/readiness and sync metadata.",
-    keptLocal: "The refresh token file itself; local app preferences and paths.",
+    keptLocal: "The refresh token file itself; local app preferences and paths. Authentication sends credential values to the configured sign-in service.",
   },
   {
     category: "Study / interview identity",
@@ -368,7 +368,7 @@ export const DATA_BOUNDARY: DataBoundaryRow[] = [
     category: "Output and diagnostics",
     syncedWhenCollaborating: "Nothing, automatically.",
     keptLocal:
-      "Exports, project databases/backups, crash logs, device-local activity. They leave this computer only if you deliberately copy or upload them.",
+      "Exports, project databases/backups, crash logs, device-local activity. These may leave your device when shared or saved in a cloud-synced folder.",
   },
 ];
 
@@ -394,7 +394,7 @@ export interface NetworkBehavior {
 
 export const NETWORK_BEHAVIOR: NetworkBehavior[] = [
   {
-    purpose: "Update checks (is a newer release published?)",
+    purpose: "Update checks at startup and every four hours (is a newer release published?)",
     endpoint: "api.github.com — wilson-taiwan/fleuron releases",
     protocol: "Outbound HTTPS",
     enabledByDefault: true,
@@ -406,7 +406,7 @@ export const NETWORK_BEHAVIOR: NetworkBehavior[] = [
     enabledByDefault: false,
   },
   {
-    purpose: "Collaboration sync (account sign-in, study/codebook/coding metadata)",
+    purpose: "Sign-in, session renewal and collaboration (study/codebook/coding metadata)",
     endpoint: "The configured Supabase service for your study",
     protocol: "Outbound HTTPS / WSS (encrypted transport)",
     enabledByDefault: false,
@@ -429,7 +429,7 @@ export const STORED_SIGN_IN = {
   windows:
     "Only your refresh token is stored, encrypted with Windows DPAPI bound to your current Windows user account on this machine (session.dpapi). It cannot be decrypted by another user account or another computer, and DPAPI never prompts. Signing out deletes every stored session artifact. Your password is never stored anywhere.",
   universalNote:
-    "Sign-in exists only for optional collaboration. Working locally never creates, requires, or touches an account. Your password is never stored anywhere.",
+    "Sign-in exists only for optional collaboration. Local coding needs no account. Stored credential files stay on this computer; credential values are sent to the configured sign-in service for authentication and session renewal. Your password is never stored anywhere.",
 } as const;
 
 // ---------------------------------------------------------------------------

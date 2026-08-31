@@ -380,7 +380,7 @@ export function SyncSheet() {
       open={showSyncSheet}
       onClose={closeSyncSheet}
       title="Study & sync"
-      subtitle="Anyone with the study key can join. Coding decisions travel; transcripts and memos never leave this machine."
+      subtitle="Anyone with the study key can join. Coding decisions travel; collaboration sync excludes transcript text and memo fields."
       width="max-w-lg"
       footer={
         <>

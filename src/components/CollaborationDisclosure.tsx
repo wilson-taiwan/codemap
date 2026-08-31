@@ -16,12 +16,12 @@ export function CollaborationDisclosure({ className = "" }: { className?: string
       <p>
         Collaborating sends your account email plus study, codebook, and coding
         metadata over encrypted HTTPS/WSS so teammates see each other&rsquo;s work.
-        Transcript text and memos <strong>never leave this computer</strong>.
+        Transcript text and memo fields are <strong>excluded from collaboration sync</strong>.
       </p>
       <p>
         Study/participant labels and every codebook field (definitions,
         criteria, examples) are <strong>synced word-for-word</strong> — write them
-        de-identified from the start.
+        de-identified from the start, including any copied quotes. Exports and backups can leave your device through sharing or a synced folder.
       </p>
       <a href={OFFICIAL_URLS.privacyGuide} target="_blank" rel="noreferrer">
         See exact fields

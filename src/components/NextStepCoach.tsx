@@ -72,7 +72,7 @@ export function NextStepCoach() {
     {
       id: "sync",
       title: "Start a group with your coder",
-      why: "Your coding travels to them and theirs to you. Transcripts stay on this computer.",
+      why: "Your coding travels to them and theirs to you. Collaboration sync excludes transcript text.",
       icon: "people",
       action: { label: "Start a group", run: () => openSyncSheet() },
       guideSection: "sync-with-your-coder",

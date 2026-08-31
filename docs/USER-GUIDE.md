@@ -66,7 +66,7 @@ On a grouped project the toolbar shows the name you confirmed when you joined �
 ## 4. Notes
 
 - **A note on a coding** appears in the right rail only when a note exists or you ask for one. In the transcript, a note icon sits beside the highlighted passage; click it to open an inline card. Both editors autosave. Use **Notes** in the transcript toolbar to hide or show all markers.
-- **Notes on this interview** (⋯ menu) are interview-wide, autosave, and **never sync** — they stay on this computer.
+- **Notes on this interview** (⋯ menu) are interview-wide, autosave, and are excluded from collaboration sync. Exports can include them.
 
 ---
 
@@ -82,7 +82,7 @@ What crosses the network when you collaborate: which passage, which codes, which
 
 Two people coding the same passage produce two records. In reflexive TA that divergence is data. There is no lock and no taking turns. One person on two machines merges; it does not 409 forever.
 
-Every codebook field syncs word-for-word: names, definitions, colours, inclusion/exclusion criteria, examples, hierarchy, retire/restore state. Memos stay local. Because criteria and examples are synced verbatim, author them de-identified from the start. Coding *decisions* travel as coded-span references; transcript text never does.
+Every codebook field syncs word-for-word: names, definitions, colours, inclusion/exclusion criteria, examples, hierarchy, retire/restore state. Memo fields are excluded from collaboration sync. Because criteria and examples are synced verbatim, author them de-identified from the start. Coding *decisions* travel as coded-span references; transcript text fields are excluded. A quote copied into a codebook example syncs as written. Exports and backups may leave your device through sharing or synced folders.
 
 **Forgot password?** Settings (or Join a group if unsigned) → **I already have one** → **Forgot password?** Type the short code from the email.
 

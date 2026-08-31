@@ -53,12 +53,12 @@ export const USER_GUIDE_SECTIONS: GuideSection[] = [
   {
     id: "sync-with-your-coder",
     category: "sync",
-    title: "How sync works (and what never leaves your computer)",
+    title: "How sync works (and which fields it excludes)",
     whenToUse: "Understanding collaboration, privacy, and data flow in Fleuron.",
     steps: [
       DATA_BOUNDARY_SUMMARY,
       "Concretely, collaboration shares: your account email; study title and membership; the de-identified study/participant label; interview IDs, segment counts, and content hashes; every codebook field including names, definitions, inclusion/exclusion criteria, examples, colors, and hierarchy; coding attribution and character offsets for each coded passage.",
-      "Transcript files and text, verbatim quotes, filenames/paths, and free-text memos stay on this computer and are never uploaded.",
+      "Collaboration sync excludes transcript files/text, quote fields, filenames/paths, and memo fields. Quotes copied into shared codebook fields sync as written. Exports may leave your device through sharing or a synced folder.",
       "Colleagues load identical transcripts locally; matching segment hashes connect their coding to yours automatically.",
       "Sync runs silently in the background when changes settle and whenever you open a study.",
     ],

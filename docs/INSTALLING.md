@@ -26,7 +26,7 @@ You may also see these on a release page. They are **updater infrastructure — 
 
 1. Open the DMG and drag **Fleuron** into **Applications**.
 2. Launch Fleuron.
-3. **Expected warning:** “Apple cannot check the app for malicious software” / “cannot verify the developer”. This is expected — Fleuron is open-source and unsigned by Apple’s paid program.
+3. **Expected warning:** “Apple cannot check the app for malicious software” / “cannot verify the developer”. This release does not have Apple Developer ID signing or notarization. Open-source licensing does not determine whether an app is signed.
 4. Continue: close the dialog, then open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**, authenticate, then **Open**.
 
 Open Anyway stays available after the first run unless macOS re-prompts after an update.
@@ -82,13 +82,13 @@ Artifact attestation proves which public repository, workflow, and commit produc
 gh attestation verify Fleuron_2.1.0_universal.dmg --repo wilson-taiwan/fleuron
 ```
 
-None of these replaces an OS publisher identity; they prove byte-exactness and build origin.
+These checks help verify file integrity and build provenance. They do not establish software safety or replace an OS publisher identity.
 
 ## Troubleshooting & diagnostics
 
 If you encounter unexpected behavior or errors:
 
-1. **In-app diagnostic report:** If Fleuron launches, open **About → Generate diagnostic report**. You can preview the full plain-text report, copy it, or save it to a file. It contains only allowlisted installation and sync metadata, with strictly no transcript text, participant IDs, or code names.
+1. **In-app diagnostic report:** If Fleuron launches, open **About → Generate diagnostic report**. You can preview the full plain-text report, copy it, or save it to a file. It is designed to include allowlisted installation and sync metadata rather than study content. Review the entire report before sharing; do not include transcripts, participant identifiers, code names, credentials, or personal file paths.
 2. **External read-only probe:** If the application fails to launch at all, run the standalone diagnostic probe from the `support/` directory in the repository:
    - macOS: `bash support/fleuron-probe.sh --output fleuron-diag.txt`
    - Windows: `powershell -NoProfile -File support\Get-FleuronProbe.ps1 -OutputFilePath fleuron-diag.txt`

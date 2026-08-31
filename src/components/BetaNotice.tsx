@@ -5,7 +5,7 @@
  * Kept in one component so the wording lives in exactly one place: it is shown
  * both where an account is created (AccountForm) and where sync is set up or
  * managed (SyncSheet), and those two must never drift apart. The commitments
- * here — local work stays free, beta joiners keep founder pricing — are
+ * here — local work stays free, paid plans and beta-user terms are announced before charging — are
  * deliberate, so the copy is held here rather than scattered.
  *
  * Scope of the promise, and the model behind it:
@@ -17,11 +17,12 @@
 export function BetaNotice({ className = "" }: { className?: string }) {
   return (
     <div className={`notice notice-info ${className}`.trim()} role="note">
-      <strong>Free beta.</strong> Hosted sync is free while Fleuron is in beta.
-      When the beta ends, hosted sync will require a subscription. Your
-      transcripts stay on your computer, and Fleuron's local/offline coding
-      tools remain free. People who join during the beta keep founder pricing
-      when paid plans arrive.
+      <strong>Free beta.</strong> Offline coding is free forever. Hosted
+      collaboration is optional and free during beta. Paid plans and terms for
+      beta users will be announced before charging begins. There is no Fleuron
+      software fee for self-hosting; you are responsible for infrastructure and
+      administration costs. Collaboration sync excludes transcript text and memo
+      fields; codebook text syncs as written.
     </div>
   );
 }
