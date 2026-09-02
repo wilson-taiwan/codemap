@@ -153,6 +153,9 @@ interface ProjectStore {
   closeNote: () => void;
   /** Show only passages carrying this code. Null shows the whole transcript. */
   codeFilter: string | null;
+  /** Show only passages spoken by this speaker. Null shows all speakers. */
+  speakerFilter: string | null;
+  setSpeakerFilter: (speaker: string | null) => void;
   showCloseConfirm: boolean;
   showResetConfirm: boolean;
 
@@ -447,6 +450,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   noteEditorCodingId: null,
   showInterviewMemo: false,
   codeFilter: null,
+  speakerFilter: null,
   showCloseConfirm: false,
   showResetConfirm: false,
   showExportDialog: false,
@@ -775,6 +779,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       showIdentityPrompt: inferred === null,
       transcriptSearch: "",
       codeFilter: null,
+      speakerFilter: null,
       noteEditorCodingId: null,
       undoStack: [],
       redoStack: [],
@@ -1188,6 +1193,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   setCodeFilter: (codeId) => set({ codeFilter: codeId }),
+  setSpeakerFilter: (speaker) => set({ speakerFilter: speaker }),
 
   /**
    * Swap the project for one of its snapshots, then reload from disk.

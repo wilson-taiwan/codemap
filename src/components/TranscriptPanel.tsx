@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useProjectStore } from "../store/project-store";
 import { useAppStore } from "../store/app-store";
@@ -14,8 +14,11 @@ import {
   highlightRuns,
   selectionOffsets,
   formatRunAttribution,
-  type HighlightRun,
+  matchRanges,
+  splitRunsOnMatches,
+  type MatchRange,
 } from "../lib/highlight";
+import { hasModKey } from "../lib/platform";
 import { SelectionBubble, type BubbleAnchor } from "./SelectionBubble";
 import { CodeFilterButton } from "./CodeFilterButton";
 import { buildMarkMenuItems } from "./TranscriptPanel.menu";
@@ -28,6 +31,9 @@ import { openContextMenu } from "./ui/ContextMenu";
 import { readableOn } from "../lib/code-colors";
 import { scrollPlan } from "../lib/scroll-into-view";
 import type { Code, CodedSegment, Interview, TranscriptSegment } from "../lib/types";
+
+const EMPTY_CODINGS: CodedSegment[] = [];
+const EMPTY_MATCHES: MatchRange[] = [];
 
 export function TranscriptPanel() {
   const {
@@ -58,6 +64,8 @@ export function TranscriptPanel() {
     pendingSpan,
     codeFilter,
     setCodeFilter,
+    speakerFilter,
+    setSpeakerFilter,
   } = useProjectStore(
     useShallow((s) => ({
       segments: s.segments,
@@ -87,6 +95,8 @@ export function TranscriptPanel() {
       pendingSpan: s.pendingSelection,
       codeFilter: s.codeFilter,
       setCodeFilter: s.setCodeFilter,
+      speakerFilter: s.speakerFilter,
+      setSpeakerFilter: s.setSpeakerFilter,
     })),
   );
   const intent = useAppStore((s) => s.intent);
@@ -261,26 +271,123 @@ export function TranscriptPanel() {
     }
   }
 
-  const codedBySegment = new Map<string, typeof codedSegments>();
-  for (const c of codedSegments) {
-    const list = codedBySegment.get(c.segment_id);
-    if (list) list.push(c);
-    else codedBySegment.set(c.segment_id, [c]);
-  }
-  const codesById = new Map(codes.map((c) => [c.id, c]));
-
-  const search = transcriptSearch.trim().toLowerCase();
-  const visibleSegments = segments.filter((seg) => {
-    if (codeFilter) {
-      const here = codedBySegment.get(seg.id);
-      if (!here?.some((c) => c.code_ids.includes(codeFilter))) return false;
+  const codedBySegment = useMemo(() => {
+    const map = new Map<string, typeof codedSegments>();
+    for (const c of codedSegments) {
+      const list = map.get(c.segment_id);
+      if (list) list.push(c);
+      else map.set(c.segment_id, [c]);
     }
-    if (!search) return true;
-    return (
-      seg.text.toLowerCase().includes(search) ||
-      seg.speaker.toLowerCase().includes(search)
-    );
-  });
+    return map;
+  }, [codedSegments]);
+
+  const codesById = useMemo(
+    () => new Map(codes.map((c) => [c.id, c])),
+    [codes],
+  );
+
+  const search = transcriptSearch.trim();
+  const visibleSegments = useMemo(() => {
+    return segments.filter((seg) => {
+      if (codeFilter) {
+        const here = codedBySegment.get(seg.id);
+        if (!here?.some((c) => c.code_ids.includes(codeFilter))) return false;
+      }
+      if (speakerFilter) {
+        if (seg.speaker !== speakerFilter) return false;
+      }
+      return true;
+    });
+  }, [segments, codeFilter, speakerFilter, codedBySegment]);
+
+  const allMatches = useMemo(() => {
+    const q = search;
+    if (!q) return [];
+    const list: { segmentId: string; start: number; end: number; matchIndex: number }[] = [];
+    let idx = 0;
+    for (const seg of visibleSegments) {
+      const ranges = matchRanges(seg.text, q);
+      for (const r of ranges) {
+        list.push({ segmentId: seg.id, start: r.start, end: r.end, matchIndex: idx++ });
+      }
+    }
+    return list;
+  }, [visibleSegments, search]);
+
+  const matchesBySegment = useMemo(() => {
+    const map = new Map<string, MatchRange[]>();
+    for (const m of allMatches) {
+      const list = map.get(m.segmentId);
+      if (list) list.push({ start: m.start, end: m.end });
+      else map.set(m.segmentId, [{ start: m.start, end: m.end }]);
+    }
+    return map;
+  }, [allMatches]);
+
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+
+  useEffect(() => {
+    setCurrentMatchIndex(0);
+  }, [search, activeInterviewId, codeFilter, speakerFilter]);
+
+  const totalMatches = allMatches.length;
+  const activeMatch =
+    totalMatches > 0
+      ? allMatches[Math.min(currentMatchIndex, totalMatches - 1)]
+      : null;
+
+  const goNextMatch = useCallback(() => {
+    if (totalMatches === 0) return;
+    setCurrentMatchIndex((i) => (i + 1) % totalMatches);
+  }, [totalMatches]);
+
+  const goPrevMatch = useCallback(() => {
+    if (totalMatches === 0) return;
+    setCurrentMatchIndex((i) => (i - 1 + totalMatches) % totalMatches);
+  }, [totalMatches]);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent);
+      const isCmdF = hasModKey(e) && !e.shiftKey && (e.key === "f" || e.key === "F");
+      const isCmdG = isMac && hasModKey(e) && (e.key === "g" || e.key === "G");
+      const isF3 = e.key === "F3";
+
+      if (isCmdF) {
+        if (document.querySelector('[role="dialog"]')) return;
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if (isCmdG || isF3) {
+        if (document.querySelector('[role="dialog"]')) return;
+        e.preventDefault();
+        if (e.shiftKey) {
+          goPrevMatch();
+        } else {
+          goNextMatch();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [goNextMatch, goPrevMatch]);
+
+  useEffect(() => {
+    if (!activeMatch) return;
+    const article = articleRefs.current.get(activeMatch.segmentId);
+    if (!article) return;
+    const mark =
+      article.querySelector<HTMLElement>(
+        `[data-run-start="${activeMatch.start}"]`,
+      ) || article;
+    mark.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+  }, [activeMatch]);
 
   const clearPassageSelection = () => {
     setPendingSelection(null);
@@ -485,9 +592,12 @@ export function TranscriptPanel() {
   const filteredCode = codes.find((c) => c.id === codeFilter) ?? null;
   const noteCount = codedSegments.filter((c) => c.memo?.trim()).length;
 
-  const passageCodings = (segId: string) => {
-    return codedBySegment.get(segId) ?? [];
-  };
+  const passageCodings = useCallback(
+    (segId: string) => {
+      return codedBySegment.get(segId) ?? EMPTY_CODINGS;
+    },
+    [codedBySegment],
+  );
 
   return (
     <main
@@ -559,9 +669,17 @@ export function TranscriptPanel() {
                 className="pointer-events-none absolute left-2.5 opacity-45"
               />
               <input
+                ref={searchInputRef}
                 type="search"
                 value={transcriptSearch}
                 onChange={(e) => setTranscriptSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (e.shiftKey) goPrevMatch();
+                    else goNextMatch();
+                  }
+                }}
                 placeholder="Search"
                 aria-label="Search transcript"
                 className="field field-sm w-24 pl-7 @2xl:w-36"
@@ -597,11 +715,15 @@ export function TranscriptPanel() {
             }}
           >
             <div className="reading-page mx-auto max-w-xl px-2 pb-2">
-              {(search || filteredCode) && (
+              {(search || filteredCode || speakerFilter) && (
                 <div className="glass-bar sticky top-0 z-10 -mx-2 flex items-center gap-2 rounded-b-[12px] px-2 py-2">
                   {search && (
                     <span className="hint text-[11.5px]">
-                      {visibleSegments.length} of {segments.length} match “{search}”
+                      {totalMatches === 0
+                        ? codeFilter || speakerFilter
+                          ? "No matches in filtered view"
+                          : "No matches"
+                        : `${currentMatchIndex + 1} of ${totalMatches}${codeFilter || speakerFilter ? " in filtered view" : ""}`}
                     </span>
                   )}
                   {filteredCode && (
@@ -613,7 +735,7 @@ export function TranscriptPanel() {
                         background: `${filteredCode.color}22`,
                         color: readableOn(filteredCode.color, ground),
                       }}
-                      title="Show the whole transcript again"
+                      title="Clear code filter"
                     >
                       <Icon name="filter" size={11} />
                       <span
@@ -621,6 +743,18 @@ export function TranscriptPanel() {
                         style={{ background: readableOn(filteredCode.color, ground) }}
                       />
                       {visibleSegments.length} coded “{filteredCode.name}”
+                      <Icon name="close" size={11} />
+                    </button>
+                  )}
+                  {speakerFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setSpeakerFilter(null)}
+                      className="chip"
+                      title="Clear speaker filter"
+                    >
+                      <Icon name="filter" size={11} />
+                      {visibleSegments.length} from “{speakerFilter}”
                       <Icon name="close" size={11} />
                     </button>
                   )}
@@ -723,7 +857,6 @@ export function TranscriptPanel() {
                         segmentId={seg.id}
                         text={seg.text}
                         coded={segCodings}
-                        codedSegments={codedSegments}
                         activeCoder={activeCoder}
                         codeFilter={codeFilter}
                         setCodeFilter={setCodeFilter}
@@ -738,6 +871,12 @@ export function TranscriptPanel() {
                         }
                         showNotes={showNotes}
                         saveMemoForCoding={saveMemoForCoding}
+                        matches={matchesBySegment.get(seg.id) ?? EMPTY_MATCHES}
+                        currentMatch={
+                          activeMatch && activeMatch.segmentId === seg.id
+                            ? activeMatch
+                            : null
+                        }
                       />
 
                       {/* Coding Pills Footer */}
@@ -833,11 +972,10 @@ export function TranscriptPanel() {
 /**
  * PassageText with multi-code underlines (B2), mark context menu (A2), and NoteEditor integration (A7).
  */
-function PassageText({
+const PassageText = memo(function PassageText({
   segmentId,
   text,
   coded,
-  codedSegments,
   activeCoder,
   codeFilter,
   setCodeFilter,
@@ -848,11 +986,12 @@ function PassageText({
   pending,
   showNotes,
   saveMemoForCoding,
+  matches,
+  currentMatch,
 }: {
   segmentId: string;
   text: string;
   coded: CodedSegment[];
-  codedSegments: CodedSegment[];
   activeCoder: string;
   codeFilter: string | null;
   setCodeFilter: (codeId: string | null) => void;
@@ -867,6 +1006,8 @@ function PassageText({
     memo: string,
     options?: { silent?: boolean },
   ) => Promise<CodedSegment>;
+  matches: MatchRange[];
+  currentMatch: MatchRange | null;
 }) {
   const runs = useMemo(
     () => highlightRuns(text, coded, codesById),
@@ -900,30 +1041,21 @@ function PassageText({
     if (!root || !paragraph) return;
 
     const base = paragraph.getBoundingClientRect().top;
-    const anchors = [
-      ...paragraph.querySelectorAll<HTMLElement>("[data-run-start]"),
-    ];
+    const noteButtons = root.querySelectorAll<HTMLElement>(
+      'button[aria-label="Expand note"], button[aria-label="Collapse note"]',
+    );
+    const tops: Record<string, number> = {};
+    noteButtons.forEach((btn, idx) => {
+      const coding = notes[idx];
+      if (!coding) return;
+      const r = btn.getBoundingClientRect();
+      tops[coding.id] = Math.max(0, r.top - base);
+    });
+    setNoteTops(tops);
 
-    if (showNotes && notes.length > 0) {
-      const next: Record<string, number> = {};
-      for (const coding of notes) {
-        const start = coding.char_start ?? 0;
-        const anchor =
-          anchors.find(
-            (element) =>
-              Number(element.dataset.runStart) <= start &&
-              Number(element.dataset.runEnd) > start,
-          ) ?? anchors[0];
-        if (anchor)
-          next[coding.id] = Math.max(
-            0,
-            anchor.getBoundingClientRect().top - base,
-          );
-      }
-      setNoteTops(next);
-    } else if (Object.keys(noteTops).length > 0) {
-      setNoteTops({});
-    }
+    const anchors = Array.from(
+      paragraph.querySelectorAll<HTMLElement>("[data-run-start]"),
+    );
 
     const layout = computeStripeLayout({
       coded,
@@ -952,32 +1084,20 @@ function PassageText({
     setStripeLayout(layout);
   }, [showNotes, text, coded, noteKey, codesById, activeCoder, codeFilter]);
 
-  type Piece = HighlightRun & { pending: boolean };
-  const pieces: Piece[] = runs.flatMap((run): Piece[] => {
-    if (
-      run.codes.length > 0 ||
-      !pendingRun ||
-      run.end <= pendingRun.start ||
-      run.start >= pendingRun.end
-    ) {
-      return [{ ...run, pending: false }];
-    }
-    const s = Math.max(run.start, pendingRun.start);
-    const e = Math.min(run.end, pendingRun.end);
-    const out: Piece[] = [];
-    if (run.start < s)
-      out.push({ ...run, end: s, text: text.slice(run.start, s), pending: false });
-    out.push({ ...run, start: s, end: e, text: text.slice(s, e), pending: true });
-    if (e < run.end)
-      out.push({ ...run, start: e, text: text.slice(e, run.end), pending: false });
-    return out;
-  });
+  const pieces = useMemo(() => {
+    return splitRunsOnMatches(runs, text, {
+      pending: pendingRun,
+      matches,
+      currentMatch,
+    });
+  }, [runs, text, pendingRun, matches, currentMatch]);
 
   return (
     <div ref={textRootRef} className="relative">
       {/* Left stripe gutter */}
       {stripeLayout && (
         <div
+          data-testid="stripe-gutter"
           className="absolute left-0 top-0 bottom-0 w-5 select-none pointer-events-auto z-10"
           aria-hidden="true"
         >
@@ -986,6 +1106,8 @@ function PassageText({
             return (
               <div
                 key={`${s.codeId}-${idx}`}
+                data-testid="stripe-bar"
+                data-code-id={s.codeId}
                 title={`${s.codeName}${s.isDashed ? " (other coder)" : ""}`}
                 onPointerEnter={() => setHoveredStripeCodeId(s.codeId)}
                 onPointerLeave={() => setHoveredStripeCodeId(null)}
@@ -1032,7 +1154,7 @@ function PassageText({
                       color: "inherit",
                       background: dark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.07)",
                       boxShadow: `inset 0 -1px 0 0 ${dark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.25)"}`,
-                      textDecoration: "underline",
+                      textDecorationLine: "underline",
                       textDecorationColor: dark ? "rgba(255, 255, 255, 0.55)" : "rgba(0, 0, 0, 0.45)",
                       textUnderlineOffset: "2px",
                     }}
@@ -1045,6 +1167,8 @@ function PassageText({
             return (
               <span key={run.start} data-run-start={run.start} data-run-end={run.end}>
                 <span
+                  data-is-match={run.isMatch ? "true" : undefined}
+                  data-current-match={run.isCurrentMatch ? "true" : undefined}
                   style={
                     run.pending
                       ? {
@@ -1052,7 +1176,13 @@ function PassageText({
                           boxShadow: "inset 0 -2px 0 0 var(--accent)",
                           borderRadius: 3,
                         }
-                      : undefined
+                      : run.isMatch
+                        ? {
+                            boxShadow: "0 0 0 1.5px var(--find-ring)",
+                            background: run.isCurrentMatch ? "var(--find-on)" : undefined,
+                            borderRadius: 2,
+                          }
+                        : undefined
                   }
                 >
                   {run.text}
@@ -1085,14 +1215,16 @@ function PassageText({
           return (
             <span key={run.start} data-run-start={run.start} data-run-end={run.end}>
               <mark
+                data-coding-id={run.codes.map((c) => c.id).join(",")}
+                data-is-match={run.isMatch ? "true" : undefined}
+                data-current-match={run.isCurrentMatch ? "true" : undefined}
                 title={formatRunAttribution(run, activeCoder)}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  e.stopPropagation();
                   const items = buildMarkMenuItems({
                     segmentId,
                     run: { start: run.start, end: run.end, wholeTurnOnly: run.wholeTurnOnly },
-                    codedSegments,
+                    codedSegments: coded,
                     codesById,
                     activeCoder,
                     codeFilter,
@@ -1106,8 +1238,12 @@ function PassageText({
                 className="rounded-[3px] px-px cursor-context-menu"
                 style={{
                   color: "inherit",
-                  background: bg,
-                  textDecoration: hasOtherCoder ? "underline" : undefined,
+                  backgroundColor: bg,
+                  backgroundImage: run.isCurrentMatch
+                    ? "linear-gradient(var(--find-on), var(--find-on))"
+                    : undefined,
+                  boxShadow: run.isMatch ? "0 0 0 1.5px var(--find-ring)" : undefined,
+                  textDecorationLine: hasOtherCoder ? "underline" : undefined,
                   textDecorationColor: dark ? "rgba(255, 255, 255, 0.55)" : "rgba(0, 0, 0, 0.45)",
                   textUnderlineOffset: "2px",
                 }}
@@ -1119,32 +1255,31 @@ function PassageText({
         })}
       </p>
 
+      {/* Inline passage notes column */}
       {showNotes &&
         notes.map((coding) => {
           const top = noteTops[coding.id] ?? 0;
+          const isExpanded = expandedNoteId === coding.id;
           return (
             <div
               key={coding.id}
-              className="absolute right-0 z-20"
+              className="absolute right-0 w-6 flex justify-center"
               style={{ top }}
             >
               <button
                 type="button"
-                aria-label={`${expandedNoteId === coding.id ? "Collapse" : "Expand"} note`}
-                aria-expanded={expandedNoteId === coding.id}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setExpandedNoteId((current) =>
-                    current === coding.id ? null : coding.id,
-                  );
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedNoteId(isExpanded ? null : coding.id);
                 }}
-                className="grid h-5 w-5 place-items-center rounded-full transition-colors hover:bg-[var(--fill-hi)]"
-                style={{ color: "var(--accent)" }}
-                title="Show passage note"
+                aria-expanded={isExpanded}
+                aria-label={isExpanded ? "Collapse note" : "Expand note"}
+                className="flex h-5 w-5 items-center justify-center rounded-full text-[var(--accent)] hover:bg-[var(--fill)]"
+                title={coding.memo ?? "Passage note"}
               >
-                <Icon name="note" size={13} />
+                <Icon name="note" size={12} />
               </button>
-              {expandedNoteId === coding.id && (
+              {isExpanded && (
                 <PassageNoteCard
                   coding={coding}
                   passageText={text}
@@ -1158,7 +1293,7 @@ function PassageText({
         })}
     </div>
   );
-}
+});
 
 function PassageNoteCard({
   coding,

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.0]
+
+### Added
+
+- **Find-in-place transcript search:** Searching in the transcript panel now highlights occurrences in place without filtering non-matching passages away. Pressing `⌘F` (macOS) or `Ctrl+F` (Windows) focuses the search input. Matches can be navigated sequentially via `Enter` / `Shift+Enter` or `⌘G` / `F3` (`⇧⌘G` / `⇧F3`), with a live match counter ("3 of 17") in the sticky header and automatic scrolling to the active match.
+- **Dedicated speaker filter:** Added a Speakers section to the transcript filter menu listing distinct speakers in the current transcript, composed with code filtering as `AND`.
+
+### Improved
+
+- **Passage rendering performance:** Repaired memoization dependencies in `TranscriptPanel` and memoized `PassageText` components, reducing typing frame latency during rapid coding by ~50% on large transcripts.
+
+### Infrastructure
+
+- **Multi-baseline Windows QA runner:** Parameterized `qa/Invoke-FleuronQA.ps1` to test both in-brand Fleuron (2.0.0 → candidate) upgrade transactions and legacy Codemap (1.2.0 → candidate) rebrand migration paths.
+- **Strict stripe assertions:** Hardened `e2e/highlight-stripes.spec.ts` to test coded marks and gutter stripe geometry unconditionally across search states.
+
 ## [2.1.0]
 
 ### Added

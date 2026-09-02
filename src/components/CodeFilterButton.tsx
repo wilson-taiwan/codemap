@@ -19,13 +19,17 @@ export function CodeFilterButton() {
   const dark = usePrefersDark();
   const ground = dark ? THEME_GROUND.dark : THEME_GROUND.light;
 
-  const { codes, codeFilter, setCodeFilter } = useProjectStore(
-    useShallow((s) => ({
-      codes: s.codes,
-      codeFilter: s.codeFilter,
-      setCodeFilter: s.setCodeFilter,
-    })),
-  );
+  const { codes, codeFilter, setCodeFilter, segments, speakerFilter, setSpeakerFilter } =
+    useProjectStore(
+      useShallow((s) => ({
+        codes: s.codes,
+        codeFilter: s.codeFilter,
+        setCodeFilter: s.setCodeFilter,
+        segments: s.segments,
+        speakerFilter: s.speakerFilter,
+        setSpeakerFilter: s.setSpeakerFilter,
+      })),
+    );
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -38,6 +42,16 @@ export function CodeFilterButton() {
     () => codes.find((c) => c.id === codeFilter) ?? null,
     [codes, codeFilter],
   );
+
+  const speakers = useMemo(() => {
+    const set = new Set<string>();
+    for (const seg of segments) {
+      if (seg.speaker && seg.speaker.trim()) {
+        set.add(seg.speaker.trim());
+      }
+    }
+    return [...set];
+  }, [segments]);
 
   // Filterable codes: usage_count > 0, sorted by usage descending
   const filterableCodes = useMemo(() => {
@@ -120,20 +134,23 @@ export function CodeFilterButton() {
   }, [open, updatePosition]);
 
   const filterShortcutLabel = shortcut("mod", "shift", "F");
+  const isFiltered = activeCode !== null || speakerFilter !== null;
 
   return (
     <>
-      <Tooltip content={`Filter passages by code (${filterShortcutLabel})`}>
+      <Tooltip content={`Filter passages (${filterShortcutLabel})`}>
         <button
           ref={buttonRef}
           type="button"
           onClick={toggleOpen}
           aria-expanded={open}
-          aria-label="Filter passages by code"
+          aria-label="Filter passages"
           className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] font-medium transition-colors ${
             activeCode
               ? "shadow-sm border border-[var(--g-rim)]"
-              : "btn-ghost text-[var(--ink-3)] hover:text-[var(--ink)]"
+              : speakerFilter
+                ? "bg-[var(--fill-on)] text-[var(--accent)] font-medium shadow-sm border border-[var(--g-rim)]"
+                : "btn-ghost text-[var(--ink-3)] hover:text-[var(--ink)]"
           }`}
           style={
             activeCode
@@ -157,6 +174,13 @@ export function CodeFilterButton() {
                 {activeCode.usage_count}
               </span>
             </>
+          ) : speakerFilter ? (
+            <>
+              <Icon name="filter" size={12} />
+              <span className="max-w-[90px] truncate hidden sm:inline">
+                {speakerFilter}
+              </span>
+            </>
           ) : (
             <Icon name="filter" size={13} />
           )}
@@ -169,7 +193,7 @@ export function CodeFilterButton() {
           <div
             ref={popoverRef}
             role="menu"
-            aria-label="Filter by code"
+            aria-label="Filter passages"
             onKeyDown={onMenuKeys}
             className="glass-pop anim-rise fixed z-[85] w-[240px] flex flex-col p-1.5 shadow-xl select-none"
             style={{
@@ -197,19 +221,56 @@ export function CodeFilterButton() {
                 role="menuitem"
                 onClick={() => {
                   setCodeFilter(null);
+                  setSpeakerFilter(null);
                   close();
                 }}
                 className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[12px] transition-colors ${
-                  codeFilter === null
+                  !isFiltered
                     ? "bg-[var(--fill-on)] text-[var(--accent)] font-medium"
                     : "hover:bg-[var(--fill)] text-[var(--ink)]"
                 }`}
               >
                 <span>All passages</span>
-                {codeFilter === null && <Icon name="check" size={12} />}
+                {!isFiltered && <Icon name="check" size={12} />}
               </button>
 
+              {/* Speakers Section */}
+              {speakers.length > 0 && (
+                <>
+                  <div className="divider my-0.5" />
+                  <div className="px-2 pt-1 pb-0.5 text-[10px] font-medium tracking-wider uppercase text-[var(--ink-4)]">
+                    Speakers
+                  </div>
+                  {speakers.map((speaker) => {
+                    const isActive = speakerFilter === speaker;
+                    return (
+                      <button
+                        key={speaker}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setSpeakerFilter(isActive ? null : speaker);
+                          close();
+                        }}
+                        className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[12px] transition-colors ${
+                          isActive
+                            ? "bg-[var(--fill-on)] text-[var(--accent)] font-medium"
+                            : "hover:bg-[var(--fill)] text-[var(--ink)]"
+                        }`}
+                      >
+                        <span className="min-w-0 flex-1 truncate">{speaker}</span>
+                        {isActive && <Icon name="check" size={12} className="shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Codes Section */}
               <div className="divider my-0.5" />
+              <div className="px-2 pt-1 pb-0.5 text-[10px] font-medium tracking-wider uppercase text-[var(--ink-4)]">
+                Codes
+              </div>
 
               {displayedCodes.length === 0 ? (
                 <div className="px-2 py-2 text-center text-[11.5px] text-[var(--ink-4)]">

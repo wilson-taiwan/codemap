@@ -14,6 +14,11 @@ param (
     [string]$Previous,
 
     [string]$PreviousVersion = "1.2.0",
+
+    [Parameter(Mandatory = $false)]
+    [string]$PreviousFleuron,
+
+    [string]$PreviousFleuronVersion = "2.0.0",
     [string]$OutputDirectory = "$PSScriptRoot\qa-evidence",
     [switch]$Online,
     [switch]$SkipUpdater,
@@ -413,137 +418,176 @@ Invoke-CrashSweep -Evidence $Evidence -StartTimeUtc $legacyStartTime -RawDirecto
 # -----------------------------------------------------------------------------
 # Leg 5: Updater Transaction Simulation (Gap 4 Instrument)
 # -----------------------------------------------------------------------------
+# Leg 5: Updater Transaction Simulation (Gap 4 Instrument & Fleuron Upgrade)
+# -----------------------------------------------------------------------------
 if (-not $SkipUpdater) {
     Write-Host ""
-    Write-Host "--- Leg 5: Updater Transaction Simulation (Gap 4 Instrument) ---"
+    Write-Host "--- Leg 5: Updater Transaction Simulation ---"
     $updaterStartTime = (Get-Date).ToUniversalTime()
     try {
-        # 1. Provable wipe to start from clean slate
-        Invoke-ProvableWipe -Evidence $Evidence
-        Initialize-Canaries -Evidence $Evidence
-
-        # 2. Resolve and install Codemap 1.2.0
-        $prevInstaller = Get-PreviousReleaseInstaller -Evidence $Evidence -PreviousLocalPath $Previous -Version $PreviousVersion -DownloadDirectory (Join-Path $OutputDirectory "download")
-
-        if ($prevInstaller -and (Test-Path $prevInstaller)) {
-            $prevRes = Invoke-InstallerProcess -InstallerPath $prevInstaller -Arguments "/S" -TimeoutSeconds 90
-            $oldExe = Join-Path $localAppData "Codemap\Codemap.exe"
-
-            if (Test-Path $oldExe) {
-                Add-QATestCaseResult -Evidence $Evidence -Name "previous_120_installed" -Leg "updater" -Status "PASS" -ElapsedMs $prevRes.ElapsedMs -ExitCode $prevRes.ExitCode -Details "Codemap 1.2.0 executable is present."
-            } else {
-                Add-QATestCaseResult -Evidence $Evidence -Name "previous_120_installed" -Leg "updater" -Status "FAIL" -ElapsedMs $prevRes.ElapsedMs -ExitCode $prevRes.ExitCode -Details "Codemap 1.2.0 executable is missing."
+        $updaterBaselines = @(
+            @{
+                Id = "codemap_120"
+                Label = "Codemap $PreviousVersion"
+                Version = $PreviousVersion
+                PreviousPath = $Previous
+                ProductName = "Codemap"
+                ExeRelativePath = "Codemap\Codemap.exe"
+                AppDataDir = "app.codemap.desktop"
+                IsLegacyCodemap = $true
+            },
+            @{
+                Id = "fleuron_200"
+                Label = "Fleuron $PreviousFleuronVersion"
+                Version = $PreviousFleuronVersion
+                PreviousPath = $PreviousFleuron
+                ProductName = "Fleuron"
+                ExeRelativePath = "Fleuron\Fleuron.exe"
+                AppDataDir = "study.fleuron.desktop"
+                IsLegacyCodemap = $false
             }
+        )
 
-            # 3. Seed real user data under %APPDATA%\app.codemap.desktop
-            $codemapAppData = Join-Path $appData "app.codemap.desktop"
-            New-Item -ItemType Directory -Path $codemapAppData -Force | Out-Null
-            $seededRecent = Join-Path $codemapAppData "recent-projects.json"
-            $seededProjectFolder = Join-Path ([Environment]::GetFolderPath("Personal")) "Codemap\Seeded Research.codemap"
-            New-Item -ItemType Directory -Path $seededProjectFolder -Force | Out-Null
-            $seededDb = Join-Path $seededProjectFolder "project.db"
-            $sqliteHeader = [byte[]](0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00)
-            [System.IO.File]::WriteAllBytes($seededDb, $sqliteHeader)
+        foreach ($b in $updaterBaselines) {
+            Write-Host ""
+            Write-Host "--- Updater Leg Baseline: $($b.Label) ---"
 
-            $recentObj = @{
-                projects = @(
-                    @{
-                        path = $seededProjectFolder
-                        title = "Seeded Research Study"
-                        last_opened = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            # 1. Provable wipe to start from clean slate
+            Invoke-ProvableWipe -Evidence $Evidence
+            Initialize-Canaries -Evidence $Evidence
+
+            # 2. Resolve and install baseline
+            $prevInstaller = Get-PreviousReleaseInstaller -Evidence $Evidence -PreviousLocalPath $b.PreviousPath -Version $b.Version -DownloadDirectory (Join-Path $OutputDirectory "download")
+
+            if ($prevInstaller -and (Test-Path $prevInstaller)) {
+                $prevRes = Invoke-InstallerProcess -InstallerPath $prevInstaller -Arguments "/S" -TimeoutSeconds 90
+                $oldExe = Join-Path $localAppData $b.ExeRelativePath
+
+                if (Test-Path $oldExe) {
+                    Add-QATestCaseResult -Evidence $Evidence -Name "$($b.Id)_installed" -Leg "updater" -Status "PASS" -ElapsedMs $prevRes.ElapsedMs -ExitCode $prevRes.ExitCode -Details "$($b.Label) executable is present."
+                } else {
+                    Add-QATestCaseResult -Evidence $Evidence -Name "$($b.Id)_installed" -Leg "updater" -Status "FAIL" -ElapsedMs $prevRes.ElapsedMs -ExitCode $prevRes.ExitCode -Details "$($b.Label) executable is missing."
+                }
+
+                # 3. Seed real user data under %APPDATA%\$($b.AppDataDir)
+                $baselineAppData = Join-Path $appData $b.AppDataDir
+                New-Item -ItemType Directory -Path $baselineAppData -Force | Out-Null
+                $seededRecent = Join-Path $baselineAppData "recent-projects.json"
+                $seededProjectFolder = Join-Path ([Environment]::GetFolderPath("Personal")) "$($b.ProductName)\Seeded Research.codemap"
+                New-Item -ItemType Directory -Path $seededProjectFolder -Force | Out-Null
+                $seededDb = Join-Path $seededProjectFolder "project.db"
+                $sqliteHeader = [byte[]](0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00)
+                [System.IO.File]::WriteAllBytes($seededDb, $sqliteHeader)
+
+                $recentObj = @{
+                    projects = @(
+                        @{
+                            path = $seededProjectFolder
+                            title = "Seeded Research Study"
+                            last_opened = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                        }
+                    )
+                }
+                $recentObj | ConvertTo-Json -Depth 4 | Set-Content -Path $seededRecent -Encoding utf8
+                $seededHash = (Get-FileHash -Path $seededDb -Algorithm SHA256).Hash
+
+                # 4. Define real marker paths under study.fleuron.desktop
+                $fleuronAppData = Join-Path $appData "study.fleuron.desktop"
+                New-Item -ItemType Directory -Path $fleuronAppData -Force | Out-Null
+                $pendingUpdatePath = Join-Path $fleuronAppData "pending-update.json"
+                $installSentinelPath = Join-Path $fleuronAppData "install-sentinel.txt"
+                if (Test-Path $pendingUpdatePath) { Remove-Item -Force $pendingUpdatePath }
+                if (Test-Path $installSentinelPath) { Remove-Item -Force $installSentinelPath }
+
+                # 5. The abort path must leave the existing installation and seeded data untouched
+                $timeoutParentProc = Start-Process powershell -ArgumentList "-NoProfile", "-Command", "Start-Sleep -Seconds 600" -PassThru
+                $timeoutArgs = '/S /FLEURON_PARENT_PID={0} /FLEURON_PENDING_UPDATE="{1}" /FLEURON_INSTALL_SENTINEL="{2}"' -f $timeoutParentProc.Id, $pendingUpdatePath, $installSentinelPath
+                Write-Host "Running deliberate updater timeout transaction: $Candidate $timeoutArgs"
+                $timeoutRes = Invoke-InstallerProcess -InstallerPath $Candidate -Arguments $timeoutArgs -TimeoutSeconds 90
+                Stop-ProcessTree -ProcessId $timeoutParentProc.Id
+
+                $timeoutNoFleuronExe = if ($b.IsLegacyCodemap) { -not (Test-Path $installedExe) } else { (Test-Path $oldExe) }
+                $timeoutNoSentinel = -not (Test-Path $installSentinelPath)
+                $timeoutSeededDataIntact = (Test-Path $seededDb) -and ((Get-FileHash -Path $seededDb -Algorithm SHA256).Hash -eq $seededHash)
+                $timeoutAbortedCleanly = -not $timeoutRes.TimedOut -and $timeoutNoFleuronExe -and $timeoutNoSentinel -and $timeoutSeededDataIntact
+                Add-QATestCaseResult -Evidence $Evidence -Name "$($b.Id)_timeout_aborts_cleanly" -Leg "updater" -Status $(if ($timeoutAbortedCleanly) { "PASS" } else { "FAIL" }) -ElapsedMs $timeoutRes.ElapsedMs -ExitCode $timeoutRes.ExitCode -Details "Installer exited=$(-not $timeoutRes.TimedOut); sentinel absent=$timeoutNoSentinel; seeded data intact=$timeoutSeededDataIntact." -Diagnostics $timeoutRes.Diagnostics
+                if (-not $timeoutAbortedCleanly) {
+                    throw "Updater timeout path changed installation state; refusing to run the real transaction from a dirty state."
+                }
+
+                if (Test-Path $pendingUpdatePath) { Remove-Item -Force $pendingUpdatePath }
+                if (Test-Path $installSentinelPath) { Remove-Item -Force $installSentinelPath }
+
+                # 6. Spawn short-lived synthetic parent
+                $parentProc = Start-Process powershell -ArgumentList "-NoProfile", "-Command", "Start-Sleep -Seconds 3" -PassThru
+
+                # 7. Execute candidate installer with real /FLEURON_* updater flags
+                $updaterArgs = '/S /FLEURON_PARENT_PID={0} /FLEURON_PENDING_UPDATE="{1}" /FLEURON_INSTALL_SENTINEL="{2}"' -f $parentProc.Id, $pendingUpdatePath, $installSentinelPath
+                Write-Host "Running candidate updater transaction: $Candidate $updaterArgs"
+                $updaterRes = Invoke-InstallerProcess -InstallerPath $Candidate -Arguments $updaterArgs -TimeoutSeconds 90
+
+                Stop-ProcessTree -ProcessId $parentProc.Id
+
+                # 8. Collect End-State Diagnostics
+                $endState = @{
+                    candidate_exit_code = $updaterRes.ExitCode
+                    baseline_id = $b.Id
+                    old_exe_exists = (Test-Path $oldExe)
+                    old_exe_version = if (Test-Path $oldExe) { (Get-Item $oldExe).VersionInfo.FileVersion } else { "absent" }
+                    fleuron_exe_exists = (Test-Path $installedExe)
+                    fleuron_exe_version = if (Test-Path $installedExe) { (Get-Item $installedExe).VersionInfo.FileVersion } else { "absent" }
+                    uninstall_codemap_exists = (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Codemap")
+                    uninstall_fleuron_exists = (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Fleuron")
+                    pending_marker_exists = (Test-Path $pendingUpdatePath)
+                    sentinel_exists = (Test-Path $installSentinelPath)
+                    seeded_data_intact = (Test-Path $seededDb) -and ((Get-FileHash -Path $seededDb -Algorithm SHA256).Hash -eq $seededHash)
+                }
+                $endState | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $RawDir "updater-end-state-$($b.Id).json") -Encoding utf8
+
+                if ($b.IsLegacyCodemap) {
+                    # Criterion 1: Codemap.exe is either removed or replaced
+                    if (-not (Test-Path $oldExe)) {
+                        Add-QATestCaseResult -Evidence $Evidence -Name "codemap_exe_replaced_or_removed" -Leg "updater" -Status "PASS" -Details "Codemap.exe was cleanly removed/replaced."
+                    } elseif ((Get-Item $oldExe).VersionInfo.FileVersion -match $ExpectedVersionRegex) {
+                        Add-QATestCaseResult -Evidence $Evidence -Name "codemap_exe_replaced_or_removed" -Leg "updater" -Status "PASS" -Details "Codemap.exe binary was upgraded to $ExpectedVersion."
+                    } else {
+                        $oldVer = (Get-Item $oldExe).VersionInfo.FileVersion
+                        Add-QATestCaseResult -Evidence $Evidence -Name "codemap_exe_replaced_or_removed" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Codemap.exe remains at version $oldVer beside Fleuron (side-by-side split)." -Diagnostics "End state dumped to raw/updater-end-state-codemap_120.json"
                     }
-                )
-            }
-            $recentObj | ConvertTo-Json -Depth 4 | Set-Content -Path $seededRecent -Encoding utf8
-            $seededHash = (Get-FileHash -Path $seededDb -Algorithm SHA256).Hash
 
-            # 4. Define real marker paths under study.fleuron.desktop
-            $fleuronAppData = Join-Path $appData "study.fleuron.desktop"
-            New-Item -ItemType Directory -Path $fleuronAppData -Force | Out-Null
-            $pendingUpdatePath = Join-Path $fleuronAppData "pending-update.json"
-            $installSentinelPath = Join-Path $fleuronAppData "install-sentinel.txt"
-            if (Test-Path $pendingUpdatePath) { Remove-Item -Force $pendingUpdatePath }
-            if (Test-Path $installSentinelPath) { Remove-Item -Force $installSentinelPath }
+                    # Criterion 2: Fleuron candidate is present
+                    if ((Test-Path $installedExe) -and ((Get-Item $installedExe).VersionInfo.FileVersion -match $ExpectedVersionRegex)) {
+                        Add-QATestCaseResult -Evidence $Evidence -Name "fleuron_v2_installed_after_update" -Leg "updater" -Status "PASS" -Details "Fleuron $ExpectedVersion binary present at $installedExe"
+                    } else {
+                        Add-QATestCaseResult -Evidence $Evidence -Name "fleuron_v2_installed_after_update" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Fleuron $ExpectedVersion binary missing or invalid version."
+                    }
 
-            # 5. The abort path must leave the existing installation and seeded
-            # data untouched. Run this first so the real transaction starts
-            # from an installer-clean directory.
-            $timeoutParentProc = Start-Process powershell -ArgumentList "-NoProfile", "-Command", "Start-Sleep -Seconds 600" -PassThru
-            $timeoutArgs = '/S /FLEURON_PARENT_PID={0} /FLEURON_PENDING_UPDATE="{1}" /FLEURON_INSTALL_SENTINEL="{2}"' -f $timeoutParentProc.Id, $pendingUpdatePath, $installSentinelPath
-            Write-Host "Running deliberate updater timeout transaction: $Candidate $timeoutArgs"
-            $timeoutRes = Invoke-InstallerProcess -InstallerPath $Candidate -Arguments $timeoutArgs -TimeoutSeconds 90
-            Stop-ProcessTree -ProcessId $timeoutParentProc.Id
+                    # Criterion 3: Seeded data preserved
+                    if ($endState.seeded_data_intact) {
+                        Add-QATestCaseResult -Evidence $Evidence -Name "seeded_user_data_intact" -Leg "updater" -Status "PASS" -Details "Seeded user data and project files untouched during upgrade."
+                    } else {
+                        Add-QATestCaseResult -Evidence $Evidence -Name "seeded_user_data_intact" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Seeded user data was corrupted or deleted during upgrade."
+                    }
 
-            $timeoutNoFleuronExe = -not (Test-Path $installedExe)
-            $timeoutNoSentinel = -not (Test-Path $installSentinelPath)
-            $timeoutSeededDataIntact = (Test-Path $seededDb) -and ((Get-FileHash -Path $seededDb -Algorithm SHA256).Hash -eq $seededHash)
-            $timeoutAbortedCleanly = -not $timeoutRes.TimedOut -and $timeoutNoFleuronExe -and $timeoutNoSentinel -and $timeoutSeededDataIntact
-            Add-QATestCaseResult -Evidence $Evidence -Name "updater_timeout_aborts_cleanly" -Leg "updater" -Status $(if ($timeoutAbortedCleanly) { "PASS" } else { "FAIL" }) -ElapsedMs $timeoutRes.ElapsedMs -ExitCode $timeoutRes.ExitCode -Details "Installer exited=$(-not $timeoutRes.TimedOut); Fleuron.exe absent=$timeoutNoFleuronExe; sentinel absent=$timeoutNoSentinel; seeded data intact=$timeoutSeededDataIntact." -Diagnostics $timeoutRes.Diagnostics
-            if (-not $timeoutAbortedCleanly) {
-                throw "Updater timeout path changed installation state; refusing to run the real transaction from a dirty state."
-            }
+                    # Gap 4 summary verdict
+                    if ((Test-Path $oldExe) -and ((Get-Item $oldExe).VersionInfo.FileVersion -match "1\.2\.0") -and (Test-Path $installedExe)) {
+                        $gapDiag = "1.2.0 path: " + $oldExe + " | $ExpectedVersion path: " + $installedExe
+                        Add-QATestCaseResult -Evidence $Evidence -Name "updater_left_user_on_previous_version" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Observed Gap 4: Shipped 1.2.0 updater left 1.2.0 installed beside new $ExpectedVersion." -Diagnostics $gapDiag
+                    }
+                } else {
+                    # Fleuron-baseline assertions
+                    if ((Test-Path $installedExe) -and ((Get-Item $installedExe).VersionInfo.FileVersion -match $ExpectedVersionRegex)) {
+                        Add-QATestCaseResult -Evidence $Evidence -Name "fleuron_baseline_upgraded_to_candidate" -Leg "updater" -Status "PASS" -Details "Fleuron $ExpectedVersion binary present after in-place upgrade."
+                    } else {
+                        Add-QATestCaseResult -Evidence $Evidence -Name "fleuron_baseline_upgraded_to_candidate" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Fleuron upgraded binary missing or version mismatch."
+                    }
 
-            # The marker paths are harness inputs, so make the real transaction
-            # independent of the deliberately aborted transaction above.
-            if (Test-Path $pendingUpdatePath) { Remove-Item -Force $pendingUpdatePath }
-            if (Test-Path $installSentinelPath) { Remove-Item -Force $installSentinelPath }
-
-            # 6. Spawn a short-lived synthetic parent. An early exit is safe:
-            # FleuronParentExited reports success. A late exit exhausts the
-            # installer wait budget and deadlocks this transaction.
-            $parentProc = Start-Process powershell -ArgumentList "-NoProfile", "-Command", "Start-Sleep -Seconds 3" -PassThru
-
-            # 7. Execute candidate installer with real /FLEURON_* updater flags
-            $updaterArgs = '/S /FLEURON_PARENT_PID={0} /FLEURON_PENDING_UPDATE="{1}" /FLEURON_INSTALL_SENTINEL="{2}"' -f $parentProc.Id, $pendingUpdatePath, $installSentinelPath
-            Write-Host "Running candidate updater transaction: $Candidate $updaterArgs"
-            $updaterRes = Invoke-InstallerProcess -InstallerPath $Candidate -Arguments $updaterArgs -TimeoutSeconds 90
-
-            # Clean up parent process
-            Stop-ProcessTree -ProcessId $parentProc.Id
-
-            # 8. Collect End-State Diagnostics
-            $endState = @{
-                candidate_exit_code = $updaterRes.ExitCode
-                codemap_exe_exists = (Test-Path $oldExe)
-                codemap_exe_version = if (Test-Path $oldExe) { (Get-Item $oldExe).VersionInfo.FileVersion } else { "absent" }
-                fleuron_exe_exists = (Test-Path $installedExe)
-                fleuron_exe_version = if (Test-Path $installedExe) { (Get-Item $installedExe).VersionInfo.FileVersion } else { "absent" }
-                uninstall_codemap_exists = (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Codemap")
-                uninstall_fleuron_exists = (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Fleuron")
-                pending_marker_exists = (Test-Path $pendingUpdatePath)
-                sentinel_exists = (Test-Path $installSentinelPath)
-                seeded_data_intact = (Test-Path $seededDb) -and ((Get-FileHash -Path $seededDb -Algorithm SHA256).Hash -eq $seededHash)
-            }
-            $endState | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $RawDir "updater-end-state.json") -Encoding utf8
-
-            # Criterion 1: Codemap.exe is either removed or replaced by the expected release.
-            if (-not (Test-Path $oldExe)) {
-                Add-QATestCaseResult -Evidence $Evidence -Name "codemap_exe_replaced_or_removed" -Leg "updater" -Status "PASS" -Details "Codemap.exe was cleanly removed/replaced."
-            } elseif ((Get-Item $oldExe).VersionInfo.FileVersion -match $ExpectedVersionRegex) {
-                Add-QATestCaseResult -Evidence $Evidence -Name "codemap_exe_replaced_or_removed" -Leg "updater" -Status "PASS" -Details "Codemap.exe binary was upgraded to $ExpectedVersion."
-            } else {
-                $oldVer = (Get-Item $oldExe).VersionInfo.FileVersion
-                Add-QATestCaseResult -Evidence $Evidence -Name "codemap_exe_replaced_or_removed" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Codemap.exe remains at version $oldVer beside Fleuron (side-by-side split)." -Diagnostics "End state dumped to raw/updater-end-state.json"
-            }
-
-            # Criterion 2: The expected Fleuron release is present and valid.
-            if ((Test-Path $installedExe) -and ((Get-Item $installedExe).VersionInfo.FileVersion -match $ExpectedVersionRegex)) {
-                Add-QATestCaseResult -Evidence $Evidence -Name "fleuron_v2_installed_after_update" -Leg "updater" -Status "PASS" -Details "Fleuron $ExpectedVersion binary present at $installedExe"
-            } else {
-                Add-QATestCaseResult -Evidence $Evidence -Name "fleuron_v2_installed_after_update" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Fleuron $ExpectedVersion binary missing or invalid version."
-            }
-
-            # Criterion 3: Seeded data preserved
-            if ($endState.seeded_data_intact) {
-                Add-QATestCaseResult -Evidence $Evidence -Name "seeded_user_data_intact" -Leg "updater" -Status "PASS" -Details "Seeded user data and project files untouched during upgrade."
-            } else {
-                Add-QATestCaseResult -Evidence $Evidence -Name "seeded_user_data_intact" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Seeded user data was corrupted or deleted during upgrade."
-            }
-
-            # Overall Gap 4 summary verdict
-            if ((Test-Path $oldExe) -and ((Get-Item $oldExe).VersionInfo.FileVersion -match "1\.2\.0") -and (Test-Path $installedExe)) {
-                $gapDiag = "1.2.0 path: " + $oldExe + " | $ExpectedVersion path: " + $installedExe
-                Add-QATestCaseResult -Evidence $Evidence -Name "updater_left_user_on_previous_version" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Observed Gap 4: Shipped 1.2.0 updater left 1.2.0 installed beside new $ExpectedVersion." -Diagnostics $gapDiag
+                    if ($endState.seeded_data_intact) {
+                        Add-QATestCaseResult -Evidence $Evidence -Name "fleuron_baseline_seeded_data_intact" -Leg "updater" -Status "PASS" -Details "Seeded Fleuron data preserved across update."
+                    } else {
+                        Add-QATestCaseResult -Evidence $Evidence -Name "fleuron_baseline_seeded_data_intact" -Leg "updater" -Status "FAIL" -ExitCode 1 -Details "Seeded Fleuron data was corrupted or deleted during upgrade."
+                    }
+                }
             }
         }
     } catch {

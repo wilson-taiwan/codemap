@@ -87,14 +87,14 @@ test("codebook filters passages and passage notes open inline", async ({ page })
   await openWorkspace(page);
 
   const filter = page.getByRole("button", {
-    name: "Filter passages by code",
+    name: "Filter passages",
   });
   const passages = page.getByRole("listbox", { name: "Transcript passages" });
   await filter.click();
   await page.getByRole("menuitem", { name: /Unwritten rules/ }).click();
   await expect(passages.getByRole("option")).toHaveCount(1);
 
-  await page.getByRole("button", { name: "Filter passages by code" }).click();
+  await page.getByRole("button", { name: "Filter passages" }).click();
   await page.getByRole("menuitem", { name: "All passages" }).click();
   await expect(passages.getByRole("option")).toHaveCount(12);
 

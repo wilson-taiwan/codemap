@@ -111,6 +111,10 @@
   --danger: #c8352b;
   --danger-soft: rgba(200, 53, 43, 0.12);
 
+  /* find-in-place tokens: hue-distinct from --accent */
+  --find-ring: #1d4ed8;
+  --find-on: rgba(37, 99, 235, 0.22);
+
   /* ambient wash — bright, calm, and never desktop-coloured in light mode.
 
      🔴 `--amb-alpha` is platform-gated, not a plain theme value. The wash is
@@ -214,6 +218,9 @@
     --danger: #ff6b5e;
     --danger-soft: rgba(255, 107, 94, 0.16);
 
+    --find-ring: #60a5fa;
+    --find-on: rgba(59, 130, 246, 0.35);
+
     --amb-base: 15, 15, 14;
     --amb-alpha-vibrant: 0.7;
     --amb-1: rgba(200, 155, 45, 0.22);
@@ -283,6 +290,9 @@
     --warn-soft: rgba(240, 145, 85, 0.16);
     --danger: #ff6b5e;
     --danger-soft: rgba(255, 107, 94, 0.16);
+
+    --find-ring: #60a5fa;
+    --find-on: rgba(59, 130, 246, 0.35);
 
     --amb-base: 15, 15, 14;
     --amb-alpha-vibrant: 0.7;

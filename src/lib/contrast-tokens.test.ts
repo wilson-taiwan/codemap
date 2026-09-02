@@ -106,6 +106,11 @@ describe.each([
   it("renders the accent as readable text on the ground", () => {
     expect(contrast(t["--accent"], ground)).toBeGreaterThanOrEqual(AA);
   });
+
+  it("declares find match tokens", () => {
+    expect(t["--find-ring"]).toBeTruthy();
+    expect(t["--find-on"]).toBeTruthy();
+  });
 });
 
 /**

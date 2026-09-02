@@ -286,3 +286,109 @@ describe("trimmedSpan", () => {
     }
   });
 });
+
+describe("matchRanges", () => {
+  it("returns empty array for empty query or whitespace", async () => {
+    const { matchRanges } = await import("./highlight");
+    expect(matchRanges(TEXT, "")).toEqual([]);
+    expect(matchRanges(TEXT, "   ")).toEqual([]);
+  });
+
+  it("finds match at passage start", async () => {
+    const { matchRanges } = await import("./highlight");
+    expect(matchRanges(TEXT, "I rehearse")).toEqual([{ start: 0, end: 10 }]);
+  });
+
+  it("finds match at passage end", async () => {
+    const { matchRanges } = await import("./highlight");
+    expect(matchRanges(TEXT, "drive in")).toEqual([{ start: 28, end: 36 }]);
+  });
+
+  it("finds adjacent matches", async () => {
+    const { matchRanges } = await import("./highlight");
+    expect(matchRanges("ha ha ha", "ha")).toEqual([
+      { start: 0, end: 2 },
+      { start: 3, end: 5 },
+      { start: 6, end: 8 },
+    ]);
+  });
+});
+
+describe("splitRunsOnMatches", () => {
+  it("leaves runs unchanged when there are no matches and no pending selection", async () => {
+    const { highlightRuns, splitRunsOnMatches } = await import("./highlight");
+    const runs = highlightRuns(TEXT, [], CODES);
+    const pieces = splitRunsOnMatches(runs, TEXT);
+    expect(pieces).toHaveLength(1);
+    expect(pieces[0].text).toBe(TEXT);
+    expect(pieces[0].isMatch).toBe(false);
+    expect(pieces[0].isCurrentMatch).toBe(false);
+    expect(pieces[0].pending).toBe(false);
+  });
+
+  it("splits a match entirely inside a coded run while preserving code and attribution", async () => {
+    const { highlightRuns, matchRanges, splitRunsOnMatches } = await import("./highlight");
+    // "I rehearse the hello on the drive in"
+    // coded "the hello" = [11, 20]
+    const runs = highlightRuns(TEXT, [coded("1", ["a"], [11, 20])], CODES);
+    // search for "hello" = [15, 20]
+    const matches = matchRanges(TEXT, "hello");
+    const pieces = splitRunsOnMatches(runs, TEXT, { matches, currentMatch: matches[0] });
+
+    expect(pieces.map((p) => p.text).join("")).toBe(TEXT);
+
+    const matchPiece = pieces.find((p) => p.isMatch);
+    expect(matchPiece).toBeDefined();
+    expect(matchPiece!.text).toBe("hello");
+    expect(matchPiece!.start).toBe(15);
+    expect(matchPiece!.end).toBe(20);
+    expect(matchPiece!.codes.map((c) => c.id)).toEqual(["a"]);
+    expect(matchPiece!.isCurrentMatch).toBe(true);
+  });
+
+  it("splits a match that spans across a run boundary (uncoded to coded)", async () => {
+    const { highlightRuns, matchRanges, splitRunsOnMatches } = await import("./highlight");
+    // coded [11, 20] ("the hello")
+    const runs = highlightRuns(TEXT, [coded("1", ["a"], [11, 20])], CODES);
+    // search "rehearse the" = [2, 14] -> spans run 1 [0, 11] and run 2 [11, 20]
+    const matches = matchRanges(TEXT, "rehearse the");
+    const pieces = splitRunsOnMatches(runs, TEXT, { matches });
+
+    expect(pieces.map((p) => p.text).join("")).toBe(TEXT);
+    const matchPieces = pieces.filter((p) => p.isMatch);
+    expect(matchPieces).toHaveLength(2);
+    expect(matchPieces[0].text).toBe("rehearse ");
+    expect(matchPieces[0].codes).toEqual([]);
+    expect(matchPieces[1].text).toBe("the");
+    expect(matchPieces[1].codes.map((c) => c.id)).toEqual(["a"]);
+  });
+
+  it("handles overlapping query and code edges cleanly", async () => {
+    const { highlightRuns, matchRanges, splitRunsOnMatches } = await import("./highlight");
+    // coded [11, 20] ("the hello")
+    const runs = highlightRuns(TEXT, [coded("1", ["a"], [11, 20])], CODES);
+    // search "hello on" = [15, 23]
+    const matches = matchRanges(TEXT, "hello on");
+    const pieces = splitRunsOnMatches(runs, TEXT, { matches });
+
+    expect(pieces.map((p) => p.text).join("")).toBe(TEXT);
+    const matchPieces = pieces.filter((p) => p.isMatch);
+    expect(matchPieces).toHaveLength(2);
+    expect(matchPieces[0].text).toBe("hello");
+    expect(matchPieces[0].codes.map((c) => c.id)).toEqual(["a"]);
+    expect(matchPieces[1].text).toBe(" on");
+    expect(matchPieces[1].codes).toEqual([]);
+  });
+
+  it("preserves pending selection split on uncoded runs", async () => {
+    const { highlightRuns, splitRunsOnMatches } = await import("./highlight");
+    const runs = highlightRuns(TEXT, [], CODES);
+    const pieces = splitRunsOnMatches(runs, TEXT, {
+      pending: { start: 2, end: 10 },
+    });
+    expect(pieces.map((p) => p.text).join("")).toBe(TEXT);
+    const pendingPiece = pieces.find((p) => p.pending);
+    expect(pendingPiece).toBeDefined();
+    expect(pendingPiece!.text).toBe("rehearse");
+  });
+});

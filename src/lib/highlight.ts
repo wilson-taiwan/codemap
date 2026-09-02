@@ -264,3 +264,110 @@ export function trimmedSpan(
 
   return { start, end, text: raw.slice(leading, raw.length - trailing) };
 }
+
+export interface MatchRange {
+  start: number;
+  end: number;
+}
+
+export interface RenderPiece extends HighlightRun {
+  pending: boolean;
+  isMatch: boolean;
+  isCurrentMatch: boolean;
+}
+
+/**
+ * Find all non-overlapping occurrences of `query` in `text`.
+ * Returns character offsets `{ start, end }`. Case-insensitive.
+ */
+export function matchRanges(text: string, query: string): MatchRange[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const ranges: MatchRange[] = [];
+  const lower = text.toLowerCase();
+  let idx = 0;
+  while ((idx = lower.indexOf(q, idx)) !== -1) {
+    ranges.push({ start: idx, end: idx + q.length });
+    idx += q.length;
+  }
+  return ranges;
+}
+
+/**
+ * Partition highlight runs on search match ranges and pending drag selections.
+ *
+ * Splits EVERY run (coded or uncoded) across match boundaries so search highlights
+ * can paint on top of coded text without destroying code attribution or gutter
+ * anchor measurements.
+ */
+export function splitRunsOnMatches(
+  runs: HighlightRun[],
+  text: string,
+  options?: {
+    pending?: { start: number; end: number } | null;
+    matches?: MatchRange[];
+    currentMatch?: MatchRange | null;
+  },
+): RenderPiece[] {
+  const pendingSpan =
+    options?.pending && options.pending.end > options.pending.start
+      ? options.pending
+      : null;
+  const matches = options?.matches ?? [];
+  const currentMatch = options?.currentMatch ?? null;
+
+  return runs.flatMap((run): RenderPiece[] => {
+    const points = new Set<number>([run.start, run.end]);
+
+    if (
+      pendingSpan &&
+      run.codes.length === 0 &&
+      pendingSpan.start < run.end &&
+      pendingSpan.end > run.start
+    ) {
+      points.add(Math.max(run.start, pendingSpan.start));
+      points.add(Math.min(run.end, pendingSpan.end));
+    }
+
+    for (const m of matches) {
+      if (m.start < run.end && m.end > run.start) {
+        points.add(Math.max(run.start, m.start));
+        points.add(Math.min(run.end, m.end));
+      }
+    }
+
+    const sorted = [...points].sort((a, b) => a - b);
+    const pieces: RenderPiece[] = [];
+
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const s = sorted[i];
+      const e = sorted[i + 1];
+      if (e <= s) continue;
+
+      const isPending = Boolean(
+        pendingSpan &&
+          run.codes.length === 0 &&
+          s >= pendingSpan.start &&
+          e <= pendingSpan.end,
+      );
+
+      const isMatch = matches.some((m) => s >= m.start && e <= m.end);
+      const isCurrentMatch = Boolean(
+        currentMatch && s >= currentMatch.start && e <= currentMatch.end,
+      );
+
+      pieces.push({
+        ...run,
+        start: s,
+        end: e,
+        text: text.slice(s, e),
+        pending: isPending,
+        isMatch,
+        isCurrentMatch,
+      });
+    }
+
+    return pieces;
+  });
+}
+
