@@ -281,6 +281,82 @@ pub struct WorkspaceState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum StudyReadiness {
+    #[serde(rename_all = "camelCase")]
+    MissingTranscripts {
+        missing_count: usize,
+    },
+    Unlinked,
+    #[serde(rename_all = "camelCase")]
+    Behind {
+        behind_count: usize,
+    },
+    Diverged,
+    Ready,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "verdict", rename_all = "snake_case")]
+pub enum JoinTargetVerdict {
+    AlreadySetUpHere {
+        path: String,
+    },
+    AdoptableUnbound {
+        path: String,
+    },
+    BoundElsewhere {
+        path: String,
+        suggested_name: String,
+        suggested_path: String,
+    },
+    Occupied {
+        path: String,
+        suggested_name: String,
+        suggested_path: String,
+    },
+    Available {
+        suggested_name: String,
+        suggested_path: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum StudyLocation {
+    Reachable,
+    VolumeNotMounted { volume_name: String },
+    CloudNotDownloaded { provider: String },
+    CloudProviderAbsent { provider: String },
+    PermissionDenied,
+    Gone,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum RelinkOutcome {
+    ExactMatch {
+        new_path: String,
+        message: String,
+    },
+    NameMatchOnly {
+        candidate_path: String,
+        message: String,
+    },
+    NotFound,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LeftStudy {
+    pub project_id: String,
+    pub title: String,
+    pub group_key: String,
+    pub coder_name: String,
+    pub left_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct RecentProject {
     pub path: String,
     pub title: String,
@@ -294,9 +370,15 @@ pub struct RecentProject {
     /// The name this machine files coding under in that group.
     #[serde(default)]
     pub coder_name: Option<String>,
+    #[serde(default)]
+    pub former_group_id: Option<String>,
+    #[serde(default)]
+    pub former_group_title: Option<String>,
+    #[serde(default)]
+    pub readiness: Option<StudyReadiness>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RecordRecentProjectInput {
     pub path: String,
     pub title: String,
@@ -306,6 +388,12 @@ pub struct RecordRecentProjectInput {
     pub group_title: Option<String>,
     #[serde(default)]
     pub coder_name: Option<String>,
+    #[serde(default)]
+    pub former_group_id: Option<String>,
+    #[serde(default)]
+    pub former_group_title: Option<String>,
+    #[serde(default)]
+    pub readiness: Option<StudyReadiness>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

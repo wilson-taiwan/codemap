@@ -15,8 +15,32 @@ import {
   joinConnectReady,
   joinRailSteps,
 } from "../lib/join-flow";
-import type { Interview, MembershipSummary, MissingTranscript } from "../lib/types";
+import type {
+  Interview,
+  MembershipSummary,
+  MissingTranscript,
+  JoinTargetVerdict,
+} from "../lib/types";
+import { parseFileError, type FileAccessUi } from "../lib/file-access";
+import { parseTranscriptFile } from "../hooks/useVttParser";
 import { CollaborationDisclosure } from "./CollaborationDisclosure";
+
+export type JoinError =
+  | FileAccessUi
+  | {
+      category: "other";
+      message: string;
+      detail?: string;
+    };
+
+export function formatJoinError(e: unknown): JoinError {
+  const parsed = parseFileError(e);
+  if (parsed) return parsed;
+  return {
+    category: "other",
+    message: e instanceof Error ? e.message : String(e),
+  };
+}
 
 /**
  * Resolve an interview against SQLite directly, matching normalized labels.
@@ -66,6 +90,15 @@ interface LinkedTranscript {
   expected: number;
   /** The coder saw the counts disagree and chose this file regardless. */
   keptAnyway: boolean;
+  hashMatched?: boolean;
+  hashMismatch?: boolean;
+}
+
+interface CandidateProposal {
+  path: string;
+  name: string;
+  hashMatch: boolean;
+  count: number;
 }
 
 /** "Teacher Interviews 2026" -> "teacher-interviews-2026" */
@@ -117,7 +150,10 @@ export function JoinStudyModal() {
     useState<MembershipSummary | null>(null);
   const [copyChoice, setCopyChoice] = useState<CopyChoice>("new");
   const [needed, setNeeded] = useState<MissingTranscript[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<JoinError | null>(null);
+  const [targetVerdict, setTargetVerdict] = useState<JoinTargetVerdict | null>(null);
+  const [lastTranscriptFolder, setLastTranscriptFolder] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<Record<string, CandidateProposal>>({});
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -194,9 +230,11 @@ export function JoinStudyModal() {
     } else {
       const parsed = parseSetup(setup);
       if (!parsed) {
-        setError(
-          "That does not look complete. Paste the whole block your colleague sent — it has an address and a long key.",
-        );
+        setError({
+          category: "other",
+          message:
+            "That does not look complete. Paste the whole block your colleague sent — it has an address and a long key.",
+        });
         return;
       }
       groupKey = parsed.groupKey;
@@ -242,11 +280,11 @@ export function JoinStudyModal() {
               setCoderName(redeemed.coderName);
               setNameTouched(true);
             } catch (e2) {
-              setError(String(e2));
+              setError(formatJoinError(e2));
               return;
             }
           } else {
-            setError(String(e));
+            setError(formatJoinError(e));
             return;
           }
         }
@@ -256,9 +294,146 @@ export function JoinStudyModal() {
       setMemberships(found);
       setStage("pick");
     } catch (e) {
-      setError(String(e));
+      setError(formatJoinError(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!pendingMembership || stage !== "copy") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const parentDir = await api.getProjectsLibraryDir();
+        const slug = slugify(pendingMembership.title);
+        const verdict = await api.inspectJoinTarget(
+          parentDir,
+          slug,
+          pendingMembership.projectId,
+        );
+        if (!cancelled) {
+          setTargetVerdict(verdict);
+          if (verdict.verdict === "adoptable_unbound") {
+            setCopyChoice("existing");
+          }
+        }
+      } catch {
+        // Non-fatal inspection error
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingMembership, stage]);
+
+  useEffect(() => {
+    if (stage !== "imports" || needed.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const interviews = useProjectStore.getState().interviews;
+      let candidateFolder = lastTranscriptFolder;
+      if (!candidateFolder) {
+        for (const inv of interviews) {
+          if (inv.audio_path) {
+            const parts = inv.audio_path.replace(/\\/g, "/").split("/");
+            if (parts.length > 1) {
+              candidateFolder = parts.slice(0, -1).join("/");
+              break;
+            }
+          }
+        }
+      }
+      if (!candidateFolder) return;
+
+      try {
+        const files = await api.scanTranscriptFolder(candidateFolder);
+        if (cancelled || files.length === 0) return;
+
+        const proposals: Record<string, CandidateProposal> = {};
+        for (const m of needed) {
+          const normLabel = normalizeLabel(m.studyLabel);
+          const matchedFile = files.find((f) => {
+            const normFileName = normalizeLabel(f.name.replace(/\.[^.]+$/, ""));
+            return normFileName.includes(normLabel) || normLabel.includes(normFileName);
+          });
+
+          if (matchedFile) {
+            let hashMatch = false;
+            let count = 0;
+            try {
+              const mergeSameSpeaker =
+                useAppStore.getState().preferences.merge_same_speaker;
+              const { segments } = await parseTranscriptFile(
+                matchedFile.raw_text,
+                mergeSameSpeaker,
+                matchedFile.path,
+              );
+              count = segments.length;
+              if (m.remoteContentHash) {
+                const computedHash = await api.hashCandidateSegments(
+                  segments.map((s, idx) => ({ index: idx, text: s.text })),
+                );
+                hashMatch = computedHash === m.remoteContentHash;
+              }
+            } catch {
+              // Ignore
+            }
+
+            proposals[m.studyLabel] = {
+              path: matchedFile.path,
+              name: matchedFile.name,
+              hashMatch,
+              count,
+            };
+          }
+        }
+
+        if (!cancelled) {
+          setCandidates(proposals);
+        }
+      } catch {
+        // Non-fatal scan error
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [stage, needed, lastTranscriptFolder]);
+
+  async function acceptCandidate(m: MissingTranscript, filePath: string) {
+    setImporting(m.studyLabel);
+    setImportError(null);
+    try {
+      const store = useProjectStore.getState();
+      const interview = await resolveInterviewForImport(
+        m.studyLabel,
+        store.createInterview,
+      );
+      await store.selectInterview(interview.id);
+      const count = await store.importVtt(filePath);
+
+      const parts = filePath.replace(/\\/g, "/").split("/");
+      if (parts.length > 1) {
+        setLastTranscriptFolder(parts.slice(0, -1).join("/"));
+      }
+
+      const candidate = candidates[m.studyLabel];
+      setLinked((prev) => ({
+        ...prev,
+        [m.studyLabel]: {
+          count,
+          expected: m.segmentCount,
+          keptAnyway: false,
+          hashMatched: candidate?.hashMatch,
+        },
+      }));
+    } catch (e) {
+      setImportError(
+        `Could not import ${m.studyLabel}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setImporting(null);
     }
   }
 
@@ -300,11 +475,42 @@ export function JoinStudyModal() {
 
       await store.selectInterview(interview.id);
       const count = await store.importVtt(file);
+
+      const parts = file.replace(/\\/g, "/").split("/");
+      if (parts.length > 1) {
+        setLastTranscriptFolder(parts.slice(0, -1).join("/"));
+      }
+
+      let hashMatched = false;
+      let hashMismatch = false;
+      if (m.remoteContentHash) {
+        try {
+          const raw = await api.readTranscriptFile(file);
+          const mergeSameSpeaker =
+            useAppStore.getState().preferences.merge_same_speaker;
+          const { segments } = await parseTranscriptFile(raw, mergeSameSpeaker, file);
+          const computedHash = await api.hashCandidateSegments(
+            segments.map((s, idx) => ({ index: idx, text: s.text })),
+          );
+          if (computedHash === m.remoteContentHash) {
+            hashMatched = true;
+          } else {
+            hashMismatch = true;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       setLinked((prev) => ({
         ...prev,
-        // A re-pick after a mismatch replaces the transcript, so the new count
-        // is judged on its own — the earlier "kept anyway" must not carry over.
-        [m.studyLabel]: { count, expected: m.segmentCount, keptAnyway: false },
+        [m.studyLabel]: {
+          count,
+          expected: m.segmentCount,
+          keptAnyway: false,
+          hashMatched,
+          hashMismatch,
+        },
       }));
     } catch (e) {
       setImportError(
@@ -327,14 +533,14 @@ export function JoinStudyModal() {
         await openProject(opts.existingPath);
         await api.syncJoinProject(membership.projectId);
       } else {
-        // The local project is scaffolding: the title and the coder's name both
-        // come off the server — the name on the membership is the name the group
-        // knows, so filing under anything else would split their work across two
-        // names.
         const parentDir = await api.getProjectsLibraryDir();
+        const folderName =
+          targetVerdict && "suggested_name" in targetVerdict
+            ? targetVerdict.suggested_name
+            : slugify(membership.title);
         const created = await api.createProject({
           parent_dir: parentDir,
-          project_name: slugify(membership.title),
+          project_name: folderName,
           title: membership.title,
           coders: [membership.coderName],
         });
@@ -348,10 +554,6 @@ export function JoinStudyModal() {
       void useSyncStore.getState().refreshGroup();
       void useSyncStore.getState().refreshStatus();
 
-      // That first sync is pull-only: this machine has no transcripts, so it
-      // takes the codebook and the interview roster and contributes nothing.
-      // What comes back is the list of files to fetch from the shared folder,
-      // and it is the wizard's last step — not a footnote on the way out.
       if (outcome && outcome.missingTranscripts && outcome.missingTranscripts.length > 0) {
         setNeeded(outcome.missingTranscripts);
         setStage("imports");
@@ -359,7 +561,7 @@ export function JoinStudyModal() {
       }
       close();
     } catch (e) {
-      setError(String(e));
+      setError(formatJoinError(e));
       if (opts.existingPath && !hadProject) {
         try {
           await useProjectStore.getState().closeProject();
@@ -442,12 +644,22 @@ export function JoinStudyModal() {
           <div className="scroll flex-1 px-9 pb-4 pt-9">
             {error && (
               <div
-                className="mb-4 flex items-start gap-2 rounded-[12px] px-3 py-2.5 text-[12.5px]"
+                className="mb-4 flex flex-col gap-1 rounded-[12px] px-3 py-2.5 text-[12.5px]"
                 style={{ background: "var(--danger-soft)", color: "var(--danger)" }}
                 role="alert"
               >
-                <Icon name="alert" size={15} />
-                <span>{error}</span>
+                <div className="flex items-start gap-2">
+                  <Icon name="alert" size={15} className="mt-0.5 shrink-0" />
+                  <span className="font-medium">{error.message}</span>
+                </div>
+                {error.detail && (
+                  <details className="ml-6 text-[11px] opacity-80">
+                    <summary className="cursor-pointer">Technical details</summary>
+                    <pre className="mt-1 whitespace-pre-wrap font-mono text-[10.5px]">
+                      {error.detail}
+                    </pre>
+                  </details>
+                )}
               </div>
             )}
 
@@ -612,6 +824,51 @@ export function JoinStudyModal() {
                 heading="Your copy of the study"
                 lede={`“${pendingMembership.title}” — as ${pendingMembership.coderName}. A new folder is the usual path. Use an existing folder only if this machine already has the study, unbound.`}
               >
+                {targetVerdict && targetVerdict.verdict === "already_set_up_here" && (
+                  <div
+                    className="mb-3 rounded-[12px] p-3 text-[12.5px]"
+                    style={{ background: "var(--fill)", border: "1px solid var(--border)" }}
+                  >
+                    <p className="font-semibold">This study is already set up on this computer.</p>
+                    <p className="mt-1 opacity-80">
+                      Located at <span className="font-mono">{targetVerdict.path}</span>. You can open it directly from the home screen.
+                    </p>
+                  </div>
+                )}
+                {targetVerdict && targetVerdict.verdict === "adoptable_unbound" && (
+                  <div
+                    className="mb-3 rounded-[12px] p-3 text-[12.5px]"
+                    style={{ background: "var(--fill)", border: "1px solid var(--accent)" }}
+                  >
+                    <p className="font-semibold text-[var(--accent)]">Local study found.</p>
+                    <p className="mt-1 opacity-80">
+                      A study folder is already here at <span className="font-mono">{targetVerdict.path}</span>. Choosing “Use a folder already on this computer” will bind it to this group.
+                    </p>
+                  </div>
+                )}
+                {targetVerdict && targetVerdict.verdict === "bound_elsewhere" && (
+                  <div
+                    className="mb-3 rounded-[12px] p-3 text-[12.5px]"
+                    style={{ background: "var(--warning-soft, #fef3c7)", color: "var(--warning, #b45309)" }}
+                  >
+                    <p className="font-semibold">Folder already bound to another group.</p>
+                    <p className="mt-1 opacity-90">
+                      A study folder at <span className="font-mono">{targetVerdict.path}</span> belongs to another group. A distinct folder name ({targetVerdict.suggested_name}) will be used instead.
+                    </p>
+                  </div>
+                )}
+                {targetVerdict && targetVerdict.verdict === "occupied" && (
+                  <div
+                    className="mb-3 rounded-[12px] p-3 text-[12.5px]"
+                    style={{ background: "var(--fill)", border: "1px solid var(--border)" }}
+                  >
+                    <p className="font-semibold">Folder name in use.</p>
+                    <p className="mt-1 opacity-80">
+                      The default folder name already exists. A distinct folder name ({targetVerdict.suggested_name}) will be created.
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-2.5" role="radiogroup">
                   <OptionCard
                     selected={copyChoice === "new"}
@@ -650,6 +907,7 @@ export function JoinStudyModal() {
                     const l = linked[m.studyLabel];
                     const done = linkedOk(m);
                     const mismatch = l && l.count !== l.expected && !l.keptAnyway;
+                    const candidate = candidates[m.studyLabel];
                     return (
                       <li
                         key={m.studyLabel}
@@ -678,9 +936,11 @@ export function JoinStudyModal() {
                               style={{ color: "var(--ok)" }}
                             >
                               <Icon name="check" size={13} />
-                              {l.count === l.expected
-                                ? `Linked — ${l.count} passages, matching`
-                                : "Linked"}
+                              {l.hashMatched
+                                ? `Linked — ${l.count} passages (verified)`
+                                : l.count === l.expected
+                                  ? `Linked — ${l.count} passages, matching`
+                                  : "Linked"}
                             </span>
                           ) : (
                             <button
@@ -698,6 +958,41 @@ export function JoinStudyModal() {
                             </button>
                           )}
                         </div>
+
+                        {candidate && !done && (
+                          <div className="mt-2.5 flex items-center justify-between rounded-lg bg-[var(--surface)] p-2.5 text-[12px]">
+                            <span className="truncate">
+                              Found: <strong className="font-mono">{candidate.name}</strong>
+                              {candidate.hashMatch ? (
+                                <span
+                                  className="chip ml-2 text-[10px]"
+                                  style={{
+                                    background: "var(--ok-soft, #dcfce7)",
+                                    color: "var(--ok, #16a34a)",
+                                  }}
+                                >
+                                  Verified match
+                                </span>
+                              ) : (
+                                <span className="hint ml-2">({candidate.count} passages)</span>
+                              )}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-xs shrink-0 ml-2"
+                              disabled={importing !== null}
+                              onClick={() => void acceptCandidate(m, candidate.path)}
+                            >
+                              Use this file
+                            </button>
+                          </div>
+                        )}
+
+                        {l && l.hashMismatch && (
+                          <p className="mt-1 text-[11.5px]" style={{ color: "var(--warning, #b45309)" }}>
+                            ⚠️ Transcript content does not match the server hash. Double check that you picked the right file.
+                          </p>
+                        )}
 
                         {mismatch && l && (
                           <div className="notice notice-warn mt-2.5">

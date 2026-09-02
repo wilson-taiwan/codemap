@@ -2197,6 +2197,135 @@ pub fn is_project_path(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+pub fn inspect_join_target(
+    parent_dir: &str,
+    slug: &str,
+    project_id: &str,
+) -> rusqlite::Result<crate::models::JoinTargetVerdict> {
+    let clean_slug = slug.trim();
+    let already_suffixed = PROJECT_EXTS
+        .iter()
+        .any(|ext| clean_slug.ends_with(&format!(".{ext}")));
+    let base_name = if already_suffixed {
+        let mut s = clean_slug.to_string();
+        for ext in PROJECT_EXTS {
+            if s.ends_with(&format!(".{ext}")) {
+                s.truncate(s.len() - (ext.len() + 1));
+                break;
+            }
+        }
+        s
+    } else {
+        clean_slug.to_string()
+    };
+
+    let folder_name = format!("{}.{}", base_name, PROJECT_EXT);
+    let target_path = Path::new(parent_dir).join(&folder_name);
+    let target_path_str = target_path.to_string_lossy().to_string();
+
+    if !target_path.exists() {
+        return Ok(crate::models::JoinTargetVerdict::Available {
+            suggested_name: folder_name,
+            suggested_path: target_path_str,
+        });
+    }
+
+    // Find suffixed name -2 .. -99
+    let mut suffixed_name = None;
+    let mut suffixed_path_str = None;
+    for i in 2..=99 {
+        let candidate_folder = format!("{}-{}.{}", base_name, i, PROJECT_EXT);
+        let candidate_path = Path::new(parent_dir).join(&candidate_folder);
+        if !candidate_path.exists() {
+            suffixed_name = Some(candidate_folder);
+            suffixed_path_str = Some(candidate_path.to_string_lossy().to_string());
+            break;
+        }
+    }
+
+    let (suggested_name, suggested_path) = match (suffixed_name, suffixed_path_str) {
+        (Some(n), Some(p)) => (n, p),
+        _ => {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "All suffixed folders from -2 to -99 are already in use".into(),
+            ));
+        }
+    };
+
+    let db_path = target_path.join("project.db");
+    if !db_path.exists() {
+        return Ok(crate::models::JoinTargetVerdict::Occupied {
+            path: target_path_str,
+            suggested_name,
+            suggested_path,
+        });
+    }
+
+    let conn = match rusqlite::Connection::open_with_flags(
+        &db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) {
+        Ok(c) => c,
+        Err(_) => {
+            return Ok(crate::models::JoinTargetVerdict::Occupied {
+                path: target_path_str,
+                suggested_name,
+                suggested_path,
+            });
+        }
+    };
+
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sync_state'",
+            [],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    if !table_exists {
+        return Ok(crate::models::JoinTargetVerdict::AdoptableUnbound {
+            path: target_path_str,
+        });
+    }
+
+    let bound: Option<String> = conn
+        .query_row(
+            "SELECT value FROM sync_state WHERE key = 'group_bound'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .unwrap_or(None);
+
+    let stored_project_id: Option<String> = conn
+        .query_row(
+            "SELECT value FROM sync_state WHERE key = 'project_id'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .unwrap_or(None);
+
+    if bound.as_deref() == Some("1") {
+        if stored_project_id.as_deref() == Some(project_id) {
+            Ok(crate::models::JoinTargetVerdict::AlreadySetUpHere {
+                path: target_path_str,
+            })
+        } else {
+            Ok(crate::models::JoinTargetVerdict::BoundElsewhere {
+                path: target_path_str,
+                suggested_name,
+                suggested_path,
+            })
+        }
+    } else {
+        Ok(crate::models::JoinTargetVerdict::AdoptableUnbound {
+            path: target_path_str,
+        })
+    }
+}
+
 pub fn open_project(path: &str) -> rusqlite::Result<Connection> {
     let project_path = Path::new(path);
     if !is_project_path(project_path) {
@@ -8242,5 +8371,118 @@ mod tests {
         ));
         assert!(is_box_path_str("/Users/test/Box Sync/MyStudy"));
         assert!(!is_box_path_str("/Users/test/Documents/Fleuron/MyStudy"));
+    }
+
+    #[test]
+    fn inspect_join_target_covers_all_verdicts() {
+        use crate::models::JoinTargetVerdict;
+
+        let temp = tempfile::tempdir().unwrap();
+        let parent = temp.path();
+        let parent_str = parent.to_string_lossy();
+
+        // 1. Available
+        let v1 = inspect_join_target(&parent_str, "alpha", "p1").unwrap();
+        match v1 {
+            JoinTargetVerdict::Available {
+                suggested_name,
+                suggested_path,
+            } => {
+                assert_eq!(suggested_name, "alpha.fleuron");
+                assert_eq!(
+                    suggested_path,
+                    parent.join("alpha.fleuron").to_string_lossy()
+                );
+            }
+            other => panic!("expected Available, got {:?}", other),
+        }
+
+        // 2. Occupied: folder exists without project.db
+        let occ_folder = parent.join("alpha.fleuron");
+        std::fs::create_dir_all(&occ_folder).unwrap();
+        let v2 = inspect_join_target(&parent_str, "alpha", "p1").unwrap();
+        match v2 {
+            JoinTargetVerdict::Occupied {
+                path,
+                suggested_name,
+                suggested_path,
+            } => {
+                assert_eq!(path, occ_folder.to_string_lossy());
+                assert_eq!(suggested_name, "alpha-2.fleuron");
+                assert_eq!(
+                    suggested_path,
+                    parent.join("alpha-2.fleuron").to_string_lossy()
+                );
+            }
+            other => panic!("expected Occupied, got {:?}", other),
+        }
+
+        // 3. AdoptableUnbound: project.db exists, sync_state has group_bound = 0
+        let unbound_folder = parent.join("beta.fleuron");
+        std::fs::create_dir_all(&unbound_folder).unwrap();
+        let db_path = unbound_folder.join("project.db");
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute(
+                "CREATE TABLE sync_state (key TEXT PRIMARY KEY, value TEXT)",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO sync_state (key, value) VALUES ('group_bound', '0')",
+                [],
+            )
+            .unwrap();
+        }
+        let v3 = inspect_join_target(&parent_str, "beta", "p1").unwrap();
+        match v3 {
+            JoinTargetVerdict::AdoptableUnbound { path } => {
+                assert_eq!(path, unbound_folder.to_string_lossy());
+            }
+            other => panic!("expected AdoptableUnbound, got {:?}", other),
+        }
+
+        // 4. AlreadySetUpHere: bound = 1 and project_id matches
+        let bound_folder = parent.join("gamma.fleuron");
+        std::fs::create_dir_all(&bound_folder).unwrap();
+        let db_path = bound_folder.join("project.db");
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute(
+                "CREATE TABLE sync_state (key TEXT PRIMARY KEY, value TEXT)",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO sync_state (key, value) VALUES ('group_bound', '1'), ('project_id', 'group-123')",
+                [],
+            )
+            .unwrap();
+        }
+        let v4 = inspect_join_target(&parent_str, "gamma", "group-123").unwrap();
+        match v4 {
+            JoinTargetVerdict::AlreadySetUpHere { path } => {
+                assert_eq!(path, bound_folder.to_string_lossy());
+            }
+            other => panic!("expected AlreadySetUpHere, got {:?}", other),
+        }
+
+        // 5. BoundElsewhere: bound = 1 and project_id differs -> suggests gamma-2.fleuron
+        let v5 = inspect_join_target(&parent_str, "gamma", "different-group").unwrap();
+        match v5 {
+            JoinTargetVerdict::BoundElsewhere {
+                path,
+                suggested_name,
+                suggested_path,
+            } => {
+                assert_eq!(path, bound_folder.to_string_lossy());
+                assert_eq!(suggested_name, "gamma-2.fleuron");
+                assert_eq!(
+                    suggested_path,
+                    parent.join("gamma-2.fleuron").to_string_lossy()
+                );
+            }
+            other => panic!("expected BoundElsewhere, got {:?}", other),
+        }
     }
 }

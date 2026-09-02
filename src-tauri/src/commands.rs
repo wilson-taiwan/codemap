@@ -246,7 +246,7 @@ impl AppState {
         restored.map(|_| ())
     }
 
-    fn project_path_str(&self) -> Result<String, String> {
+    pub fn project_path_str(&self) -> Result<String, String> {
         let guard = self.project_path.lock().map_err(|e| e.to_string())?;
         guard
             .as_ref()
@@ -264,7 +264,7 @@ pub fn create_project(
     state.ensure_update_writable()?;
     let path = db::create_project(&input).map_err(|e| {
         crate::file_error::classified(
-            "Could not create the study folder. If that location is protected or full, choose another location.",
+            "Could not create the study folder. Check that you have permission to write to this location.",
             &e.to_string(),
         )
     })?;
@@ -278,10 +278,26 @@ pub fn create_project(
     *state.project_path.lock().map_err(|e| e.to_string())? = Some(path.clone());
     *state.db.lock().map_err(|e| e.to_string())? = Some(conn);
 
-    state.with_conn(|conn| {
+    let info = state.with_conn(|conn| {
         initialize_local_v2_metadata(&app, conn)?;
         db::get_project_info(conn, &path.to_string_lossy()).map_err(|e| e.to_string())
-    })
+    })?;
+
+    let path_str = path.to_string_lossy().to_string();
+    let _ = app_data::record_recent_project(
+        &app,
+        RecordRecentProjectInput {
+            path: path_str,
+            title: info.title.clone(),
+            group_id: None,
+            group_title: None,
+            coder_name: None,
+            former_group_id: None,
+            former_group_title: None,
+            readiness: None,
+        },
+    );
+    Ok(info)
 }
 
 #[tauri::command]
@@ -307,6 +323,39 @@ pub async fn open_project(
     *state.db.lock().map_err(|e| e.to_string())? = Some(conn);
 
     state.with_conn(|conn| initialize_local_v2_metadata(&app, conn))?;
+
+    // Task 10(c): Two folders, one group guard
+    let group_id = state
+        .with_conn(|conn| sync::get_state(conn, sync::KEY_PROJECT_ID).map_err(|e| e.to_string()))
+        .ok()
+        .flatten();
+    let is_bound = state
+        .with_conn(|conn| sync::is_bound(conn).map_err(|e| e.to_string()))
+        .unwrap_or(false);
+    if is_bound {
+        if let Some(ref gid) = group_id {
+            if let Ok(recents) = crate::app_data::list_recent_projects(&app) {
+                for r in recents {
+                    if r.group_id.as_ref() == Some(gid)
+                        && r.path != path
+                        && Path::new(&r.path).exists()
+                    {
+                        return Err(format!("TWO_FOLDERS_ONE_GROUP|{}|{}", r.path, gid));
+                    }
+                }
+            }
+        }
+    }
+
+    // Task 11: Write open marker
+    let marker_path = PathBuf::from(&path);
+    let coder_name = snapshot
+        .workspace
+        .active_coder
+        .clone()
+        .unwrap_or_else(|| "Me".into());
+    let machine_name = crate::open_marker::get_machine_name();
+    let _ = crate::open_marker::write_marker(&marker_path, &machine_name, &coder_name);
 
     state.maybe_start_realtime(&app);
     state.request_background_sync(
@@ -334,6 +383,9 @@ pub fn close_project(app: tauri::AppHandle, state: State<'_, AppState>) -> Resul
     state.sync_coordinator.cancel();
     state.realtime.stop(&app);
     state.checkpoint_open_project();
+    if let Ok(p) = state.project_path_str() {
+        crate::open_marker::remove_marker(Path::new(&p));
+    }
     *state.project_path.lock().map_err(|e| e.to_string())? = None;
     *state.db.lock().map_err(|e| e.to_string())? = None;
     Ok(())
@@ -521,6 +573,14 @@ pub fn adopt_project_title(
         .with_conn(|conn| db::get_workspace_state(conn).map_err(|e| e.to_string()))
         .map(|ws| ws.active_coder)
         .unwrap_or(None);
+    let (former_group_id, former_group_title) = state
+        .with_conn(|conn| {
+            let id = sync::get_state(conn, sync::KEY_FORMER_GROUP_ID).map_err(|e| e.to_string())?;
+            let title =
+                sync::get_state(conn, sync::KEY_FORMER_GROUP_TITLE).map_err(|e| e.to_string())?;
+            Ok((id, title))
+        })
+        .unwrap_or((None, None));
     let _ = app_data::record_recent_project(
         &app,
         RecordRecentProjectInput {
@@ -529,6 +589,9 @@ pub fn adopt_project_title(
             group_id,
             group_title: Some(title),
             coder_name,
+            former_group_id,
+            former_group_title,
+            readiness: None,
         },
     );
     Ok(project)
@@ -1966,6 +2029,9 @@ pub fn sync_join_project(
                 group_id: Some(project_id),
                 group_title: None,
                 coder_name: None,
+                former_group_id: None,
+                former_group_title: None,
+                readiness: None,
             },
         );
     }
@@ -2339,6 +2405,9 @@ pub async fn sync_delete_group(
                         group_id: None,
                         group_title: None,
                         coder_name: None,
+                        former_group_id: Some(target_id.clone()),
+                        former_group_title: target_recent.group_title.clone(),
+                        readiness: None,
                     },
                 );
             }
@@ -2372,6 +2441,38 @@ pub async fn sync_leave_group(
         })?;
     }
 
+    if let (Ok(cfg), Ok(session), Ok(client)) = (
+        sync_server_config(&app),
+        state.sync_session(),
+        sync::client(),
+    ) {
+        if let Ok(info) = sync::group_info_fetch(&client, &cfg, &session).await {
+            let my_coder_name = state
+                .with_conn(|conn| {
+                    sync::get_state(conn, sync::KEY_CODER_NAME).map_err(|e| e.to_string())
+                })
+                .ok()
+                .flatten()
+                .or_else(|| {
+                    info.members
+                        .iter()
+                        .find(|m| m.user_id.as_deref() == Some(&session.user_id))
+                        .map(|m| m.coder_name.clone())
+                })
+                .unwrap_or_else(|| "Me".into());
+            let _ = crate::app_data::record_left_study(
+                &app,
+                crate::models::LeftStudy {
+                    project_id: target_id.clone(),
+                    title: info.title,
+                    group_key: info.group_key,
+                    coder_name: my_coder_name,
+                    left_at: chrono::Utc::now().to_rfc3339(),
+                },
+            );
+        }
+    }
+
     let server_res = match (
         sync_server_config(&app),
         state.sync_session(),
@@ -2398,7 +2499,7 @@ pub async fn sync_leave_group(
             }
             sync::LocalLeaveOutcome::UnboundServerRejected(msg) => {
                 state.realtime.stop(&app);
-                Err(msg)
+                Err(format!("Could not remove membership on server: {msg}"))
             }
         }
     } else {
@@ -2422,6 +2523,9 @@ pub async fn sync_leave_group(
                         group_id: None,
                         group_title: None,
                         coder_name: None,
+                        former_group_id: Some(target_id.clone()),
+                        former_group_title: target_recent.group_title.clone(),
+                        readiness: None,
                     },
                 );
             }
@@ -2461,6 +2565,9 @@ pub fn sync_detach_local(
                             group_id: None,
                             group_title: None,
                             coder_name: None,
+                            former_group_id: Some(target_id.clone()),
+                            former_group_title: r.group_title.clone(),
+                            readiness: None,
                         },
                     );
                 }
@@ -2483,6 +2590,9 @@ pub fn sync_detach_local(
                         group_id: None,
                         group_title: None,
                         coder_name: None,
+                        former_group_id: Some(target_id.clone()),
+                        former_group_title: target_recent.group_title.clone(),
+                        readiness: None,
                     },
                 );
                 return Ok(());
@@ -2539,6 +2649,63 @@ pub fn project_deletion_summary(path: String) -> Result<ProjectDeletionSummary, 
 #[tauri::command]
 pub fn delete_project_folder(path: String) -> Result<(), String> {
     db::delete_project_folder_impl(&path)
+}
+
+#[tauri::command]
+pub fn inspect_join_target(
+    parent_dir: String,
+    slug: String,
+    project_id: String,
+) -> Result<crate::models::JoinTargetVerdict, String> {
+    db::inspect_join_target(&parent_dir, &slug, &project_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_left_studies(app: tauri::AppHandle) -> Result<Vec<crate::models::LeftStudy>, String> {
+    app_data::list_left_studies(&app)
+}
+
+#[tauri::command]
+pub fn resolve_study_location(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<crate::models::StudyLocation, String> {
+    Ok(crate::location::resolve_study_location(&app, &path))
+}
+
+#[tauri::command]
+pub fn auto_relink_study(
+    app: tauri::AppHandle,
+    path: String,
+    expected_project_id: Option<String>,
+) -> Result<crate::models::RelinkOutcome, String> {
+    Ok(crate::location::auto_relink_study(
+        &app,
+        &path,
+        expected_project_id.as_deref(),
+    ))
+}
+
+#[tauri::command]
+pub fn study_readiness(path: String) -> Result<crate::models::StudyReadiness, String> {
+    Ok(crate::readiness::study_readiness(&path))
+}
+
+#[tauri::command]
+pub fn check_open_marker(path: String) -> Result<crate::open_marker::OpenMarkerStatus, String> {
+    let machine_name = crate::open_marker::get_machine_name();
+    Ok(crate::open_marker::check_marker(
+        Path::new(&path),
+        &machine_name,
+    ))
+}
+
+#[tauri::command]
+pub fn heartbeat_open_marker(state: State<'_, AppState>) -> Result<(), String> {
+    if let Ok(p) = state.project_path_str() {
+        crate::open_marker::heartbeat_marker(Path::new(&p))?;
+    }
+    Ok(())
 }
 
 /// Change the name the signed-in member files under in this group.
@@ -2707,6 +2874,63 @@ async fn sync_attempt(
         interview_cursor.as_deref(),
     )
     .await?;
+
+    // Task 8: When pull is empty and idle for > 60s, check if membership or group was removed
+    let empty_pull =
+        pulled.coded.is_empty() && pulled.codes.is_empty() && pulled.interviews.is_empty();
+    if empty_pull {
+        let last_synced = state
+            .with_sync_target(target, |conn| {
+                sync::get_state(conn, sync::KEY_LAST_SYNCED).map_err(|e| e.to_string())
+            })
+            .unwrap_or(None);
+
+        let should_check_membership = match last_synced {
+            None => true,
+            Some(ts) => {
+                if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&ts) {
+                    chrono::Utc::now()
+                        .signed_duration_since(dt.with_timezone(&chrono::Utc))
+                        .num_seconds()
+                        > 60
+                } else {
+                    true
+                }
+            }
+        };
+
+        if should_check_membership {
+            if let Ok(session) = state.sync_session() {
+                if let Ok(Some(reason)) = sync::check_access_lost_fn(client, cfg, &session).await {
+                    let target_path_str = target.project_path.to_string_lossy().to_string();
+
+                    let _ = state.with_sync_target(target, |conn| {
+                        sync::unbind_from_group(conn).map_err(|e| e.to_string())
+                    });
+
+                    if let Ok(recents) = crate::app_data::list_recent_projects(app) {
+                        if let Some(r) = recents.iter().find(|r| r.path == target_path_str) {
+                            let _ = crate::app_data::record_recent_project(
+                                app,
+                                crate::models::RecordRecentProjectInput {
+                                    path: r.path.clone(),
+                                    title: r.title.clone(),
+                                    group_id: None,
+                                    group_title: None,
+                                    coder_name: None,
+                                    former_group_id: Some(cfg.project_id.clone()),
+                                    former_group_title: r.group_title.clone(),
+                                    readiness: None,
+                                },
+                            );
+                        }
+                    }
+                    state.realtime.stop(app);
+                    return Err(sync::SyncError::Network(reason.user_message().to_string()));
+                }
+            }
+        }
+    }
 
     // ── Phase 3: apply, in one transaction.
     let synced_at = db::now_iso();

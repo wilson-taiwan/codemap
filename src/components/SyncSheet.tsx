@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { appConfirm } from "../store/confirm-store";
+import { VOCABULARY } from "../lib/collab-vocabulary";
 import { useShallow } from "zustand/react/shallow";
 import { Modal } from "./ui/Surfaces";
 import { Icon } from "./ui/Icon";
@@ -245,9 +246,9 @@ export function SyncSheet() {
 
   async function handleLeaveStudy() {
     const ok = await appConfirm({
-      title: "Leave study?",
+      title: "Leave the group?",
       body: "Your coding and membership on the server will be removed. Transcripts on your computer are untouched.",
-      confirmLabel: "Leave study",
+      confirmLabel: VOCABULARY.LEAVE_GROUP,
       cancelLabel: "Stay",
       destructive: true,
       dedupeKey: "leave-study",
@@ -743,7 +744,7 @@ export function SyncSheet() {
           {isGroupAdmin && (
             <section className="mt-8 border-t pt-6" style={{ borderColor: "var(--danger-soft)" }}>
               <h3 className="label mb-1.5" style={{ color: "var(--danger)" }}>
-                Delete group
+                {VOCABULARY.DELETE_GROUP_FOR_EVERYONE}
               </h3>
               <p className="hint mb-3 text-[12.5px]">
                 Permanently deletes the group from the sync server. Every coder's synced coding goes with it and cannot be recovered. Local project folders on each Mac remain intact as standalone studies.
@@ -769,7 +770,7 @@ export function SyncSheet() {
                   }
                   onClick={() => void handleDeleteGroup()}
                 >
-                  {deletingGroup ? "Deleting…" : "Delete group"}
+                  {deletingGroup ? "Deleting…" : VOCABULARY.DELETE_GROUP_FOR_EVERYONE}
                 </button>
               </div>
             </section>
@@ -813,7 +814,7 @@ export function SyncSheet() {
             when they join.
           </p>
 
-          <h3 className="label mb-1.5">Share this study</h3>
+          <h3 className="label mb-1.5">{VOCABULARY.SHARE_WITH_GROUP}</h3>
           <p className="hint mb-2">
             Shares “{project?.title ?? "this study"}” and gives it a study key.
             Send the key to your coder.
@@ -824,7 +825,7 @@ export function SyncSheet() {
             disabled={!startName.trim() || starting || joining}
             onClick={() => void startGroup()}
           >
-            {starting ? "Sharing…" : "Share this study"}
+            {starting ? "Sharing…" : VOCABULARY.SHARE_WITH_GROUP}
           </button>
 
           <h3 className="label mb-1.5 mt-5">Or join a shared study</h3>

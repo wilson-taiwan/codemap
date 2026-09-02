@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.0]
+
+### Added
+
+- **Two-section home layout:** The home screen clearly separates "On this computer only" from "Shared with a group", eliminating ambiguity over which studies sync and which remain strictly local.
+- **Collaborative vocabulary:** Consistent, plain-language terminology across all menus, dialogs, and alerts ("Share with a group", "Stop syncing on this computer", "Leave group", "Delete group for everyone", "Delete from this computer").
+- **Folder collision and join target inspection:** The join wizard inspects candidate folder names before creation, detects adoptable unbound studies, and generates clean disambiguated names when collisions exist.
+- **Transcript candidate proposal and verification:** In the join wizard, candidate transcript files are automatically matched and compared against remote content hashes, verifying transcript identity before coding starts.
+- **Same-titled study disambiguation:** Studies sharing the same title are flagged with clear warning banners and last-opened timestamps to differentiate separate project folders.
+- **Duplicate share guard:** Attempting to share a study with the same name as an existing group warns the user and offers to connect to the existing group instead.
+- **Sole-member leave guard:** Leaving a group as the only remaining member requires typing the full study title to confirm, preventing permanent loss of access to cloud data.
+- **Access lost handling:** If access to a group is revoked or deleted on the server, local coding and project files are preserved and converted back to a standalone local study.
+- **Study location resolver & cloud eviction detection:** Accurately diagnoses moved, missing, or cloud-evicted files (0-byte/cloud stubs) with clear explanations and re-download guidance.
+- **Advisory concurrent open markers:** Detects when a study folder on a shared or cloud drive is actively open on another machine, warning before conflicting changes occur.
+- **Study readiness checking:** Checks study folder readiness in the background, surfacing missing transcripts or unreadable states on project cards.
+- **Two-machine QA test suites:** Added `scripts/Invoke-FleuronCollabQA.ps1` (pure ASCII) and `scripts/collab-qa.sh` covering end-to-end collaboration scenarios.
+
 ## [2.2.0]
 
 ### Added

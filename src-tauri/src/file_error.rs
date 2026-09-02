@@ -21,6 +21,8 @@ pub enum FileAccessCategory {
     StorageFull,
     ReadOnlyStorage,
     FileInUse,
+    NameInUse,
+    ContentNotDownloaded,
     InvalidProject,
 }
 
@@ -32,6 +34,8 @@ impl FileAccessCategory {
             FileAccessCategory::StorageFull => "storage_full",
             FileAccessCategory::ReadOnlyStorage => "read_only_storage",
             FileAccessCategory::FileInUse => "file_in_use",
+            FileAccessCategory::NameInUse => "name_in_use",
+            FileAccessCategory::ContentNotDownloaded => "content_not_downloaded",
             FileAccessCategory::InvalidProject => "invalid_project",
         }
     }
@@ -55,7 +59,7 @@ pub fn classify_io(err: &std::io::Error) -> FileAccessCategory {
 /// through `.to_string()`, rusqlite texts, Windows API texts).
 pub fn classify_message(raw: &str) -> FileAccessCategory {
     let lower = raw.to_lowercase();
-    const TABLE: [(&str, FileAccessCategory); 9] = [
+    const TABLE: [(&str, FileAccessCategory); 13] = [
         ("access is denied", FileAccessCategory::PermissionDenied),
         ("permission denied", FileAccessCategory::PermissionDenied),
         (
@@ -68,11 +72,26 @@ pub fn classify_message(raw: &str) -> FileAccessCategory {
         ("not enough space", FileAccessCategory::StorageFull),
         ("used by another process", FileAccessCategory::FileInUse),
         ("being used by another", FileAccessCategory::FileInUse),
+        (
+            "project folder already exists",
+            FileAccessCategory::NameInUse,
+        ),
+        ("folder already exists", FileAccessCategory::NameInUse),
+        ("already exists", FileAccessCategory::NameInUse),
+        ("file exists", FileAccessCategory::NameInUse),
     ];
     for (needle, category) in TABLE {
         if lower.contains(needle) {
             return category;
         }
+    }
+    // Eviction signatures (iCloud / Box / OneDrive placeholder)
+    if lower.contains("etimedout")
+        || lower.contains("os error 60")
+        || lower.contains("operation timed out")
+        || lower.contains("mmap failed")
+    {
+        return FileAccessCategory::ContentNotDownloaded;
     }
     // Windows read-only media surfaces as os error 19; macOS EROFS as 30.
     if lower.contains("os error 19") || lower.contains("os error 30") {
@@ -163,6 +182,28 @@ mod tests {
         assert_eq!(
             classify_message("The media is write protected. (os error 19)"),
             FileAccessCategory::ReadOnlyStorage
+        );
+        // Folder exists / Name in use (Task 3)
+        assert_eq!(
+            classify_message("Invalid parameter name: Project folder already exists"),
+            FileAccessCategory::NameInUse
+        );
+        assert_eq!(
+            classify_message("destination path already exists"),
+            FileAccessCategory::NameInUse
+        );
+        // Eviction / Content not downloaded (Task 9)
+        assert_eq!(
+            classify_message("Operation timed out (os error 60)"),
+            FileAccessCategory::ContentNotDownloaded
+        );
+        assert_eq!(
+            classify_message("resource temporarily unavailable: etimedout"),
+            FileAccessCategory::ContentNotDownloaded
+        );
+        assert_eq!(
+            classify_message("mmap failed: resource temporarily unavailable"),
+            FileAccessCategory::ContentNotDownloaded
         );
         // Unknown falls back to invalid_project, never to a panic
         assert_eq!(

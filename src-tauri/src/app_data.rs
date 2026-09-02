@@ -124,6 +124,28 @@ pub(crate) fn truncate_recents_partition(projects: &mut Vec<RecentProject>) {
     projects.sort_by(|a, b| b.last_opened_at.cmp(&a.last_opened_at));
 }
 
+const LEFT_STUDIES_FILE: &str = "left-studies.json";
+
+pub fn list_left_studies(app: &tauri::AppHandle) -> Result<Vec<crate::models::LeftStudy>, String> {
+    let path = app_data_dir(app)?.join(LEFT_STUDIES_FILE);
+    read_json(&path)
+}
+
+pub fn record_left_study(
+    app: &tauri::AppHandle,
+    study: crate::models::LeftStudy,
+) -> Result<Vec<crate::models::LeftStudy>, String> {
+    let path = app_data_dir(app)?.join(LEFT_STUDIES_FILE);
+    let mut list: Vec<crate::models::LeftStudy> = read_json(&path).unwrap_or_default();
+    list.retain(|s| s.project_id != study.project_id);
+    list.insert(0, study);
+    if list.len() > 20 {
+        list.truncate(20);
+    }
+    write_json(&path, &list)?;
+    Ok(list)
+}
+
 pub fn record_recent_project(
     app: &tauri::AppHandle,
     input: RecordRecentProjectInput,
@@ -143,6 +165,9 @@ pub fn record_recent_project(
             group_id: input.group_id,
             group_title: input.group_title,
             coder_name: input.coder_name,
+            former_group_id: input.former_group_id,
+            former_group_title: input.former_group_title,
+            readiness: input.readiness,
         },
     );
 
@@ -150,6 +175,22 @@ pub fn record_recent_project(
 
     write_json(&path, &file)?;
     Ok(file.projects)
+}
+
+pub fn update_recent_project_path(
+    app: &tauri::AppHandle,
+    old_path: &str,
+    new_path: &str,
+) -> Result<(), String> {
+    let path = app_data_dir(app)?.join(RECENT_FILE);
+    let mut file: RecentProjectsFile = read_json(&path)?;
+    for p in &mut file.projects {
+        if p.path == old_path {
+            p.path = new_path.to_string();
+        }
+    }
+    write_json(&path, &file)?;
+    Ok(())
 }
 
 pub fn read_memberships_cache(app: &tauri::AppHandle) -> Result<MembershipsCache, String> {
@@ -318,6 +359,7 @@ mod tests {
                 group_id: Some(format!("group-{}", i)),
                 group_title: Some(format!("Group {}", i)),
                 coder_name: Some("Ada".into()),
+                ..Default::default()
             });
         }
 
@@ -330,6 +372,7 @@ mod tests {
                 group_id: None,
                 group_title: None,
                 coder_name: None,
+                ..Default::default()
             });
         }
 
@@ -438,6 +481,7 @@ mod tests {
             group_id: None,
             group_title: None,
             coder_name: None,
+            ..Default::default()
         };
         // Row whose folder does not exist must survive normalization.
         let projects = vec![

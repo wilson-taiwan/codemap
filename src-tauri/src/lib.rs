@@ -31,9 +31,12 @@ mod file_error;
 mod ids;
 #[cfg(test)]
 mod lifecycle_harness;
+pub mod location;
 mod menu;
 mod models;
+pub mod open_marker;
 pub mod pdf;
+pub mod readiness;
 mod realtime;
 pub mod run_marker;
 #[cfg(test)]
@@ -259,6 +262,13 @@ pub fn run() {
             commands::sync_detach_local,
             commands::project_deletion_summary,
             commands::delete_project_folder,
+            commands::inspect_join_target,
+            commands::list_left_studies,
+            commands::resolve_study_location,
+            commands::auto_relink_study,
+            commands::study_readiness,
+            commands::check_open_marker,
+            commands::heartbeat_open_marker,
             commands::sync_set_my_coder_name,
             commands::sync_sign_up,
             commands::sync_request_password_reset,
@@ -344,7 +354,11 @@ pub fn run() {
                 );
             }
             RunEvent::ExitRequested { .. } | RunEvent::Exit => {
-                app_handle.state::<AppState>().checkpoint_open_project();
+                let state = app_handle.state::<AppState>();
+                state.checkpoint_open_project();
+                if let Ok(p) = state.project_path_str() {
+                    open_marker::remove_marker(std::path::Path::new(&p));
+                }
                 if let Ok(app_dir) = app_data::app_data_dir(app_handle) {
                     run_marker::remove_current_run_marker(&app_dir);
                 }

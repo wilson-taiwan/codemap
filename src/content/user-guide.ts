@@ -40,7 +40,7 @@ export const USER_GUIDE_SECTIONS: GuideSection[] = [
     whenToUse: "Opening Fleuron, starting a study, or joining an existing study.",
     steps: [
       "Starting a study: Click 'Set up a new study' on the home screen. Name your study and choose a local folder.",
-      "Joining a study: Click 'Join a study' and paste the 8-character study key sent by your colleague.",
+      "Joining a study: Click 'Join with a key' and paste the 8-character study key sent by your colleague.",
       "Importing transcripts: Add participant IDs (e.g. P01, P02) and point Fleuron at your local .docx or .vtt transcript files.",
       "Coding text: Select any text passage in the transcript to open the coding bubble and apply or create codes.",
     ],

@@ -1478,6 +1478,33 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
     case "delete_project_folder": {
       return null;
     }
+    case "inspect_join_target": {
+      const parentDir = (args.parentDir as string) || "";
+      const slug = (args.slug as string) || "";
+      return {
+        verdict: "available",
+        suggested_name: slug,
+        suggested_path: `${parentDir}/${slug}`,
+      };
+    }
+    case "list_left_studies": {
+      return [];
+    }
+    case "resolve_study_location": {
+      return { state: "reachable" };
+    }
+    case "auto_relink_study": {
+      return { outcome: "not_found" };
+    }
+    case "study_readiness": {
+      return { kind: "ready" };
+    }
+    case "check_open_marker": {
+      return { status: "clear" };
+    }
+    case "heartbeat_open_marker": {
+      return null;
+    }
     case "sync_set_my_coder_name": {
       const next = ((args.coderName as string) || "Ada Lovelace").trim();
       if (

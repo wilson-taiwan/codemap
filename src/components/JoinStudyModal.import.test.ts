@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolveInterviewForImport } from "./JoinStudyModal";
+import { formatJoinError, resolveInterviewForImport } from "./JoinStudyModal";
 import { api } from "../lib/api";
 import type { Interview } from "../lib/types";
 
@@ -47,5 +47,25 @@ describe("resolveInterviewForImport", () => {
 
     expect(resolved).toEqual(created);
     expect(createMock).toHaveBeenCalledWith("P08");
+  });
+});
+
+describe("formatJoinError", () => {
+  it("parses CODEMAP_FILE_ERROR sentinel into friendly message without raw sentinel string", () => {
+    const rawError =
+      'CODEMAP_FILE_ERROR|{"category":"permission_denied","message":"Fleuron cannot open this folder because permission was denied.","detail":"os error 13"}';
+    const formatted = formatJoinError(rawError);
+    expect(formatted.message).toBe(
+      "Fleuron cannot open this folder because permission was denied.",
+    );
+    expect(formatted.message).not.toContain("CODEMAP_FILE_ERROR");
+    expect(formatted.category).toBe("permission_denied");
+    expect(formatted.detail).toBe("os error 13");
+  });
+
+  it("handles plain string error as other category", () => {
+    const formatted = formatJoinError("Network request failed");
+    expect(formatted.message).toBe("Network request failed");
+    expect(formatted.category).toBe("other");
   });
 });

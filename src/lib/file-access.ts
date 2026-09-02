@@ -16,6 +16,8 @@ export type FileAccessCategory =
   | "storage_full"
   | "read_only_storage"
   | "file_in_use"
+  | "name_in_use"
+  | "content_not_downloaded"
   | "invalid_project";
 
 const SENTINEL = "CODEMAP_FILE_ERROR|";
@@ -70,6 +72,16 @@ const COPY: Record<FileAccessCategory, { message: string; recovery: string }> = 
   file_in_use: {
     message: "Something else is using that file right now.",
     recovery: "Close it in the other app, wait a moment, and try again.",
+  },
+  name_in_use: {
+    message: "A folder with that name is already here.",
+    recovery:
+      "Fleuron can use the existing folder or make a new one — see the options above.",
+  },
+  content_not_downloaded: {
+    message: "This study's files haven't downloaded from cloud storage yet.",
+    recovery:
+      "Box, iCloud, or OneDrive may still be syncing or offline. Wait for download to finish or mark the folder 'Always keep on this device'.",
   },
   invalid_project: {
     message: "This study could not be opened.",

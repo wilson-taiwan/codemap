@@ -19,6 +19,8 @@ export type HomeRow =
       lastOpenedAt: string;
       isOffline: boolean;
       readiness?: StudyReadiness;
+      duplicateOf?: string[];
+      groupKeyPrefix?: string;
     }
   | {
       kind: "remote-group-unbound";
@@ -28,6 +30,8 @@ export type HomeRow =
       members: string[];
       role: string;
       readiness?: StudyReadiness;
+      duplicateOf?: string[];
+      groupKeyPrefix?: string;
     }
   | {
       kind: "standalone-project";
@@ -35,7 +39,17 @@ export type HomeRow =
       title: string;
       lastOpenedAt: string;
       readiness?: StudyReadiness;
+      formerGroupId?: string;
+      formerGroupTitle?: string;
     };
+
+export type SharedHomeRow = Extract<HomeRow, { kind: "bound-group" | "remote-group-unbound" }>;
+export type IndividualHomeRow = Extract<HomeRow, { kind: "standalone-project" }>;
+
+export interface HomeSections {
+  individual: IndividualHomeRow[];
+  shared: SharedHomeRow[];
+}
 
 export function getRowReadiness(row: HomeRow): StudyReadiness {
   if (row.readiness) return row.readiness;
@@ -58,6 +72,10 @@ export function readinessPriority(readiness: StudyReadiness): number {
   }
 }
 
+export function normalizeStudyTitle(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 export interface DeriveHomeRowsParams {
   recents: RecentProject[];
   cachedMemberships: MembershipSummary[];
@@ -66,19 +84,20 @@ export interface DeriveHomeRowsParams {
 }
 
 /**
- * Pure function to derive unified home screen rows.
+ * Pure function to derive grouped home screen sections.
  *
- * Groups come first:
- * 1. Groups bound to a local folder on this Mac (sorted by last opened descending).
- * 2. Remote groups this account belongs to that are not yet set up on this Mac.
- * 3. Standalone local projects not bound to any shared group (sorted by last opened descending).
+ * Returned structure:
+ * - individual: Standalone local projects not bound to any shared group.
+ * - shared: Bound groups on this computer followed by remote groups not yet set up locally.
+ *
+ * Bound groups and standalone projects are ordered by readinessPriority ascending, then lastOpenedAt descending.
  */
 export function deriveHomeRows({
   recents,
   cachedMemberships,
   liveMemberships,
   signedIn,
-}: DeriveHomeRowsParams): HomeRow[] {
+}: DeriveHomeRowsParams): HomeSections {
   const isOffline = liveMemberships === null;
   const memberships = liveMemberships ?? cachedMemberships;
 
@@ -96,12 +115,17 @@ export function deriveHomeRows({
     }
   }
 
-  const boundGroupRows: HomeRow[] = [];
-  const standaloneRows: HomeRow[] = [];
+  const boundGroupRows: SharedHomeRow[] = [];
+  const standaloneRows: IndividualHomeRow[] = [];
   const boundGroupIds = new Set<string>();
+  const formerGroupIds = new Set<string>();
 
   // Process recents in their given order
   for (const r of recents) {
+    if (r.former_group_id) {
+      formerGroupIds.add(r.former_group_id);
+    }
+
     if (r.group_id) {
       if (boundGroupIds.has(r.group_id)) {
         // Prevent duplicate bound cards for the same group id
@@ -121,6 +145,7 @@ export function deriveHomeRows({
           role: mem.role || "coder",
           lastOpenedAt: r.last_opened_at,
           isOffline: isOffline || !membershipMap.has(r.group_id),
+          readiness: r.readiness,
         });
       } else {
         // Bound locally, but not found in live/cached memberships (e.g. offline cold launch or signed out)
@@ -134,6 +159,7 @@ export function deriveHomeRows({
           role: "coder",
           lastOpenedAt: r.last_opened_at,
           isOffline: true,
+          readiness: r.readiness,
         });
       }
     } else {
@@ -142,15 +168,19 @@ export function deriveHomeRows({
         path: r.path,
         title: r.title,
         lastOpenedAt: r.last_opened_at,
+        readiness: r.readiness,
+        formerGroupId: r.former_group_id,
+        formerGroupTitle: r.former_group_title,
       });
     }
   }
 
-  // Any membership not bound to a local recent becomes a remote-group-unbound row
-  const unboundGroupRows: HomeRow[] = [];
+  // Any membership not bound to a local recent becomes a remote-group-unbound row,
+  // unless its projectId matches a recent's former_group_id (Task 6 ghost suppression).
+  const unboundGroupRows: SharedHomeRow[] = [];
   if (signedIn || memberships.length > 0) {
     for (const m of memberships) {
-      if (!boundGroupIds.has(m.projectId)) {
+      if (!boundGroupIds.has(m.projectId) && !formerGroupIds.has(m.projectId)) {
         unboundGroupRows.push({
           kind: "remote-group-unbound",
           projectId: m.projectId,
@@ -163,7 +193,44 @@ export function deriveHomeRows({
     }
   }
 
-  return [...boundGroupRows, ...unboundGroupRows, ...standaloneRows];
+  // Sorter: readinessPriority ascending, then lastOpenedAt descending
+  const compareRows = (a: HomeRow, b: HomeRow): number => {
+    const prioA = readinessPriority(getRowReadiness(a));
+    const prioB = readinessPriority(getRowReadiness(b));
+    if (prioA !== prioB) return prioA - prioB;
+
+    const dateA = "lastOpenedAt" in a ? a.lastOpenedAt : "";
+    const dateB = "lastOpenedAt" in b ? b.lastOpenedAt : "";
+    return dateB.localeCompare(dateA);
+  };
+
+  standaloneRows.sort(compareRows);
+  boundGroupRows.sort(compareRows);
+
+  const sharedRows: SharedHomeRow[] = [...boundGroupRows, ...unboundGroupRows];
+
+  // Detect duplicate groups sharing normalized titles (Task 7)
+  const sharedByTitle = new Map<string, Array<{ row: SharedHomeRow; projectId: string }>>();
+  for (const row of sharedRows) {
+    const norm = normalizeStudyTitle(row.title);
+    const existing = sharedByTitle.get(norm) ?? [];
+    existing.push({ row, projectId: row.projectId });
+    sharedByTitle.set(norm, existing);
+  }
+
+  for (const group of sharedByTitle.values()) {
+    if (group.length >= 2) {
+      const allIds = group.map((g) => g.projectId);
+      for (const item of group) {
+        item.row.duplicateOf = allIds.filter((id) => id !== item.projectId);
+      }
+    }
+  }
+
+  return {
+    individual: standaloneRows,
+    shared: sharedRows,
+  };
 }
 
 /**

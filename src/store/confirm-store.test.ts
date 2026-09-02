@@ -31,7 +31,7 @@ describe("confirm store", () => {
   });
 
   it("cancel resolves false and never leaves a hanging promise", async () => {
-    const promise = appConfirm({ title: "Leave study?" });
+    const promise = appConfirm({ title: "Leave the group?" });
     useConfirmStore.getState().answer(false);
     await expect(promise).resolves.toBe(false);
   });

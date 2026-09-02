@@ -334,6 +334,8 @@ pub const KEY_LAST_SYNCED: &str = "last_synced_at";
 /// before anything is shared.
 pub const KEY_BOUND: &str = "group_bound";
 pub const KEY_GROUP_TITLE: &str = "group_title";
+pub const KEY_FORMER_GROUP_ID: &str = "former_group_id";
+pub const KEY_FORMER_GROUP_TITLE: &str = "former_group_title";
 pub const KEY_CODER_NAME: &str = "coder_name";
 pub const KEY_ROLE: &str = "role";
 pub const KEY_PENDING_UNBIND: &str = "pending_unbind";
@@ -392,6 +394,13 @@ pub fn is_bound(conn: &Connection) -> rusqlite::Result<bool> {
 /// remote/cursor keys, marks local tables dirty, clears former merge base
 /// and remote metadata, and removes `pending_coded_segments`.
 pub fn unbind_from_group(conn: &Connection) -> rusqlite::Result<()> {
+    if let Some(current_id) = get_state(conn, KEY_PROJECT_ID)? {
+        set_state(conn, KEY_FORMER_GROUP_ID, &current_id)?;
+    }
+    if let Some(current_title) = get_state(conn, KEY_GROUP_TITLE)? {
+        set_state(conn, KEY_FORMER_GROUP_TITLE, &current_title)?;
+    }
+
     let fresh_id = uuid::Uuid::new_v4().to_string();
     set_state(conn, KEY_PROJECT_ID, &fresh_id)?;
     set_state(conn, KEY_BOUND, "0")?;
@@ -437,6 +446,10 @@ pub fn bind_to_group(conn: &Connection, project_id: &str) -> Result<(), SyncErro
     if bound {
         if existing.as_deref() == Some(project_id) {
             set_state(conn, KEY_BOUND, "1")?;
+            let _ = conn.execute(
+                "DELETE FROM sync_state WHERE key IN (?1, ?2)",
+                params![KEY_FORMER_GROUP_ID, KEY_FORMER_GROUP_TITLE],
+            );
             return Ok(());
         }
         return Err(SyncError::AlreadyBound);
@@ -453,6 +466,10 @@ pub fn bind_to_group(conn: &Connection, project_id: &str) -> Result<(), SyncErro
     )
     .map_err(|e| SyncError::Db(e.to_string()))?;
     set_state(conn, KEY_BOUND, "1")?;
+    let _ = conn.execute(
+        "DELETE FROM sync_state WHERE key IN (?1, ?2)",
+        params![KEY_FORMER_GROUP_ID, KEY_FORMER_GROUP_TITLE],
+    );
     Ok(())
 }
 
@@ -854,6 +871,8 @@ pub struct MissingTranscript {
     pub segment_count: i64,
     /// True when the interview exists locally but its transcript differs.
     pub mismatched: bool,
+    #[serde(default)]
+    pub remote_content_hash: Option<String>,
 }
 
 /// What this machine still needs from Box.
@@ -880,11 +899,13 @@ pub fn missing_transcripts(conn: &Connection) -> rusqlite::Result<Vec<MissingTra
                 study_label: label,
                 segment_count: remote_count,
                 mismatched: false,
+                remote_content_hash: remote_hash.clone(),
             }),
             (Some(l), Some(r)) if l != r => out.push(MissingTranscript {
                 study_label: label,
                 segment_count: remote_count,
                 mismatched: true,
+                remote_content_hash: remote_hash.clone(),
             }),
             _ => {}
         }
@@ -2900,6 +2921,88 @@ pub struct GroupInfo {
 /// activity aggregation runs here rather than in SQL because the roster also
 /// lists names that hold no membership — coding filed before the group existed
 /// stays visible instead of silently falling off the display.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccessLostReason {
+    RemovedFromGroup,
+    GroupDeleted,
+}
+
+impl AccessLostReason {
+    pub fn user_message(&self) -> &'static str {
+        match self {
+            AccessLostReason::RemovedFromGroup => "You were removed from this study",
+            AccessLostReason::GroupDeleted => "This study was deleted by its owner",
+        }
+    }
+}
+
+pub fn classify_access_lost(
+    has_project_row: bool,
+    has_membership: bool,
+) -> Option<AccessLostReason> {
+    if has_membership {
+        None
+    } else if has_project_row {
+        Some(AccessLostReason::RemovedFromGroup)
+    } else {
+        Some(AccessLostReason::GroupDeleted)
+    }
+}
+
+pub async fn check_access_lost_fn(
+    client: &Client,
+    cfg: &SyncConfig,
+    session: &SyncSession,
+) -> Result<Option<AccessLostReason>, SyncError> {
+    let mem_res = rest(
+        client,
+        cfg,
+        session,
+        reqwest::Method::GET,
+        "project_members",
+    )
+    .query(&[
+        ("project_id", format!("eq.{}", cfg.project_id)),
+        ("user_id", format!("eq.{}", session.user_id)),
+        ("select", "user_id".to_string()),
+    ])
+    .send()
+    .await
+    .map_err(|e| SyncError::Network(e.to_string()))?;
+
+    if mem_res.status() == StatusCode::UNAUTHORIZED {
+        return Err(SyncError::Unauthorized);
+    }
+    if !mem_res.status().is_success() {
+        return Ok(None);
+    }
+
+    let members: Vec<serde_json::Value> = mem_res.json().await.unwrap_or_default();
+    let has_membership = !members.is_empty();
+    if has_membership {
+        return Ok(None);
+    }
+
+    let proj_res = rest(client, cfg, session, reqwest::Method::GET, "projects")
+        .query(&[
+            ("project_id", format!("eq.{}", cfg.project_id)),
+            ("select", "project_id".to_string()),
+        ])
+        .send()
+        .await
+        .map_err(|e| SyncError::Network(e.to_string()))?;
+
+    let has_project_row = if proj_res.status().is_success() {
+        let projs: Vec<serde_json::Value> = proj_res.json().await.unwrap_or_default();
+        !projs.is_empty()
+    } else {
+        false
+    };
+
+    Ok(classify_access_lost(has_project_row, has_membership))
+}
+
 pub async fn group_info_fetch(
     client: &Client,
     cfg: &SyncConfig,
@@ -5611,6 +5714,14 @@ mod tests {
         assert_eq!(get_state(&conn, KEY_BOUND).unwrap(), Some("0".to_string()));
         let new_project_id = get_state(&conn, KEY_PROJECT_ID).unwrap().unwrap();
         assert_ne!(new_project_id, initial_project_id);
+        assert_eq!(
+            get_state(&conn, KEY_FORMER_GROUP_ID).unwrap(),
+            Some(initial_project_id.to_string())
+        );
+        assert_eq!(
+            get_state(&conn, KEY_FORMER_GROUP_TITLE).unwrap(),
+            Some("My Group".to_string())
+        );
         assert_eq!(get_state(&conn, KEY_ROLE).unwrap(), None);
         assert_eq!(get_state(&conn, KEY_GROUP_TITLE).unwrap(), None);
         assert_eq!(get_state(&conn, KEY_CODED_CURSOR).unwrap(), None);
@@ -5620,6 +5731,33 @@ mod tests {
 
         // Assert idempotency: calling a second time still returns Ok
         assert!(unbind_from_group(&conn).is_ok());
+    }
+
+    #[test]
+    fn classify_access_lost_distinguishes_removed_from_deleted() {
+        // (a) project present + no membership -> removed
+        assert_eq!(
+            classify_access_lost(true, false),
+            Some(AccessLostReason::RemovedFromGroup)
+        );
+        assert_eq!(
+            AccessLostReason::RemovedFromGroup.user_message(),
+            "You were removed from this study"
+        );
+
+        // (b) project absent + no membership -> deleted
+        assert_eq!(
+            classify_access_lost(false, false),
+            Some(AccessLostReason::GroupDeleted)
+        );
+        assert_eq!(
+            AccessLostReason::GroupDeleted.user_message(),
+            "This study was deleted by its owner"
+        );
+
+        // (c) membership present -> not lost
+        assert_eq!(classify_access_lost(true, true), None);
+        assert_eq!(classify_access_lost(false, true), None);
     }
 }
 

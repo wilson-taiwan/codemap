@@ -9,8 +9,15 @@ import { useSyncStore } from "../store/sync-store";
 import { api } from "../lib/api";
 import { basename, formatRelativeTime } from "../lib/format";
 import { fileManagerName, trashName } from "../lib/platform";
-import { deriveHomeRows, formatMembersPhrase, getRowReadiness } from "../lib/home-rows";
-import type { MembershipSummary, RecentProject } from "../lib/types";
+import {
+  deriveHomeRows,
+  formatMembersPhrase,
+  getRowReadiness,
+  normalizeStudyTitle,
+} from "../lib/home-rows";
+import { VOCABULARY } from "../lib/collab-vocabulary";
+import { appConfirm } from "../store/confirm-store";
+import type { LeftStudy, MembershipSummary, RecentProject } from "../lib/types";
 import { Icon, type IconName } from "./ui/Icon";
 import { Modal } from "./ui/Surfaces";
 import { ContextMenuHost, openContextMenu } from "./ui/ContextMenu";
@@ -62,6 +69,7 @@ export function WelcomeScreen() {
   const [cachedMemberships, setCachedMemberships] = useState<MembershipSummary[]>([]);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [liveMemberships, setLiveMemberships] = useState<MembershipSummary[] | null>(null);
+  const [leftStudies, setLeftStudies] = useState<LeftStudy[]>([]);
 
   const [removalState, setRemovalState] = useState<{
     target: {
@@ -71,6 +79,7 @@ export function WelcomeScreen() {
       isBound: boolean;
       isAdmin: boolean;
       isRemoteOnly?: boolean;
+      members?: string[];
     };
     summary?: {
       interview_count: number;
@@ -80,6 +89,7 @@ export function WelcomeScreen() {
     mode: "detach" | "leave" | "delete_group" | "delete_solo";
     alsoDeleteFolder: boolean;
     confirmTitleInput: string;
+    isSoleMember?: boolean;
   } | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
 
@@ -101,7 +111,15 @@ export function WelcomeScreen() {
       setRecentError(`Could not read recent projects: ${String(e)}`);
     }
 
-    // 3. Background refresh of live memberships if signed in
+    // 3. Fetch left studies
+    try {
+      const left = await api.listLeftStudies();
+      setLeftStudies(left);
+    } catch {
+      // Non-fatal
+    }
+
+    // 4. Background refresh of live memberships if signed in
     if (signedIn) {
       try {
         const live = await api.listMemberships();
@@ -133,9 +151,73 @@ export function WelcomeScreen() {
   async function handleOpenPath(path: string) {
     setRecentError(null);
     try {
+      // Task 9: Resolve study location
+      const loc = await api.resolveStudyLocation(path);
+      if (loc.state !== "reachable") {
+        switch (loc.state) {
+          case "volume_not_mounted":
+            setRecentError(`Volume “${loc.volume_name}” is not mounted. Connect the drive to open this study.`);
+            return;
+          case "cloud_not_downloaded":
+            setRecentError(`This study is stored in ${loc.provider} and has not been downloaded to this computer yet. Right-click the folder in ${fileManagerName} and choose “Download Now” or “Always Keep on This Device”.`);
+            return;
+          case "cloud_provider_absent":
+            setRecentError(`${loc.provider} is not installed or running on this computer.`);
+            return;
+          case "permission_denied":
+            setRecentError("Fleuron does not have permission to open this folder. Check permissions in System Settings.");
+            return;
+          case "gone": {
+            // Task 10: Auto-relink bounded search
+            const outcome = await api.autoRelinkStudy(path);
+            if (outcome.outcome === "exact_match") {
+              await openProject(outcome.new_path);
+              return;
+            } else if (outcome.outcome === "name_match_only") {
+              const ok = await appConfirm({
+                title: "Study moved?",
+                body: `Fleuron found a folder with the same name at ${outcome.candidate_path}. Open this folder?`,
+                confirmLabel: "Open folder",
+                cancelLabel: "Cancel",
+              });
+              if (ok) {
+                await openProject(outcome.candidate_path);
+                return;
+              }
+            }
+            setRecentError("This study is no longer in its original location and could not be found nearby.");
+            return;
+          }
+        }
+      }
+
+      // Task 11: Check open marker
+      const marker = await api.checkOpenMarker(path);
+      if (marker.status === "active_other_machine") {
+        const ok = await appConfirm({
+          title: "Study is open on another computer",
+          body: `This study is currently open on ${marker.machineName} (by ${marker.coderName}, ${marker.minutesAgo} minutes ago). Opening the same study in two places at once can create sync conflicts. Open anyway?`,
+          confirmLabel: "Open anyway",
+          cancelLabel: "Cancel",
+        });
+        if (!ok) return;
+      }
+
       await openProject(path);
     } catch (e) {
-      setRecentError(`Could not open project — ${String(e)}`);
+      const errStr = String(e);
+      if (errStr.startsWith("TWO_FOLDERS_ONE_GROUP|")) {
+        const parts = errStr.split("|");
+        const otherPath = parts[1] || "";
+        await appConfirm({
+          title: "Two folders, one study",
+          body: `This study is already bound to the folder at ${otherPath}. Opening a second folder for the same study mixes local changes. Use the existing folder or detach it first.`,
+          confirmLabel: "Understood",
+          cancelLabel: "Close",
+        });
+        return;
+      }
+      setRecentError(`Could not open project — ${errStr}`);
     }
   }
 
@@ -143,10 +225,61 @@ export function WelcomeScreen() {
     setRecentError(null);
     try {
       await openProject(path);
+      const project = useProjectStore.getState().project;
+      if (project) {
+        // Task 5: Query memberships to check if account already belongs to a group with matching title
+        let memberships: MembershipSummary[] = [];
+        try {
+          memberships = await api.listMemberships();
+        } catch {
+          // Offline / signed out
+        }
+        const norm = normalizeStudyTitle(project.title);
+        const match = memberships.find((m) => normalizeStudyTitle(m.title) === norm);
+        if (match) {
+          const membersList = formatMembersPhrase(match.members, match.coderName);
+          const ok = await appConfirm({
+            title: "Study with this name already exists",
+            body: `You already have a shared study named “${match.title}”${membersList ? ` with ${membersList}` : ""}. Sharing this copy will create a second, separate group with the same name.`,
+            confirmLabel: "Share as a new, separate group",
+            cancelLabel: "Cancel",
+          });
+          if (!ok) {
+            return;
+          }
+        }
+      }
       useSyncStore.getState().openSyncSheet();
     } catch (e) {
       setRecentError(`Could not open project for sharing — ${String(e)}`);
     }
+  }
+
+  async function handleRejoinFormerGroup(formerGroupId: string, _title?: string) {
+    const found = (liveMemberships || cachedMemberships).find(
+      (m) => m.projectId === formerGroupId,
+    );
+    if (found) {
+      openJoinStudyForMembership({
+        projectId: found.projectId,
+        title: found.title,
+        coderName: found.coderName,
+        members: found.members,
+        role: found.role,
+      });
+      return;
+    }
+    const left = leftStudies.find((s) => s.projectId === formerGroupId);
+    if (left && left.groupKey) {
+      try {
+        await api.syncJoinGroup(left.groupKey, left.coderName);
+        openJoinStudy();
+      } catch (e) {
+        setRecentError(String(e));
+      }
+      return;
+    }
+    openJoinStudy();
   }
 
   async function requestRemoveStudy(
@@ -157,6 +290,7 @@ export function WelcomeScreen() {
       isBound: boolean;
       isAdmin?: boolean;
       isRemoteOnly?: boolean;
+      members?: string[];
     },
     initialMode?: "detach" | "leave" | "delete_group" | "delete_solo",
   ) {
@@ -182,6 +316,8 @@ export function WelcomeScreen() {
           ? "leave"
           : "detach");
 
+    const isSoleMember = target.members ? target.members.length <= 1 : false;
+
     setRemovalState({
       target: {
         ...target,
@@ -191,12 +327,13 @@ export function WelcomeScreen() {
       mode: defaultMode,
       alsoDeleteFolder: false,
       confirmTitleInput: "",
+      isSoleMember,
     });
   }
 
   async function confirmRemoval() {
     if (!removalState || actionBusy) return;
-    const { target, mode, alsoDeleteFolder, confirmTitleInput } = removalState;
+    const { target, mode, alsoDeleteFolder, confirmTitleInput, isSoleMember } = removalState;
     setActionBusy(true);
     try {
       if (mode === "delete_solo") {
@@ -207,6 +344,9 @@ export function WelcomeScreen() {
       } else if (mode === "detach") {
         await api.syncDetachLocal(target.projectId);
       } else if (mode === "leave") {
+        if (isSoleMember && confirmTitleInput.trim() !== target.title.trim()) {
+          throw new Error("Confirmation title does not match.");
+        }
         await api.syncLeaveGroup(target.projectId);
         if (alsoDeleteFolder && target.path) {
           await api.deleteProjectFolder(target.path);
@@ -387,14 +527,17 @@ export function WelcomeScreen() {
     );
   }
 
-  const rows = deriveHomeRows({
+  const sections = deriveHomeRows({
     recents,
     cachedMemberships,
     liveMemberships,
     signedIn,
   });
 
-  const isEmpty = rows.length === 0;
+  const isEmpty = sections.individual.length === 0 && sections.shared.length === 0;
+  const hasDuplicates = sections.shared.some(
+    (r) => r.duplicateOf && r.duplicateOf.length > 0,
+  );
   const problem = error || recentError || autoOpenFailed;
 
   return (
@@ -556,24 +699,21 @@ export function WelcomeScreen() {
                 </button>
               </div>
 
-              {/* Single unified Studies section */}
+              {/* Individual Studies section */}
               <section className="mb-8 w-full">
                 <div className="mb-2.5 flex items-baseline justify-between px-1">
-                  <h2 className="eyebrow">Studies</h2>
-                  {liveMemberships === null && cachedAt && (
-                    <span className="hint text-[11px]">
-                      Last checked {formatRelativeTime(cachedAt)}
-                    </span>
-                  )}
+                  <h2 className="eyebrow">{VOCABULARY.SECTION_INDIVIDUAL}</h2>
                 </div>
-                <ul className="flex flex-col gap-1.5">
-                  {rows.map((row) => {
-                    const readiness = getRowReadiness(row);
-                    if (row.kind === "bound-group") {
-                      const membersText = formatMembersPhrase(
-                        row.members,
-                        row.coderName,
-                      );
+                {sections.individual.length === 0 ? (
+                  <p className="hint px-1 text-[12.5px]">
+                    {sections.shared.length > 0
+                      ? "Nothing here. Studies you share move to Shared with a group."
+                      : "No individual studies yet. Create or open one to start."}
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-1.5">
+                    {sections.individual.map((row) => {
+                      const readiness = getRowReadiness(row);
                       return (
                         <li key={row.path}>
                           <div
@@ -596,58 +736,27 @@ export function WelcomeScreen() {
                                   onSelect: () => copyPath(row.path),
                                 },
                                 {
-                                  label: "Remove from this Mac…",
-                                  icon: "close",
-                                  onSelect: () =>
-                                    requestRemoveStudy(
-                                      {
-                                        title: row.title,
-                                        path: row.path,
-                                        projectId: row.projectId,
-                                        isBound: true,
-                                        isAdmin: row.role === "admin",
-                                      },
-                                      "detach",
-                                    ),
+                                  label: `${VOCABULARY.SHARE_WITH_GROUP}…`,
+                                  icon: "people",
+                                  onSelect: () => void handleShareProject(row.path),
                                 },
                                 {
-                                  label: "Leave study…",
-                                  icon: "close",
+                                  label: `${VOCABULARY.DELETE_FROM_COMPUTER}…`,
+                                  icon: "trash",
                                   onSelect: () =>
                                     requestRemoveStudy(
                                       {
                                         title: row.title,
                                         path: row.path,
-                                        projectId: row.projectId,
-                                        isBound: true,
-                                        isAdmin: row.role === "admin",
+                                        isBound: false,
+                                        isAdmin: false,
                                       },
-                                      "leave",
+                                      "delete_solo",
                                     ),
                                   destructive: true,
                                 },
-                                ...(row.role === "admin"
-                                  ? [
-                                      {
-                                        label: "Delete study for everyone…",
-                                        icon: "trash" as const,
-                                        onSelect: () =>
-                                          requestRemoveStudy(
-                                            {
-                                              title: row.title,
-                                              path: row.path,
-                                              projectId: row.projectId,
-                                              isBound: true,
-                                              isAdmin: true,
-                                            },
-                                            "delete_group",
-                                          ),
-                                        destructive: true,
-                                      },
-                                    ]
-                                  : []),
                                 {
-                                  label: "Remove from list",
+                                  label: VOCABULARY.HIDE_FROM_LIST,
                                   icon: "close",
                                   onSelect: () => removeRecent(row.path),
                                 },
@@ -677,35 +786,254 @@ export function WelcomeScreen() {
                                   </span>
                                 )}
                               </div>
-                              <span className="hint mt-0.5 truncate text-[12px]">
-                                you code as &ldquo;{row.coderName}&rdquo;
-                                {membersText ? ` · ${membersText}` : ""}
-                              </span>
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[12px]">
+                                <span className="hint truncate">
+                                  {basename(row.path)} · opened{" "}
+                                  {formatRelativeTime(row.lastOpenedAt)}
+                                </span>
+                                {row.formerGroupId && (
+                                  <span className="hint flex items-center">
+                                    · Was shared as “{row.formerGroupTitle ?? "a group study"}” —
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleRejoinFormerGroup(row.formerGroupId!, row.formerGroupTitle);
+                                      }}
+                                      className="link ml-1 font-medium"
+                                    >
+                                      Rejoin
+                                    </button>
+                                  </span>
+                                )}
+                              </div>
                               <span
                                 className="mt-1 truncate text-[11.5px]"
-                                style={{ color: "var(--ink-3)" }}
+                                style={{ color: "var(--ink-4)" }}
                               >
                                 {row.path}
                               </span>
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenPath(row.path)}
-                              disabled={loading}
-                              className="btn btn-outline btn-sm shrink-0"
-                            >
-                              Open
-                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void handleShareProject(row.path)}
+                                disabled={loading}
+                                className="btn btn-ghost btn-sm gap-1 text-[12px]"
+                              >
+                                <Icon name="people" size={13} />
+                                {VOCABULARY.SHARE_WITH_GROUP}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPath(row.path)}
+                                disabled={loading}
+                                className="btn btn-outline btn-sm"
+                              >
+                                Open
+                              </button>
+                            </div>
                           </div>
                         </li>
                       );
-                    }
+                    })}
+                  </ul>
+                )}
+              </section>
 
-                    if (row.kind === "remote-group-unbound") {
-                      const membersText = formatMembersPhrase(
-                        row.members,
-                        row.coderName,
-                      );
+              {/* Shared Studies section */}
+              <section className="mb-8 w-full">
+                <div className="mb-2.5 flex items-baseline justify-between px-1">
+                  <h2 className="eyebrow">{VOCABULARY.SECTION_SHARED}</h2>
+                  {!signedIn ? (
+                    <span className="hint text-[11px]">
+                      Signed out
+                      {cachedAt ? ` — last checked ${formatRelativeTime(cachedAt)}` : ""}
+                      <button
+                        type="button"
+                        onClick={openSettings}
+                        className="link ml-1.5 font-medium"
+                      >
+                        Sign in
+                      </button>
+                    </span>
+                  ) : liveMemberships === null && cachedAt ? (
+                    <span className="hint text-[11px]">
+                      Last checked {formatRelativeTime(cachedAt)}
+                    </span>
+                  ) : null}
+                </div>
+
+                {hasDuplicates && (
+                  <div
+                    className="mb-3 rounded-[12px] p-3 text-[12.5px]"
+                    style={{
+                      background: "var(--warning-soft, #fef3c7)",
+                      color: "var(--warning, #b45309)",
+                      border: "1px solid var(--warning, #b45309)",
+                    }}
+                  >
+                    <p className="font-semibold">Two studies here have the same name.</p>
+                    <p className="mt-1 opacity-90">
+                      They are separate — coding does not move between them. Open each to see which holds your work, then leave or delete the one you do not want.
+                    </p>
+                  </div>
+                )}
+
+                {sections.shared.length === 0 ? (
+                  <p className="hint px-1 text-[12.5px]">
+                    You are not in any shared studies yet. Share one, or join with a key.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-1.5">
+                    {sections.shared.map((row) => {
+                      const readiness = getRowReadiness(row);
+                      if (row.kind === "bound-group") {
+                        const membersText = formatMembersPhrase(row.members, row.coderName);
+                        return (
+                          <li key={row.path}>
+                            <div
+                              onContextMenu={(e) =>
+                                openContextMenu(e, [
+                                  {
+                                    label: "Open study",
+                                    icon: "folder",
+                                    onSelect: () => handleOpenPath(row.path),
+                                    disabled: loading,
+                                  },
+                                  {
+                                    label: `Show in ${fileManagerName}`,
+                                    icon: "search",
+                                    onSelect: () => revealRecent(row.path),
+                                  },
+                                  {
+                                    label: "Copy path",
+                                    icon: "note",
+                                    onSelect: () => copyPath(row.path),
+                                  },
+                                  {
+                                    label: `${VOCABULARY.STOP_SYNCING_LOCAL}…`,
+                                    icon: "close",
+                                    onSelect: () =>
+                                      requestRemoveStudy(
+                                        {
+                                          title: row.title,
+                                          path: row.path,
+                                          projectId: row.projectId,
+                                          isBound: true,
+                                          isAdmin: row.role === "admin",
+                                          members: row.members,
+                                        },
+                                        "detach",
+                                      ),
+                                  },
+                                  {
+                                    label: `${VOCABULARY.LEAVE_GROUP}…`,
+                                    icon: "close",
+                                    onSelect: () =>
+                                      requestRemoveStudy(
+                                        {
+                                          title: row.title,
+                                          path: row.path,
+                                          projectId: row.projectId,
+                                          isBound: true,
+                                          isAdmin: row.role === "admin",
+                                          members: row.members,
+                                        },
+                                        "leave",
+                                      ),
+                                    destructive: true,
+                                  },
+                                  ...(row.role === "admin"
+                                    ? [
+                                        {
+                                          label: `${VOCABULARY.DELETE_GROUP_FOR_EVERYONE}…`,
+                                          icon: "trash" as const,
+                                          onSelect: () =>
+                                            requestRemoveStudy(
+                                              {
+                                                title: row.title,
+                                                path: row.path,
+                                                projectId: row.projectId,
+                                                isBound: true,
+                                                isAdmin: true,
+                                                members: row.members,
+                                              },
+                                              "delete_group",
+                                            ),
+                                          destructive: true,
+                                        },
+                                      ]
+                                    : []),
+                                  {
+                                    label: VOCABULARY.HIDE_FROM_LIST,
+                                    icon: "close",
+                                    onSelect: () => removeRecent(row.path),
+                                  },
+                                ])
+                              }
+                              className="group flex items-center justify-between gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-3.5 transition-all hover:bg-[var(--fill)]"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPath(row.path)}
+                                disabled={loading}
+                                className="flex min-w-0 flex-1 flex-col text-left disabled:opacity-50"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="truncate text-[14px] font-medium">
+                                    {row.title}
+                                  </span>
+                                  {readiness.kind === "missing-transcripts" && (
+                                    <span
+                                      className="chip text-[10.5px]"
+                                      style={{
+                                        background: "var(--warning-soft, #fef3c7)",
+                                        color: "var(--warning, #b45309)",
+                                      }}
+                                    >
+                                      {readiness.missingCount} missing
+                                    </span>
+                                  )}
+                                  {row.duplicateOf && (
+                                    <span
+                                      className="chip text-[10.5px]"
+                                      style={{
+                                        background: "var(--warning-soft, #fef3c7)",
+                                        color: "var(--warning, #b45309)",
+                                      }}
+                                    >
+                                      Same name
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="hint mt-0.5 truncate text-[12px]">
+                                  you code as &ldquo;{row.coderName}&rdquo;
+                                  {membersText ? ` · ${membersText}` : ""}
+                                  {row.duplicateOf ? ` · opened ${formatRelativeTime(row.lastOpenedAt)}` : ""}
+                                </span>
+                                <span
+                                  className="mt-1 truncate text-[11.5px]"
+                                  style={{ color: "var(--ink-3)" }}
+                                >
+                                  {row.path}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPath(row.path)}
+                                disabled={loading}
+                                className="btn btn-outline btn-sm shrink-0"
+                              >
+                                Open
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      }
+
+                      // remote-group-unbound
+                      const membersText = formatMembersPhrase(row.members, row.coderName);
                       return (
                         <li key={row.projectId}>
                           <div
@@ -725,7 +1053,7 @@ export function WelcomeScreen() {
                                   disabled: loading,
                                 },
                                 {
-                                  label: "Leave study…",
+                                  label: `${VOCABULARY.LEAVE_GROUP}…`,
                                   icon: "close",
                                   onSelect: () =>
                                     requestRemoveStudy(
@@ -735,6 +1063,7 @@ export function WelcomeScreen() {
                                         isBound: true,
                                         isAdmin: row.role === "admin",
                                         isRemoteOnly: true,
+                                        members: row.members,
                                       },
                                       "leave",
                                     ),
@@ -752,6 +1081,17 @@ export function WelcomeScreen() {
                                 <span className="chip text-[10.5px] opacity-75">
                                   Not on this computer
                                 </span>
+                                {row.duplicateOf && (
+                                  <span
+                                    className="chip text-[10.5px]"
+                                    style={{
+                                      background: "var(--warning-soft, #fef3c7)",
+                                      color: "var(--warning, #b45309)",
+                                    }}
+                                  >
+                                    Same name
+                                  </span>
+                                )}
                               </div>
                               <span className="hint mt-0.5 truncate text-[12px]">
                                 you code as &ldquo;{row.coderName}&rdquo;
@@ -777,110 +1117,49 @@ export function WelcomeScreen() {
                           </div>
                         </li>
                       );
-                    }
+                    })}
+                  </ul>
+                )}
 
-                    // standalone-project
-                    return (
-                      <li key={row.path}>
-                        <div
-                          onContextMenu={(e) =>
-                            openContextMenu(e, [
-                              {
-                                label: "Open study",
-                                icon: "folder",
-                                onSelect: () => handleOpenPath(row.path),
-                                disabled: loading,
-                              },
-                              {
-                                label: `Show in ${fileManagerName}`,
-                                icon: "search",
-                                onSelect: () => revealRecent(row.path),
-                              },
-                              {
-                                label: "Copy path",
-                                icon: "note",
-                                onSelect: () => copyPath(row.path),
-                              },
-                              {
-                                label: "Share this study…",
-                                icon: "people",
-                                onSelect: () => void handleShareProject(row.path),
-                              },
-                              {
-                                label: "Delete study from this computer…",
-                                icon: "trash",
-                                onSelect: () =>
-                                  requestRemoveStudy(
-                                    {
-                                      title: row.title,
-                                      path: row.path,
-                                      isBound: false,
-                                      isAdmin: false,
-                                    },
-                                    "delete_solo",
-                                  ),
-                                destructive: true,
-                              },
-                              {
-                                label: "Remove from list",
-                                icon: "close",
-                                onSelect: () => removeRecent(row.path),
-                              },
-                            ])
-                          }
-                          className="group flex items-center justify-between gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-3.5 transition-all hover:bg-[var(--fill)]"
+                {/* Left studies (Task 6) */}
+                {leftStudies.length > 0 && (
+                  <details className="mt-4 px-1">
+                    <summary className="hint cursor-pointer text-[12px] font-medium hover:text-[var(--ink)]">
+                      Studies you have left ({leftStudies.length})
+                    </summary>
+                    <ul className="mt-2 flex flex-col gap-1.5">
+                      {leftStudies.map((s) => (
+                        <li
+                          key={s.projectId}
+                          className="flex items-center justify-between gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-2.5 text-[12.5px]"
                         >
-                          <button
-                            type="button"
-                            onClick={() => handleOpenPath(row.path)}
-                            disabled={loading}
-                            className="flex min-w-0 flex-1 flex-col text-left disabled:opacity-50"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="truncate text-[14px] font-medium">
-                                {row.title}
-                              </span>
-                              <span className="chip text-[10.5px] opacity-75">
-                                On this computer only
-                              </span>
-                            </div>
-                            <span
-                              className="mt-0.5 truncate text-[11.5px]"
-                              style={{ color: "var(--ink-3)" }}
-                            >
-                              {basename(row.path)} · opened{" "}
-                              {formatRelativeTime(row.lastOpenedAt)}
+                          <div className="min-w-0 flex-1">
+                            <span className="font-medium text-[var(--ink)]">{s.title}</span>
+                            <span className="hint ml-2 text-[11px]">
+                              coded as {s.coderName} · left {formatRelativeTime(s.leftAt)}
                             </span>
-                            <span
-                              className="mt-1 truncate text-[11.5px]"
-                              style={{ color: "var(--ink-4)" }}
-                            >
-                              {row.path}
-                            </span>
-                          </button>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => void handleShareProject(row.path)}
-                              disabled={loading}
-                              className="btn btn-ghost btn-sm"
-                            >
-                              Share…
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenPath(row.path)}
-                              disabled={loading}
-                              className="btn btn-outline btn-sm"
-                            >
-                              Open
-                            </button>
                           </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                          {s.groupKey && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await api.syncJoinGroup(s.groupKey, s.coderName);
+                                  openJoinStudy();
+                                } catch (e) {
+                                  setRecentError(String(e));
+                                }
+                              }}
+                              className="btn btn-outline btn-xs shrink-0"
+                            >
+                              Rejoin
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
               </section>
             </div>
           )}
@@ -918,7 +1197,8 @@ export function WelcomeScreen() {
                     onClick={confirmRemoval}
                     disabled={
                       actionBusy ||
-                      (removalState.mode === "delete_group" &&
+                      ((removalState.mode === "delete_group" ||
+                        (removalState.mode === "leave" && removalState.isSoleMember)) &&
                         removalState.confirmTitleInput.trim() !==
                           removalState.target.title.trim())
                     }
@@ -931,14 +1211,14 @@ export function WelcomeScreen() {
                     {actionBusy
                       ? "Processing…"
                       : removalState.mode === "delete_solo"
-                        ? "Delete from this computer"
+                        ? VOCABULARY.DELETE_FROM_COMPUTER
                         : removalState.mode === "detach"
-                          ? "Remove from this Mac"
+                          ? VOCABULARY.STOP_SYNCING_LOCAL
                           : removalState.mode === "leave"
                             ? removalState.alsoDeleteFolder
                               ? "Leave and delete folder"
-                              : "Leave study"
-                            : "Delete for everyone"}
+                              : VOCABULARY.LEAVE_GROUP
+                            : VOCABULARY.DELETE_GROUP_FOR_EVERYONE}
                   </button>
                 </>
               }
@@ -1020,7 +1300,7 @@ export function WelcomeScreen() {
                         />
                         <div className="flex-1">
                           <div className="font-medium text-[var(--ink)]">
-                            Remove from this Mac
+                            {VOCABULARY.STOP_SYNCING_LOCAL}
                           </div>
                           <div
                             className="mt-0.5 text-[12px] leading-relaxed"
@@ -1054,7 +1334,7 @@ export function WelcomeScreen() {
                         />
                         <div className="flex-1">
                           <div className="font-medium text-[var(--ink)]">
-                            Leave study
+                            {VOCABULARY.LEAVE_GROUP}
                           </div>
                           <div
                             className="mt-0.5 text-[12px] leading-relaxed"
@@ -1063,6 +1343,42 @@ export function WelcomeScreen() {
                             Removes your account from the study roster on the
                             server and stops syncing locally.
                           </div>
+
+                          {removalState.mode === "leave" && removalState.isSoleMember && (
+                            <div
+                              className="mt-3 rounded-[10px] p-3 text-[12px] leading-relaxed"
+                              style={{
+                                background: "var(--warning-soft, #fef3c7)",
+                                color: "var(--warning, #b45309)",
+                              }}
+                            >
+                              <p className="font-semibold text-[12.5px]">
+                                You are the only member
+                              </p>
+                              <p className="mt-1">
+                                Leaving makes this study permanently unreachable — nobody, including you, will be able to open it again. Your coding stays on the server but no one can get to it.
+                              </p>
+                              <p className="mt-1">
+                                If you want to remove the study completely, choose <strong>{VOCABULARY.DELETE_GROUP_FOR_EVERYONE}</strong> instead.
+                              </p>
+                              <div className="mt-3">
+                                <label className="label text-[11.5px]" htmlFor="confirm-leave-input">
+                                  Type <strong>{removalState.target.title}</strong> to confirm:
+                                </label>
+                                <input
+                                  id="confirm-leave-input"
+                                  className="field mt-1 w-full text-[12.5px]"
+                                  value={removalState.confirmTitleInput}
+                                  onChange={(e) =>
+                                    setRemovalState((s) =>
+                                      s ? { ...s, confirmTitleInput: e.target.value } : null,
+                                    )
+                                  }
+                                  placeholder={removalState.target.title}
+                                />
+                              </div>
+                            </div>
+                          )}
 
                           {removalState.mode === "leave" && (
                             <div className="mt-3 border-t border-[var(--border)] pt-2.5">

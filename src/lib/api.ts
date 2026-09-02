@@ -38,7 +38,13 @@ import type {
   TranscriptSegment,
   WorkspaceState,
   ProjectOpenSnapshot,
+  JoinTargetVerdict,
+  StudyLocation,
+  RelinkOutcome,
+  OpenMarkerStatus,
+  LeftStudy,
 } from "./types";
+import type { StudyReadiness } from "./home-rows";
 
 export const api = {
   createProject: (input: {
@@ -466,4 +472,30 @@ export const api = {
 
   /** Check if last exit was unclean and clear the flag. */
   takeUncleanExitNotice: () => invoke<boolean>("take_unclean_exit_notice"),
+
+  inspectJoinTarget: (parentDir: string, slug: string, projectId: string) =>
+    invoke<JoinTargetVerdict>("inspect_join_target", {
+      parentDir,
+      slug,
+      projectId,
+    }),
+
+  listLeftStudies: () => invoke<LeftStudy[]>("list_left_studies"),
+
+  resolveStudyLocation: (path: string) =>
+    invoke<StudyLocation>("resolve_study_location", { path }),
+
+  autoRelinkStudy: (path: string, expectedProjectId?: string) =>
+    invoke<RelinkOutcome>("auto_relink_study", {
+      path,
+      expectedProjectId: expectedProjectId ?? null,
+    }),
+
+  studyReadiness: (path: string) =>
+    invoke<StudyReadiness>("study_readiness", { path }),
+
+  checkOpenMarker: (path: string) =>
+    invoke<OpenMarkerStatus>("check_open_marker", { path }),
+
+  heartbeatOpenMarker: () => invoke<void>("heartbeat_open_marker"),
 };

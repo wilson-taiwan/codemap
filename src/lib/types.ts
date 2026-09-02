@@ -177,6 +177,9 @@ export interface RecentProject {
   group_id?: string;
   group_title?: string;
   coder_name?: string;
+  former_group_id?: string;
+  former_group_title?: string;
+  readiness?: import("./home-rows").StudyReadiness;
 }
 
 export interface PanelWidths {
@@ -213,6 +216,7 @@ export interface MissingTranscript {
   segmentCount: number;
   /** The interview exists here, but was imported from a different file. */
   mismatched: boolean;
+  remoteContentHash?: string | null;
 }
 
 /** What redeeming a legacy invitation settled. */
@@ -600,4 +604,36 @@ export interface LiveWorkspaceSnapshot {
   conflicts: SyncConflictSummary[];
   sync_status: LiveWorkspaceSyncStatus;
   local_revision: number;
+}
+
+export type JoinTargetVerdict =
+  | { verdict: "already_set_up_here"; path: string }
+  | { verdict: "adoptable_unbound"; path: string }
+  | { verdict: "bound_elsewhere"; path: string; suggested_name: string; suggested_path: string }
+  | { verdict: "occupied"; path: string; suggested_name: string; suggested_path: string }
+  | { verdict: "available"; suggested_name: string; suggested_path: string };
+
+export type StudyLocation =
+  | { state: "reachable" }
+  | { state: "volume_not_mounted"; volume_name: string }
+  | { state: "cloud_not_downloaded"; provider: string }
+  | { state: "cloud_provider_absent"; provider: string }
+  | { state: "permission_denied" }
+  | { state: "gone" };
+
+export type RelinkOutcome =
+  | { outcome: "exact_match"; new_path: string; message: string }
+  | { outcome: "name_match_only"; candidate_path: string; message: string }
+  | { outcome: "not_found" };
+
+export type OpenMarkerStatus =
+  | { status: "clear" }
+  | { status: "active_other_machine"; machineName: string; coderName: string; minutesAgo: number };
+
+export interface LeftStudy {
+  projectId: string;
+  title: string;
+  groupKey: string;
+  coderName: string;
+  leftAt: string;
 }
