@@ -1657,7 +1657,7 @@ Notice: This report contains no transcript text, participant labels, or code nam
 
 --- Application ---
 Name: Fleuron
-Version: 2.1.0
+Version: 2.2.0
 Build commit: dev
 Source URL: https://github.com/wilson-taiwan/fleuron
 OS: macos
