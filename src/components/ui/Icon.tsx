@@ -27,6 +27,7 @@ export type IconName =
   | "help"
   | "import"
   | "layers"
+  | "minus"
   | "note"
   | "people"
   | "plus"
@@ -61,6 +62,7 @@ const PATHS: Record<IconName, string> = {
   note: "M6 3.5h8.5L19 8v12.5H6V3.5Zm8.2 0V8H19M9 12.5h7M9 16h4.5",
   people: "M15.5 20v-1.6a3.4 3.4 0 0 0-3.4-3.4H6.4A3.4 3.4 0 0 0 3 18.4V20M12.2 7.9a3.2 3.2 0 1 1-6.4 0 3.2 3.2 0 0 1 6.4 0ZM21 20v-1.6a3.4 3.4 0 0 0-2.6-3.3M15.6 4.7a3.2 3.2 0 0 1 0 6.2",
   plus: "M12 5.5v13M5.5 12h13",
+  minus: "M5.5 12h13",
   refresh: "M20 11.5a8 8 0 1 0-.6 4M20 5.5V12h-6",
   search: "m20 20-3.6-3.6M18.5 11a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z",
   settings:

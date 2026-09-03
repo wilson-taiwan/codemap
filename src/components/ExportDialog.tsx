@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { useAppStore } from "../store/app-store";
 import { useProjectStore } from "../store/project-store";
 import {
   type ExportConfig,
@@ -38,6 +39,11 @@ export function ExportDialog({
   );
   const exportWithConfig = useProjectStore((s) => s.exportWithConfig);
   const exporting = useProjectStore((s) => s.exporting);
+  // Speaker redaction notice (T06): count of interviews with the toggle on.
+  const redactedCount = useAppStore((s) =>
+    interviews.filter((iv) => s.preferences.speaker_redaction?.[iv.id] ?? false)
+      .length,
+  );
 
   const [config, setConfig] = useState<ExportConfig>(() =>
     getDefaultConfig(toPresetId(project?.methodology)),
@@ -209,6 +215,13 @@ export function ExportDialog({
           <strong>{unresolvedConflictCount} unresolved sync conflict{unresolvedConflictCount === 1 ? "" : "s"}.</strong>{" "}
           This export uses the current canonical values; pending proposals are not merged into analysis.
         </div>
+      )}
+      {redactedCount > 0 && (
+        <p className="hint mb-5 text-[12.5px]">
+          Speaker names are redacted (Speaker 1, Speaker 2) for{" "}
+          {redactedCount} interview{redactedCount === 1 ? "" : "s"} — see
+          Interview settings to change this.
+        </p>
       )}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
         {/* Left Column: Preset & Checkbox Options */}

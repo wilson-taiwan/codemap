@@ -89,6 +89,34 @@ export function SelectionBubble({
   };
   const [query, setQuery] = useState("");
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  /**
+   * While Shift is held the bubble goes click-through (T01). A Shift+click is
+   * a span extension aimed at the passage underneath; a bubble sitting over
+   * that point would otherwise swallow the mousedown (collapsing the native
+   * selection by default) and the click (never reaching the passage), making
+   * extension fail exactly when the bubble is open — which is always, since
+   * the drag that summons the bubble precedes every extension.
+   */
+  const [shiftHeld, setShiftHeld] = useState(false);
+
+  useEffect(() => {
+    if (!anchor) {
+      setShiftHeld(false);
+      return;
+    }
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "Shift") setShiftHeld(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === "Shift") setShiftHeld(false);
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [anchor]);
 
   const target = currentCodingTarget();
   const applied = target?.existing?.code_ids ?? [];
@@ -245,6 +273,11 @@ export function SelectionBubble({
     };
     const onDown = (e: MouseEvent) => {
       if (ref.current?.contains(e.target as Node)) return;
+      // Shift+mousedown is the second half of a Shift+click span extension,
+      // not a dismissal: the click handler is about to extend the pending
+      // span this bubble belongs to, and dismissing here would clear the
+      // anchor before it runs.
+      if (e.shiftKey) return;
       onDismiss();
     };
     window.addEventListener("keydown", onKey, true);
@@ -276,8 +309,18 @@ export function SelectionBubble({
         // height before the bubble has a position to show. Rendering nothing
         // until measured is what made input focus unreliable here.
         pos
-          ? { top: pos.top, left: pos.left, width: WIDTH }
-          : { top: -9999, left: -9999, width: WIDTH, visibility: "hidden" }
+          ? {
+              top: pos.top,
+              left: pos.left,
+              width: WIDTH,
+              pointerEvents: shiftHeld ? "none" : undefined,
+            }
+          : {
+              top: -9999,
+              left: -9999,
+              width: WIDTH,
+              visibility: "hidden",
+            }
       }
       role="dialog"
       aria-label="Code this selection"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitRails } from "./WorkspaceLayout";
+import { fitRails, workspaceColumns } from "./WorkspaceLayout";
 
 /**
  * The transcript is the app's core artifact and the only column whose width is
@@ -68,5 +68,43 @@ describe("fitRails", () => {
   it("restores the stored widths when the window widens again", () => {
     expect(fitRails(248, 300, 1024)).not.toEqual({ codebook: 248, memos: 300 });
     expect(fitRails(248, 300, 1600)).toEqual({ codebook: 248, memos: 300 });
+  });
+});
+
+describe("workspaceColumns", () => {
+  it("renders the full codebook rail when expanded", () => {
+    expect(
+      workspaceColumns({ collapsed: false, memoRail: false, codebook: 248, memos: 300 }),
+    ).toBe("248px 5px minmax(0, 1fr)");
+    expect(
+      workspaceColumns({ collapsed: false, memoRail: true, codebook: 248, memos: 300 }),
+    ).toBe("248px 5px minmax(0, 1fr) 5px 300px");
+  });
+
+  it("replaces the codebook with the slim rail when collapsed", () => {
+    expect(
+      workspaceColumns({ collapsed: true, memoRail: false, codebook: 248, memos: 300 }),
+    ).toBe("28px minmax(0, 1fr)");
+  });
+
+  it("leaves the memo rail untouched while collapsed", () => {
+    expect(
+      workspaceColumns({ collapsed: true, memoRail: true, codebook: 248, memos: 300 }),
+    ).toBe("28px minmax(0, 1fr) 5px 300px");
+  });
+
+  it("keeps the stored codebook width out of the collapsed template", () => {
+    // Expanding restores the previous width because collapsing never writes
+    // it anywhere: the collapsed template must not mention it.
+    const collapsed = workspaceColumns({
+      collapsed: true,
+      memoRail: false,
+      codebook: 372,
+      memos: 300,
+    });
+    expect(collapsed).not.toContain("372");
+    expect(
+      workspaceColumns({ collapsed: false, memoRail: false, codebook: 372, memos: 300 }),
+    ).toContain("372px");
   });
 });

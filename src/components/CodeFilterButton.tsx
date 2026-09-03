@@ -14,10 +14,14 @@ import { shortcut } from "../lib/platform";
 import { Icon } from "./ui/Icon";
 import { Tooltip } from "./ui/Tooltip";
 import { useMenuKeys } from "./ui/Menu";
+import { useSpeakerDisplay } from "../hooks/useSpeakerDisplay";
 
 export function CodeFilterButton() {
   const dark = usePrefersDark();
   const ground = dark ? THEME_GROUND.dark : THEME_GROUND.light;
+  // Speaker redaction (T06): the list shows aliases while the stored filter
+  // value stays the real name.
+  const showSpeaker = useSpeakerDisplay();
 
   const { codes, codeFilter, setCodeFilter, segments, speakerFilter, setSpeakerFilter } =
     useProjectStore(
@@ -178,7 +182,7 @@ export function CodeFilterButton() {
             <>
               <Icon name="filter" size={12} />
               <span className="max-w-[90px] truncate hidden sm:inline">
-                {speakerFilter}
+                {showSpeaker(speakerFilter)}
               </span>
             </>
           ) : (
@@ -258,7 +262,7 @@ export function CodeFilterButton() {
                             : "hover:bg-[var(--fill)] text-[var(--ink)]"
                         }`}
                       >
-                        <span className="min-w-0 flex-1 truncate">{speaker}</span>
+                        <span className="min-w-0 flex-1 truncate">{showSpeaker(speaker)}</span>
                         {isActive && <Icon name="check" size={12} className="shrink-0" />}
                       </button>
                     );

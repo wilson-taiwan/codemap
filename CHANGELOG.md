@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.0]
+
+### Added
+
+- **Shift+click extends the passage selection:** dragging across a phrase overshoots by a word and no longer means re-dragging — first click or drag sets an anchor, Shift+click extends to that point inside the same speaker turn.
+- **Filtering keeps your place in the transcript:** applying or clearing a code/speaker filter keeps the selected passage visible when it survives, otherwise restores the same scroll fraction instead of jumping to the top.
+- **Passage text zoom:** minus/percentage/plus control and Cmd/Ctrl +/−/0 scale only the reading serif (75–200%), persisted per machine.
+- **Collapsible codebook:** a Hide button, slim expand rail, and Cmd/Ctrl+B give the transcript the full width; the collapsed choice and the previous width persist.
+- **Bulk transcript import:** pick many files, check the suggested participant IDs on one review screen (duplicates blocked with the next-free ID offered), import once with per-file results; the review screen also links the folder-scan matcher.
+- **Per-interview speaker redaction:** an Interview-settings toggle maps real names to Speaker 1, Speaker 2 in first-appearance order across display, copy actions, the speaker filter, and the CSV export. Stored transcripts and sync payloads are unchanged.
+- **Manual QA checklist artifact:** every Windows QA run now writes a fill-in `manual-rows-{version}.md` for the five hands-on rows.
+- **Codebook search polish:** search covers names, definitions, and criteria text with a match count and clear button.
+
 ## [2.3.0]
 
 ### Added

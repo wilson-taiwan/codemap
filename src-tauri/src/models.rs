@@ -460,6 +460,19 @@ pub struct AppPreferences {
     pub sync_url: Option<String>,
     #[serde(default)]
     pub sync_anon_key: Option<String>,
+    /// Passage-text zoom as a scale factor (1.0 = 100%). Null means default.
+    /// Local-only reading preference: never synced, never exported.
+    #[serde(default)]
+    pub transcript_zoom: Option<f64>,
+    /// Whether the left codebook rail is collapsed. Local-only, like widths.
+    #[serde(default)]
+    pub codebook_collapsed: bool,
+    /// Per-interview speaker-redaction toggle, keyed by interview id.
+    /// Local-only view/export layer: the real names stay stored, and this map
+    /// never enters a sync payload (it lives in app preferences, which have
+    /// no sync path at all).
+    #[serde(default)]
+    pub speaker_redaction: std::collections::HashMap<String, bool>,
 }
 
 fn default_merge_same_speaker() -> bool {
@@ -488,6 +501,9 @@ impl Default for AppPreferences {
             coder_identities: Default::default(),
             sync_url: None,
             sync_anon_key: None,
+            transcript_zoom: None,
+            codebook_collapsed: false,
+            speaker_redaction: Default::default(),
         }
     }
 }

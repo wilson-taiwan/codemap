@@ -9,6 +9,10 @@ interface InterviewSettingsModalProps {
   onRename: (id: string, label: string, date: string | null) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   loadImpact: (id: string) => Promise<InterviewDeleteImpact>;
+  /** Per-interview speaker redaction (T06). Local-only view/export layer. */
+  redactionOn?: boolean;
+  redactionPreview?: { real: string; alias: string }[];
+  onToggleRedaction?: (on: boolean) => void;
 }
 
 /**
@@ -28,6 +32,9 @@ export function InterviewSettingsModal({
   onRename,
   onDelete,
   loadImpact,
+  redactionOn = false,
+  redactionPreview = [],
+  onToggleRedaction,
 }: InterviewSettingsModalProps) {
   const [date, setDate] = useState("");
   const [impact, setImpact] = useState<InterviewDeleteImpact | null>(null);
@@ -182,6 +189,34 @@ export function InterviewSettingsModal({
         onChange={(e) => setDate(e.target.value)}
         className="field"
       />
+
+      {onToggleRedaction && (
+        <div className="mt-4 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3">
+          <label className="flex cursor-pointer items-center justify-between gap-3">
+            <span>
+              <span className="block text-[13px] font-medium text-[var(--ink-1)]">
+                Redact speaker names
+              </span>
+              <span className="hint mt-0.5 block text-[11.5px]">
+                Shows Speaker 1, Speaker 2 instead of real names — on screen,
+                on copy, and in exports. The stored transcript is unchanged.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={redactionOn}
+              onChange={(e) => onToggleRedaction(e.target.checked)}
+              aria-label="Redact speaker names"
+              className="h-4 w-4 shrink-0 accent-[var(--accent)]"
+            />
+          </label>
+          {redactionPreview.length > 0 && (
+            <p className="hint mt-2 text-[11.5px]">
+              {redactionPreview.map((p) => `${p.real} → ${p.alias}`).join(" · ")}
+            </p>
+          )}
+        </div>
+      )}
     </Modal>
   );
 }

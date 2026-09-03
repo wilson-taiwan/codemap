@@ -415,6 +415,18 @@ export interface AppPreferences {
    */
   sync_url: string | null;
   sync_anon_key: string | null;
+  /**
+   * Passage-text zoom as a scale factor (1 = 100%). Null/absent = default.
+   * Local-only reading preference: never synced, never exported.
+   */
+  transcript_zoom?: number | null;
+  /** Whether the left codebook rail is collapsed. Local-only, like widths. */
+  codebook_collapsed?: boolean;
+  /**
+   * Per-interview speaker-redaction toggle, keyed by interview id.
+   * Local-only view/export layer; never enters a sync payload.
+   */
+  speaker_redaction?: Record<string, boolean>;
 }
 
 export interface AppVersionInfo {

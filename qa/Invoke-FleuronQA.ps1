@@ -186,11 +186,30 @@ if ($SelfCheck) {
     # 5. Test Evidence Export
     $g3 = [Guid]::NewGuid().ToString("N")
     $scratchOut = Join-Path $temporaryDirectory "fleuron-qa-selfcheck-out-$g3"
+    Add-QAManualRow -Evidence $Evidence -Number 1 -Title "SelfCheck Row One" -Instruction "Do one thing." -ExpectedOutcome "One thing done."
+    Add-QAManualRow -Evidence $Evidence -Number 2 -Title "SelfCheck Row Two" -Instruction "Do two things." -ExpectedOutcome "Two things done."
+    Add-QAManualRow -Evidence $Evidence -Number 3 -Title "SelfCheck Row Three" -Instruction "Do three things." -ExpectedOutcome "Three things done."
+    Add-QAManualRow -Evidence $Evidence -Number 4 -Title "SelfCheck Row Four" -Instruction "Do four things." -ExpectedOutcome "Four things done."
+    Add-QAManualRow -Evidence $Evidence -Number 5 -Title "SelfCheck Row Five" -Instruction "Do five things." -ExpectedOutcome "Five things done."
     Export-QAEvidence -Evidence $Evidence -OutputDirectory $scratchOut
     if ((Test-Path (Join-Path $scratchOut "evidence.json")) -and (Test-Path (Join-Path $scratchOut "SUMMARY.md"))) {
         Write-Host "[OK] Self-check: Evidence export verified."
     } else {
         Write-Host "[FAIL] Self-check failed: Evidence export did not create evidence.json and SUMMARY.md."
+        $SelfCheckPass = $false
+    }
+    $manualFiles = @(Get-ChildItem -Path $scratchOut -Filter "manual-rows-*.md" -ErrorAction SilentlyContinue)
+    if ($manualFiles.Count -eq 1) {
+        $manualText = Get-Content -Path $manualFiles[0].FullName -Raw
+        $rowHits = @([regex]::Matches($manualText, "## [1-5]\. SelfCheck Row"))
+        if ($rowHits.Count -eq 5 -and $manualText.Contains("- [ ] PASS") -and $manualText.Contains("- [ ] FAIL") -and $manualText.Contains("- [ ] SKIP")) {
+            Write-Host "[OK] Self-check: Manual checklist file verified (5 rows with PASS/FAIL/SKIP boxes)."
+        } else {
+            Write-Host "[FAIL] Self-check failed: Manual checklist file is missing rows or verdict boxes."
+            $SelfCheckPass = $false
+        }
+    } else {
+        Write-Host "[FAIL] Self-check failed: Expected exactly one manual-rows-*.md file, found $($manualFiles.Count)."
         $SelfCheckPass = $false
     }
     if (Test-Path $scratchOut) { Remove-Item -Recurse -Force $scratchOut }

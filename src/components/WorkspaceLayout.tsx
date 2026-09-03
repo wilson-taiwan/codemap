@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../store/app-store";
 import { useProjectStore } from "../store/project-store";
+import { hasModKey } from "../lib/platform";
+import { Icon } from "./ui/Icon";
 import { CodebookPanel } from "./CodebookPanel";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { MemoPanel } from "./MemoPanel";
@@ -35,6 +37,33 @@ const RESIZER = 5;
  * a paragraph cannot be read at 45 characters.
  */
 const TRANSCRIPT_MIN = 512;
+
+/** Width of the slim expand rail shown while the codebook is collapsed. */
+const COLLAPSED_RAIL = 28;
+
+/**
+ * Grid columns for the workspace rails (T04).
+ *
+ * Collapsed, the codebook and its resizer are replaced by one slim expand
+ * rail; the stored codebook width is untouched so expanding restores it.
+ * Exported for test: collapsing must give the width to the transcript, never
+ * to the memo rail, and must survive the memo rail being open.
+ */
+export function workspaceColumns(opts: {
+  collapsed: boolean;
+  memoRail: boolean;
+  codebook: number;
+  memos: number;
+}): string {
+  if (opts.collapsed) {
+    return opts.memoRail
+      ? `${COLLAPSED_RAIL}px minmax(0, 1fr) ${RESIZER}px ${opts.memos}px`
+      : `${COLLAPSED_RAIL}px minmax(0, 1fr)`;
+  }
+  return opts.memoRail
+    ? `${opts.codebook}px ${RESIZER}px minmax(0, 1fr) ${RESIZER}px ${opts.memos}px`
+    : `${opts.codebook}px ${RESIZER}px minmax(0, 1fr)`;
+}
 
 /**
  * Shrink the rails toward `MIN_PANEL` when the window cannot hold both them and
@@ -100,6 +129,9 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
 export function WorkspaceLayout() {
   const panelWidths = useAppStore((s) => s.preferences.panel_widths);
   const setPanelWidths = useAppStore((s) => s.setPanelWidths);
+  const codebookCollapsed =
+    useAppStore((s) => s.preferences.codebook_collapsed) ?? false;
+  const setCodebookCollapsed = useAppStore((s) => s.setCodebookCollapsed);
   const [codebookWidth, setCodebookWidth] = useState(
     panelWidths?.codebook ?? DEFAULT_CODEBOOK,
   );
@@ -174,6 +206,33 @@ export function WorkspaceLayout() {
     };
   }, [onMouseMove, onMouseUp]);
 
+  // Codebook collapse toggle (T04): Cmd/Ctrl+B, never while typing or in a
+  // dialog. The stored width is untouched while collapsed, so expanding
+  // restores exactly what was there.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!hasModKey(e) || e.shiftKey || e.altKey) return;
+      if (e.key !== "b" && e.key !== "B") return;
+      if (document.querySelector('[role="dialog"]')) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      const current =
+        useAppStore.getState().preferences.codebook_collapsed ?? false;
+      void useAppStore.getState().setCodebookCollapsed(!current);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <Toolbar />
@@ -181,23 +240,44 @@ export function WorkspaceLayout() {
       <div
         ref={gridRef}
         data-testid="workspace-grid"
+        data-codebook-collapsed={codebookCollapsed ? "true" : undefined}
         className="relative grid min-h-0 flex-1 overflow-hidden"
-        style={
+          style={
           {
-            gridTemplateColumns: showMemoRail
-              ? `${rails.codebook}px ${RESIZER}px minmax(0, 1fr) ${RESIZER}px ${rails.memos}px`
-              : `${rails.codebook}px ${RESIZER}px minmax(0, 1fr)`,
+            gridTemplateColumns: workspaceColumns({
+              collapsed: codebookCollapsed,
+              memoRail: showMemoRail,
+              codebook: rails.codebook,
+              memos: rails.memos,
+            }),
             gridTemplateRows: "minmax(0, 1fr)",
             // Published so NextStepCoach can sit over the transcript column
             // alone. It used to be `inset-x-0` across the whole grid, which
             // ran it under the memo rail and covered "Already on this passage".
-            "--rail-l": `${rails.codebook + RESIZER}px`,
+            "--rail-l": codebookCollapsed
+              ? `${COLLAPSED_RAIL}px`
+              : `${rails.codebook + RESIZER}px`,
             "--rail-r": showMemoRail ? `${rails.memos + RESIZER}px` : "0px",
           } as React.CSSProperties
         }
       >
-        <CodebookPanel />
-        <Resizer onGrab={() => (dragging.current = "codebook")} />
+        {codebookCollapsed ? (
+          <button
+            type="button"
+            onClick={() => void setCodebookCollapsed(false)}
+            aria-label="Show codebook"
+            title="Show codebook (Cmd/Ctrl+B)"
+            data-testid="show-codebook-rail"
+            className="flex h-full w-full items-start justify-center border-r border-[var(--g-rim)] pt-3 text-[var(--ink-3)] transition-colors hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+          >
+            <Icon name="arrowRight" size={14} />
+          </button>
+        ) : (
+          <>
+            <CodebookPanel />
+            <Resizer onGrab={() => (dragging.current = "codebook")} />
+          </>
+        )}
         <TranscriptPanel />
         {showMemoRail && (
           <>

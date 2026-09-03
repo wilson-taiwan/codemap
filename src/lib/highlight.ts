@@ -265,6 +265,63 @@ export function trimmedSpan(
   return { start, end, text: raw.slice(leading, raw.length - trailing) };
 }
 
+/**
+ * Extend a pending span to a Shift+click point.
+ *
+ * `anchor` is the fixed edge — the stored start of the pending selection —
+ * and `focus` is the char offset of the Shift+click. When the click lands
+ * before the anchor the edges flip so the selection covers click→anchor;
+ * otherwise it covers anchor→click. Trimming is delegated to `trimmedSpan`,
+ * so the stored span has exactly the same edge rules as a dragged one.
+ *
+ * Pure: `text` is the full passage text. Returns null when the extended range
+ * holds nothing but whitespace.
+ */
+export function extendSpan(
+  text: string,
+  anchor: number,
+  focus: number,
+): { start: number; end: number; text: string } | null {
+  const clampedAnchor = Math.max(0, Math.min(anchor, text.length));
+  const clampedFocus = Math.max(0, Math.min(focus, text.length));
+  const rawStart = Math.min(clampedAnchor, clampedFocus);
+  const rawEnd = Math.max(clampedAnchor, clampedFocus);
+  if (rawEnd <= rawStart) return null;
+  return trimmedSpan(rawStart, text.slice(rawStart, rawEnd));
+}
+
+/**
+ * Char offset of a mouse point inside a passage container.
+ *
+ * Uses the same preceding-range technique as `selectionOffsets` so the number
+ * is comparable with stored spans however the passage is chopped into marks.
+ * Returns null when the point is not over text in the container.
+ */
+export function clickOffsetIn(
+  container: HTMLElement,
+  clientX: number,
+  clientY: number,
+): number | null {
+  let range: Range | null = null;
+  if (typeof document.caretRangeFromPoint === "function") {
+    range = document.caretRangeFromPoint(clientX, clientY);
+  } else {
+    const pos = (document as Document & {
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    }).caretPositionFromPoint?.(clientX, clientY);
+    if (pos) {
+      range = document.createRange();
+      range.setStart(pos.offsetNode, pos.offset);
+      range.collapse(true);
+    }
+  }
+  if (!range || !container.contains(range.startContainer)) return null;
+  const preceding = range.cloneRange();
+  preceding.selectNodeContents(container);
+  preceding.setEnd(range.startContainer, range.startOffset);
+  return preceding.toString().length;
+}
+
 export interface MatchRange {
   start: number;
   end: number;

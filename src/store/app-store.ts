@@ -68,6 +68,9 @@ interface AppStore {
   setMergeSameSpeaker: (value: boolean) => Promise<void>;
   setTheme: (theme: ThemePreference) => Promise<void>;
   setSyncServer: (url: string, anonKey: string) => Promise<void>;
+  setTranscriptZoom: (value: number | null) => Promise<void>;
+  setCodebookCollapsed: (value: boolean) => Promise<void>;
+  setSpeakerRedaction: (interviewId: string, value: boolean) => Promise<void>;
   setAutomaticUpdateChecks: (value: boolean) => Promise<void>;
   clearAutoOpenFailed: () => void;
   openAbout: () => void;  closeAbout: () => void;
@@ -96,6 +99,9 @@ const defaultPrefs: AppPreferences = {
   coder_identities: {},
   sync_url: null,
   sync_anon_key: null,
+  transcript_zoom: null,
+  codebook_collapsed: false,
+  speaker_redaction: {},
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -205,6 +211,45 @@ export const useAppStore = create<AppStore>((set, get) => ({
     };
     const saved = await api.setAppPreferences(prefs);
     set({ preferences: saved });
+  },
+
+  setTranscriptZoom: async (value) => {
+    const prefs = { ...get().preferences, transcript_zoom: value };
+    set({ preferences: prefs });
+    try {
+      const saved = await api.setAppPreferences(prefs);
+      set({ preferences: saved });
+    } catch {
+      // Cosmetic — the choice still applies for this session.
+    }
+  },
+
+  setCodebookCollapsed: async (value) => {
+    const prefs = { ...get().preferences, codebook_collapsed: value };
+    set({ preferences: prefs });
+    try {
+      const saved = await api.setAppPreferences(prefs);
+      set({ preferences: saved });
+    } catch {
+      // Cosmetic — the choice still applies for this session.
+    }
+  },
+
+  setSpeakerRedaction: async (interviewId, value) => {
+    const prefs = {
+      ...get().preferences,
+      speaker_redaction: {
+        ...(get().preferences.speaker_redaction ?? {}),
+        [interviewId]: value,
+      },
+    };
+    set({ preferences: prefs });
+    try {
+      const saved = await api.setAppPreferences(prefs);
+      set({ preferences: saved });
+    } catch {
+      // View-layer toggle — the choice still applies for this session.
+    }
   },
 
   setAutomaticUpdateChecks: async (value) => {

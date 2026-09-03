@@ -1,3 +1,33 @@
+/**
+ * Where the reader is as a fraction of the scrollable range, so a filter that
+ * changes the list height can put them back in the same place.
+ *
+ * A fraction, not pixels: applying a code filter removes most of the list, so
+ * the old pixel offset points somewhere unrelated while the fraction still
+ * names the same part of the transcript. Guards divide-by-zero (an
+ * unscrolled or unmeasured scroller) as 0.
+ */
+export function scrollFraction(
+  scrollTop: number,
+  scrollHeight: number,
+  clientHeight: number,
+): number {
+  const range = scrollHeight - clientHeight;
+  if (range <= 0) return 0;
+  return Math.min(1, Math.max(0, scrollTop / range));
+}
+
+/** Inverse of `scrollFraction`: the pixel offset for a saved fraction. */
+export function scrollTopForFraction(
+  fraction: number,
+  scrollHeight: number,
+  clientHeight: number,
+): number {
+  const range = scrollHeight - clientHeight;
+  if (range <= 0) return 0;
+  return Math.min(1, Math.max(0, fraction)) * range;
+}
+
 export type SelectIntent = "click" | "keys" | "jump" | "restore";
 
 export const SCROLL_MARGIN = 48;

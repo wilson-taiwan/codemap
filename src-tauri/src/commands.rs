@@ -845,6 +845,7 @@ pub fn clear_workspace(
 
 #[tauri::command]
 pub fn export_with_config(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     target_dir: String,
     config: ExportConfigInput,
@@ -853,6 +854,19 @@ pub fn export_with_config(
     coder_name: String,
 ) -> Result<ExportResult, String> {
     let target_path = PathBuf::from(&target_dir);
+    // Speaker redaction is a per-machine view/export layer: the toggle lives
+    // in app preferences (which have no sync path), so the exporting machine
+    // decides and the stored names are never rewritten.
+    let redacted: std::collections::HashSet<String> = crate::app_data::get_app_preferences(&app)
+        .map(|prefs| {
+            prefs
+                .speaker_redaction
+                .into_iter()
+                .filter(|(_, on)| *on)
+                .map(|(id, _)| id)
+                .collect()
+        })
+        .unwrap_or_default();
     state.with_conn(|conn| {
         db::export_with_config(
             conn,
@@ -861,6 +875,7 @@ pub fn export_with_config(
             report_html.as_deref(),
             framework_matrix_csv.as_deref(),
             &coder_name,
+            &redacted,
         )
         .map_err(|e| {
             crate::file_error::classified(

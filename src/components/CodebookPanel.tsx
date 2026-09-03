@@ -11,6 +11,7 @@ import { NoteHoverCard, type NoteHoverCardTarget } from "./NoteHoverCard";
 import { openContextMenu } from "./ui/ContextMenu";
 import type { MenuItemSpec } from "./ui/Menu";
 import { canNest } from "../lib/code-drag";
+import { codeMatchesQuery } from "../lib/code-search";
 import {
   computeDragState,
   resolveDropTarget,
@@ -57,6 +58,7 @@ export function CodebookPanel() {
   );
   const intent = useAppStore((s) => s.intent);
   const setIntent = useAppStore((s) => s.setIntent);
+  const setCodebookCollapsed = useAppStore((s) => s.setCodebookCollapsed);
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -209,13 +211,7 @@ export function CodebookPanel() {
 
   const filteredAndSortedCodes = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    let list = codes.filter((c) => {
-      if (!q) return true;
-      return (
-        c.name.toLowerCase().includes(q) ||
-        (c.definition && c.definition.toLowerCase().includes(q))
-      );
-    });
+    let list = codes.filter((c) => codeMatchesQuery(c, q));
 
     if (sortBy === "name") {
       if (!q) {
@@ -379,9 +375,38 @@ export function CodebookPanel() {
     >
       <div className="flex items-center justify-between px-3.5 pb-2 pt-3">
         <h2 className="eyebrow">Codebook</h2>
-        {codes.length > 0 && (
-          <span className="chip text-[11px] tabular-nums">{codes.length}</span>
-        )}
+        <span className="flex items-center gap-1">
+          {codes.length > 0 && (
+            <span
+              className="chip text-[11px] tabular-nums"
+              data-testid="codebook-count"
+              aria-label={
+                searchQuery.trim()
+                  ? `${filteredAndSortedCodes.length} of ${codes.length} codes match`
+                  : `${codes.length} codes`
+              }
+              title={
+                searchQuery.trim()
+                  ? `${filteredAndSortedCodes.length} of ${codes.length} codes match`
+                  : undefined
+              }
+            >
+              {searchQuery.trim()
+                ? `${filteredAndSortedCodes.length} of ${codes.length}`
+                : `${codes.length}`}
+            </span>
+          )}
+          <Tooltip content="Hide codebook (Cmd/Ctrl+B)">
+            <button
+              type="button"
+              onClick={() => void setCodebookCollapsed(true)}
+              aria-label="Hide codebook"
+              className="grid h-5 w-5 place-items-center rounded-md text-[var(--ink-3)] transition-colors hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+            >
+              <Icon name="arrowLeft" size={13} />
+            </button>
+          </Tooltip>
+        </span>
       </div>
 
       {codes.length > 0 && (

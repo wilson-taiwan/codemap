@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { highlightRuns, trimmedSpan } from "./highlight";
+import { extendSpan, highlightRuns, trimmedSpan } from "./highlight";
 import type { Code, CodedSegment } from "./types";
 
 const TEXT = "I rehearse the hello on the drive in";
@@ -284,6 +284,58 @@ describe("trimmedSpan", () => {
       if (!span) continue;
       expect(passage.slice(span.start, span.end)).toBe(span.text);
     }
+  });
+});
+
+describe("extendSpan", () => {
+  const PASSAGE = "I rehearse the hello on the drive in";
+
+  it("extends forward from the anchor to the click point", () => {
+    // Dragged "rehearse" (2-9), Shift+click at 20: covers 2-20 trimmed.
+    expect(extendSpan(PASSAGE, 2, 20)).toEqual({
+      start: 2,
+      end: 20,
+      text: PASSAGE.slice(2, 20),
+    });
+  });
+
+  it("flips the edges when the click lands before the anchor", () => {
+    expect(extendSpan(PASSAGE, 20, 2)).toEqual({
+      start: 2,
+      end: 20,
+      text: PASSAGE.slice(2, 20),
+    });
+  });
+
+  it("keeps the anchor edge fixed and trims like a drag", () => {
+    // Click lands on the trailing space of "hello ": the end trims back.
+    const span = extendSpan(PASSAGE, 11, 17);
+    expect(span).toEqual(trimmedSpan(11, PASSAGE.slice(11, 17)));
+    expect(span?.start).toBe(11);
+  });
+
+  it("matches trimmedSpan parity across the passage", () => {
+    for (const [anchor, focus] of [[0, 11], [2, 14], [10, 12], [20, 16], [16, 20]] as const) {
+      const span = extendSpan(PASSAGE, anchor, focus);
+      const parity = trimmedSpan(
+        Math.min(anchor, focus),
+        PASSAGE.slice(Math.min(anchor, focus), Math.max(anchor, focus)),
+      );
+      expect(span).toEqual(parity);
+      if (span) expect(PASSAGE.slice(span.start, span.end)).toBe(span.text);
+    }
+  });
+
+  it("rejects a click on the anchor and whitespace-only ranges", () => {
+    expect(extendSpan(PASSAGE, 9, 9)).toBeNull();
+    // 9-11 is " h" — trims to "h", kept. 10-11 is just " " — rejected.
+    expect(extendSpan(PASSAGE, 10, 11)).toBeNull();
+  });
+
+  it("clamps out-of-range offsets to the passage", () => {
+    const span = extendSpan(PASSAGE, -5, 999);
+    expect(span?.start).toBe(0);
+    expect(span?.end).toBe(PASSAGE.length);
   });
 });
 

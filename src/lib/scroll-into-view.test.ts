@@ -1,5 +1,40 @@
 import { describe, it, expect } from "vitest";
-import { scrollPlan, SCROLL_MARGIN } from "./scroll-into-view";
+import {
+  scrollFraction,
+  scrollPlan,
+  scrollTopForFraction,
+  SCROLL_MARGIN,
+} from "./scroll-into-view";
+
+describe("scrollFraction", () => {
+  it("names the reader's place as a fraction of the scroll range", () => {
+    expect(scrollFraction(500, 1500, 500)).toBe(0.5);
+    expect(scrollFraction(0, 1500, 500)).toBe(0);
+    expect(scrollFraction(1000, 1500, 500)).toBe(1);
+  });
+
+  it("clamps overshoot and guards a zero-height range", () => {
+    expect(scrollFraction(-10, 1500, 500)).toBe(0);
+    expect(scrollFraction(9999, 1500, 500)).toBe(1);
+    expect(scrollFraction(0, 500, 500)).toBe(0);
+    expect(scrollFraction(0, 0, 0)).toBe(0);
+  });
+
+  it("round-trips through scrollTopForFraction", () => {
+    for (const top of [0, 137, 500, 999, 1000]) {
+      const f = scrollFraction(top, 1500, 500);
+      expect(scrollTopForFraction(f, 1500, 500)).toBeCloseTo(top, 6);
+    }
+  });
+
+  it("restores the same fraction against a shorter filtered list", () => {
+    const f = scrollFraction(750, 3000, 500);
+    expect(scrollTopForFraction(f, 1200, 500)).toBeCloseTo(
+      ((750 / 2500) * 700),
+      6,
+    );
+  });
+});
 
 describe("scrollPlan", () => {
   const viewportHeight = 600;

@@ -677,6 +677,9 @@ let prefs = {
   // rather than the first-run form. Clear them to see the setup path.
   sync_url: "https://example-project.supabase.co" as string | null,
   sync_anon_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.preview" as string | null,
+  transcript_zoom: null as number | null,
+  codebook_collapsed: false,
+  speaker_redaction: {} as Record<string, boolean>,
 };
 let mockUpdateStatus = {
   phase: "idle",

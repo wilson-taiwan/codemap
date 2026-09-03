@@ -5334,6 +5334,34 @@ fn fetch_export_coded_rows(conn: &Connection) -> rusqlite::Result<Vec<ExportCode
     rows.collect()
 }
 
+/// Per-interview speaker aliases for redacted exports (T06).
+///
+/// Same rule as the frontend `speaker-alias.ts`: the exact name "Interviewer"
+/// is exempt and never numbered; every other distinct name — including
+/// "Unknown" — becomes Speaker 1..N in first-appearance (`segment_index`)
+/// order, independently per interview.
+fn speaker_alias_map(
+    conn: &Connection,
+    interview_id: &str,
+) -> rusqlite::Result<HashMap<String, String>> {
+    let mut stmt = conn.prepare(
+        "SELECT speaker FROM transcript_segments
+         WHERE interview_id = ?1 ORDER BY segment_index",
+    )?;
+    let speakers = stmt.query_map([interview_id], |row| row.get::<_, String>(0))?;
+    let mut aliases = HashMap::new();
+    let mut n = 0;
+    for speaker in speakers {
+        let name = speaker?.trim().to_string();
+        if name.is_empty() || name == "Interviewer" || aliases.contains_key(&name) {
+            continue;
+        }
+        n += 1;
+        aliases.insert(name, format!("Speaker {n}"));
+    }
+    Ok(aliases)
+}
+
 fn write_coded_segments_csv(
     path: &Path,
     rows: &[ExportCodedRow],
@@ -5379,6 +5407,10 @@ pub fn export_with_config(
     report_html: Option<&str>,
     framework_matrix_csv: Option<&str>,
     coder_name: &str,
+    // Interviews with speaker redaction on (per-interview toggle, app
+    // preferences, local-only). Their CSV speaker column carries aliases;
+    // every other interview exports real names as before.
+    redacted_interview_ids: &std::collections::HashSet<String>,
 ) -> rusqlite::Result<ExportResult> {
     let title: String = conn
         .query_row(
@@ -5449,6 +5481,26 @@ pub fn export_with_config(
     }
     if config.include_coder_scope == "active-coder" && !coder_name.is_empty() {
         coded_rows.retain(|r| r.coder_name == coder_name);
+    }
+
+    // Speaker redaction (T06): alias the speaker column for toggled
+    // interviews. The database keeps the real names; only the file changes.
+    if !redacted_interview_ids.is_empty() {
+        let mut maps: HashMap<String, HashMap<String, String>> = HashMap::new();
+        for row in &mut coded_rows {
+            if !redacted_interview_ids.contains(&row.interview_id) {
+                continue;
+            }
+            if !maps.contains_key(&row.interview_id) {
+                maps.insert(
+                    row.interview_id.clone(),
+                    speaker_alias_map(conn, &row.interview_id)?,
+                );
+            }
+            if let Some(alias) = maps[&row.interview_id].get(row.speaker.trim()) {
+                row.speaker = alias.clone();
+            }
+        }
     }
 
     if config.items.iter().any(|i| i == "coded-segments") {
@@ -7280,6 +7332,7 @@ mod tests {
             Some("<html>Report</html>"),
             None,
             "Alice",
+            &std::collections::HashSet::new(),
         )
         .unwrap();
 
@@ -7301,6 +7354,7 @@ mod tests {
             Some("<html>Report 2</html>"),
             None,
             "Alice",
+            &std::collections::HashSet::new(),
         )
         .unwrap();
         let out_dir2 = std::path::PathBuf::from(&res2.exports_dir);
@@ -7310,6 +7364,71 @@ mod tests {
             "Previous export folder must not be deleted"
         );
         assert!(out_dir2.exists(), "Second export folder must exist");
+    }
+
+    #[test]
+    fn csv_export_redacts_speakers_for_toggled_interviews() {
+        let (_dir, project_path, conn) = make_project();
+        let iv = make_interview(&conn, "A");
+        let seg = |speaker: &str, text: &str| crate::models::SegmentInput {
+            speaker: speaker.into(),
+            timestamp_start: "00:00:00.000".into(),
+            timestamp_end: None,
+            text: text.into(),
+            section_tag: None,
+        };
+        import_segments(
+            &conn,
+            &ImportSegmentsInput {
+                interview_id: iv.id.clone(),
+                segments: vec![
+                    seg("Ada Lovelace", "first"),
+                    seg("Interviewer", "prompt"),
+                    seg("Ada Lovelace", "again"),
+                    seg("Bo", "last"),
+                ],
+                raw_vtt_path: None,
+            },
+        )
+        .unwrap();
+        for s in get_segments(&conn, &iv.id).unwrap() {
+            apply_one(&conn, &iv.id, &s.id);
+        }
+
+        let config = ExportConfigInput {
+            preset: "reflexive-ta".to_string(),
+            items: vec!["coded-segments".to_string()],
+            include_participant_scope: "all".to_string(),
+            selected_participant_ids: None,
+            include_coder_scope: "all".to_string(),
+        };
+        let export_once = |redacted: &std::collections::HashSet<String>| {
+            let dir = project_path.join(format!("exports_{}", redacted.len()));
+            let res =
+                export_with_config(&conn, &dir, &config, None, None, "Alice", redacted).unwrap();
+            std::fs::read_to_string(
+                std::path::PathBuf::from(&res.exports_dir).join("coded-segments.csv"),
+            )
+            .unwrap()
+        };
+
+        // Unredacted: real names in the speaker column.
+        let plain = export_once(&std::collections::HashSet::new());
+        assert!(plain.contains("Ada Lovelace"), "plain export keeps names");
+        assert!(plain.contains("Interviewer"), "Interviewer always literal");
+
+        // Redacted: first-appearance numbering, Interviewer untouched.
+        let mut redacted = std::collections::HashSet::new();
+        redacted.insert(iv.id.clone());
+        let masked = export_once(&redacted);
+        assert!(
+            !masked.contains("Ada Lovelace"),
+            "alias replaces Ada Lovelace"
+        );
+        assert!(!masked.contains("Bo"), "alias replaces Bo");
+        assert!(masked.contains("Speaker 1"), "first speaker is Speaker 1");
+        assert!(masked.contains("Speaker 2"), "second speaker is Speaker 2");
+        assert!(masked.contains("Interviewer"), "Interviewer stays literal");
     }
 
     #[test]
@@ -7351,6 +7470,7 @@ mod tests {
             None,
             None,
             "Alice",
+            &std::collections::HashSet::new(),
         )
         .unwrap();
 

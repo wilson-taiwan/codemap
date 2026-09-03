@@ -184,4 +184,34 @@ function Export-QAEvidence {
     $summaryPath = Join-Path $OutputDirectory "SUMMARY.md"
     $summaryLines -join [Environment]::NewLine | Set-Content -Path $summaryPath -Encoding utf8
     Write-Host "Summary Markdown written to: $summaryPath"
+
+    # 3. Write the manual-rows checklist (FL-029 closeout artifact). The five
+    # hands-on rows leave no automated record, so the run emits a fill-in
+    # sheet naming the exact build under test. CI is never gated on it.
+    $versionTag = $Evidence.expected_release_version
+    if ([string]::IsNullOrWhiteSpace($versionTag)) { $versionTag = "unversioned" }
+    $versionTag = ($versionTag -replace '[^A-Za-z0-9._-]', '_')
+    $manualLines = @()
+    $manualLines += "# Fleuron Manual QA Checklist"
+    $manualLines += ""
+    $manualLines += "- Build under test: $versionTag"
+    $manualLines += "- Candidate SHA-256: $($Evidence.candidate_installer_hash)"
+    $manualLines += "- Automated run at: $($Evidence.executed_at) ($($Evidence.windows_version))"
+    $manualLines += "- Runner version: $($Evidence.runner_version)"
+    $manualLines += ""
+    $manualLines += "Tick one box per row after performing it by hand inside the VM."
+    $manualLines += ""
+    foreach ($m in $manualRows) {
+        $manualLines += "## $($m.number). $($m.title)"
+        $manualLines += "- Action: $($m.instruction)"
+        $manualLines += "- Expected: $($m.expected)"
+        $manualLines += "- [ ] PASS"
+        $manualLines += "- [ ] FAIL"
+        $manualLines += "- [ ] SKIP"
+        $manualLines += "- Notes: "
+        $manualLines += ""
+    }
+    $manualPath = Join-Path $OutputDirectory ("manual-rows-" + $versionTag + ".md")
+    $manualLines -join [Environment]::NewLine | Set-Content -Path $manualPath -Encoding utf8
+    Write-Host "Manual checklist written to: $manualPath"
 }

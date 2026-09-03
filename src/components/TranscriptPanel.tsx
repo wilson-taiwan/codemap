@@ -7,18 +7,33 @@ import { appConfirm } from "../store/confirm-store";
 import { formatTimestampDisplay } from "../lib/vtt-parser";
 import { basename } from "../lib/format";
 import { NewInterviewModal } from "./NewInterviewModal";
+import { BulkImportModal } from "./BulkImportModal";
 import { InterviewSettingsModal } from "./InterviewSettingsModal";
 import { TranscriptLinkPanel } from "./TranscriptLinkPanel";
 import { api } from "../lib/api";
 import {
   highlightRuns,
   selectionOffsets,
+  clickOffsetIn,
+  extendSpan,
   formatRunAttribution,
   matchRanges,
   splitRunsOnMatches,
   type MatchRange,
 } from "../lib/highlight";
+import {
+  normalizeZoom,
+  stepZoom,
+  zoomPercent,
+  ZOOM_MAX,
+  ZOOM_MIN,
+} from "../lib/reading-zoom";
 import { hasModKey } from "../lib/platform";
+import {
+  useSpeakerDisplay,
+  useSpeakerRedactionOn,
+} from "../hooks/useSpeakerDisplay";
+import { aliasPreview } from "../lib/speaker-alias";
 import { SelectionBubble, type BubbleAnchor } from "./SelectionBubble";
 import { CodeFilterButton } from "./CodeFilterButton";
 import { buildMarkMenuItems } from "./TranscriptPanel.menu";
@@ -29,7 +44,11 @@ import { Icon } from "./ui/Icon";
 import { Tooltip } from "./ui/Tooltip";
 import { openContextMenu } from "./ui/ContextMenu";
 import { readableOn } from "../lib/code-colors";
-import { scrollPlan } from "../lib/scroll-into-view";
+import {
+  scrollFraction,
+  scrollPlan,
+  scrollTopForFraction,
+} from "../lib/scroll-into-view";
 import type { Code, CodedSegment, Interview, TranscriptSegment } from "../lib/types";
 
 const EMPTY_CODINGS: CodedSegment[] = [];
@@ -101,9 +120,16 @@ export function TranscriptPanel() {
   );
   const intent = useAppStore((s) => s.intent);
   const setIntent = useAppStore((s) => s.setIntent);
+  const transcriptZoomPref = useAppStore((s) => s.preferences.transcript_zoom);
+  const setTranscriptZoom = useAppStore((s) => s.setTranscriptZoom);
+  const zoom = normalizeZoom(transcriptZoomPref);
+  const showSpeaker = useSpeakerDisplay();
+  const redactionOn = useSpeakerRedactionOn();
+  const setSpeakerRedaction = useAppStore((s) => s.setSpeakerRedaction);
 
   const [importing, setImporting] = useState(false);
   const [showNewInterview, setShowNewInterview] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [showLinkPanel, setShowLinkPanel] = useState(false);
   const [pendingCoded, setPendingCoded] = useState(0);
   const [editingInterview, setEditingInterview] = useState<Interview | null>(null);
@@ -111,13 +137,24 @@ export function TranscriptPanel() {
   const articleRefs = useRef<Map<string, HTMLElement>>(new Map());
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [bubbleAnchor, setBubbleAnchor] = useState<BubbleAnchor | null>(null);
+  /**
+   * Fixed edge for Shift+click extension (T01). Set when a plain drag creates
+   * a pending span; the anchor stays put while Shift+click moves the focus
+   * edge. Cleared together with the pending selection.
+   */
+  const anchorRef = useRef<{ segmentId: string; anchor: number } | null>(null);
 
   /**
    * Span capture lives at the document level.
    * Cross-passage selection triggers a helpful notice (B4).
    */
   useEffect(() => {
-    const onMouseUp = () => {
+    const onMouseUp = (e: MouseEvent) => {
+      // Shift+click extension is handled in the passage onClick below, where
+      // the stored anchor is known. Letting this handler run first would
+      // overwrite the pending span with the native extended range and lose
+      // which edge is fixed.
+      if (e.shiftKey) return;
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
       const range = sel.getRangeAt(0);
@@ -144,6 +181,7 @@ export function TranscriptPanel() {
       const box = p.getBoundingClientRect();
       const r = range.getBoundingClientRect();
       setPendingSelection({ segmentId, ...offsets });
+      anchorRef.current = { segmentId, anchor: offsets.start };
       setBubbleAnchor({
         segmentId,
         rel: {
@@ -161,8 +199,45 @@ export function TranscriptPanel() {
     if (bubbleAnchor && bubbleAnchor.segmentId !== selectedSegmentId) {
       setBubbleAnchor(null);
       setPendingSelection(null);
+      anchorRef.current = null;
     }
   }, [selectedSegmentId, bubbleAnchor, setPendingSelection]);
+
+  // The anchor only means something while a pending span is alive. Every
+  // dismissal path (bubble dismiss, Esc, passage switch) nulls the pending
+  // selection, so tying the anchor's lifetime to it keeps the two from
+  // disagreeing without touching each call site.
+  useEffect(() => {
+    if (!pendingSpan) anchorRef.current = null;
+  }, [pendingSpan]);
+
+  /**
+   * Reader's place (T02): the selected passage plus the scroll fraction,
+   * refreshed on selection change and on every scroll so a filter change
+   * always has a pre-change snapshot to restore. The fraction — not pixels —
+   * survives the list-height change a filter causes.
+   */
+  const placeRef = useRef<{
+    selectedSegmentId: string | null;
+    fraction: number;
+  }>({ selectedSegmentId: null, fraction: 0 });
+
+  useEffect(() => {
+    placeRef.current.selectedSegmentId = selectedSegmentId;
+  }, [selectedSegmentId]);
+
+  const recordScrollPlace = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    placeRef.current = {
+      selectedSegmentId: useProjectStore.getState().selectedSegmentId,
+      fraction: scrollFraction(el.scrollTop, el.scrollHeight, el.clientHeight),
+    };
+  }, []);
+
+  const filterKey = `${codeFilter ?? ""}\n${speakerFilter ?? ""}`;
+  const filterKeyRef = useRef<string | null>(null);
+  const placeInterviewRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!selectedSegmentId) return;
@@ -330,6 +405,48 @@ export function TranscriptPanel() {
     setCurrentMatchIndex(0);
   }, [search, activeInterviewId, codeFilter, speakerFilter]);
 
+  useEffect(() => {
+    // Filtering keeps your place (T02). First run just arms the key;
+    // interview switches keep their own behavior (each interview has its own
+    // saved selection). Search-only changes never reach this effect's key.
+    if (filterKeyRef.current === null) {
+      filterKeyRef.current = filterKey;
+      placeInterviewRef.current = activeInterviewId;
+      return;
+    }
+    if (placeInterviewRef.current !== activeInterviewId) {
+      placeInterviewRef.current = activeInterviewId;
+      filterKeyRef.current = filterKey;
+      return;
+    }
+    if (filterKeyRef.current === filterKey) return;
+    filterKeyRef.current = filterKey;
+    const snap = placeRef.current;
+    if (!snap) return;
+    const stillVisible =
+      snap.selectedSegmentId !== null &&
+      visibleSegments.some((seg) => seg.id === snap.selectedSegmentId);
+    if (stillVisible && snap.selectedSegmentId) {
+      // Kept by the filter: re-assert with instant "restore" semantics so
+      // the passage stays (or comes back) into view instead of jumping top.
+      setSelectedSegmentId(snap.selectedSegmentId, "restore");
+    } else {
+      // Filtered out: hold the same fraction of the new list on the next
+      // frame, after the filtered rows have rendered.
+      const fraction = snap.fraction;
+      requestAnimationFrame(() => {
+        const el = scrollerRef.current;
+        if (el) {
+          el.scrollTop = scrollTopForFraction(
+            fraction,
+            el.scrollHeight,
+            el.clientHeight,
+          );
+        }
+      });
+    }
+  }, [filterKey, activeInterviewId, visibleSegments, setSelectedSegmentId]);
+
   const totalMatches = allMatches.length;
   const activeMatch =
     totalMatches > 0
@@ -378,6 +495,41 @@ export function TranscriptPanel() {
     return () => window.removeEventListener("keydown", onKey);
   }, [goNextMatch, goPrevMatch]);
 
+  // Passage-text zoom keys (T03): Cmd/Ctrl + +/-/0 while the transcript has
+  // focus. Never fires inside inputs, the note editor, or dialogs.
+  useEffect(() => {
+    const onZoomKey = (e: KeyboardEvent) => {
+      if (!hasModKey(e) || e.shiftKey || e.altKey) return;
+      if (e.key !== "+" && e.key !== "=" && e.key !== "-" && e.key !== "0") {
+        return;
+      }
+      if (document.querySelector('[role="dialog"]')) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (!target?.closest?.('[data-testid="transcript-panel"]')) return;
+      e.preventDefault();
+      const current = normalizeZoom(
+        useAppStore.getState().preferences.transcript_zoom,
+      );
+      const setZoom = useAppStore.getState().setTranscriptZoom;
+      if (e.key === "0") {
+        if (current !== 1) void setZoom(null);
+      } else {
+        void setZoom(stepZoom(current, e.key === "-" ? -1 : 1));
+      }
+    };
+    window.addEventListener("keydown", onZoomKey);
+    return () => window.removeEventListener("keydown", onZoomKey);
+  }, []);
+
   useEffect(() => {
     if (!activeMatch) return;
     const article = articleRefs.current.get(activeMatch.segmentId);
@@ -393,6 +545,7 @@ export function TranscriptPanel() {
     setPendingSelection(null);
     setSelectedSegmentId(null);
     setBubbleAnchor(null);
+    anchorRef.current = null;
     window.getSelection()?.removeAllRanges();
   };
 
@@ -515,7 +668,7 @@ export function TranscriptPanel() {
         icon: "export" as const,
         onSelect: () =>
           copyText(
-            `${seg.speaker} (${formatTimestampDisplay(seg.timestamp_start)}): ${seg.text}`,
+            `${showSpeaker(seg.speaker)} (${formatTimestampDisplay(seg.timestamp_start)}): ${seg.text}`,
             "Passage",
           ),
       },
@@ -544,6 +697,11 @@ export function TranscriptPanel() {
   function interviewOverflowMenu(interview: Interview) {
     const isSingle = interviews.length <= 1;
     return [
+      {
+        label: "Add transcripts…",
+        icon: "import" as const,
+        onSelect: () => setShowBulkImport(true),
+      },
       {
         label: "Edit details…",
         icon: "settings" as const,
@@ -641,6 +799,18 @@ export function TranscriptPanel() {
         )}
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <Tooltip content="Add many transcripts at once">
+            <button
+              type="button"
+              onClick={() => setShowBulkImport(true)}
+              aria-label="Add transcripts in bulk"
+              className="btn btn-ghost btn-sm"
+            >
+              <Icon name="import" size={13} />
+              <span className="hidden @2xl:inline">Add transcripts</span>
+            </button>
+          </Tooltip>
+
           {/* Code Filter Button (A6) */}
           <CodeFilterButton />
 
@@ -659,6 +829,44 @@ export function TranscriptPanel() {
                 </span>
               </button>
             </Tooltip>
+          )}
+
+          {segments.length > 0 && (
+            <span
+              className="flex items-center gap-0.5"
+              role="group"
+              aria-label="Passage text size"
+            >
+              <button
+                type="button"
+                onClick={() => void setTranscriptZoom(stepZoom(zoom, -1))}
+                disabled={zoom <= ZOOM_MIN}
+                aria-label="Decrease passage text size"
+                title="Decrease passage text size"
+                className="btn btn-ghost btn-sm"
+              >
+                <Icon name="minus" size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => void setTranscriptZoom(null)}
+                aria-label={`Reset passage text size (currently ${zoomPercent(zoom)} percent)`}
+                title="Reset to 100%"
+                className="min-w-11 rounded px-1 py-0.5 text-center text-[11px] tabular-nums text-[var(--ink-3)] transition-colors hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+              >
+                {zoomPercent(zoom)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => void setTranscriptZoom(stepZoom(zoom, 1))}
+                disabled={zoom >= ZOOM_MAX}
+                aria-label="Increase passage text size"
+                title="Increase passage text size"
+                className="btn btn-ghost btn-sm"
+              >
+                <Icon name="plus" size={13} />
+              </button>
+            </span>
           )}
 
           {segments.length > 0 && (
@@ -707,16 +915,28 @@ export function TranscriptPanel() {
           <div
             ref={scrollerRef}
             data-testid="transcript-scroller"
+            onScroll={recordScrollPlace}
+            style={{ "--reading-scale": String(zoom) } as React.CSSProperties}
             className="scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-6 pb-24 pt-1"
             onMouseDown={(e) => {
               if (!(e.target instanceof HTMLElement)) return;
               if (e.target.closest('[role="option"]')) return;
+              // Controls in the sticky filter bar (chips, buttons) must not
+              // clear the passage selection on their way to handling the
+              // click — clearing first is what used to drop the reader back
+              // to the top when a filter was removed.
+              if (e.target.closest('[data-testid="transcript-filterbar"]')) {
+                return;
+              }
               clearPassageSelection();
             }}
           >
             <div className="reading-page mx-auto max-w-xl px-2 pb-2">
               {(search || filteredCode || speakerFilter) && (
-                <div className="glass-bar sticky top-0 z-10 -mx-2 flex items-center gap-2 rounded-b-[12px] px-2 py-2">
+                <div
+                  data-testid="transcript-filterbar"
+                  className="glass-bar sticky top-0 z-10 -mx-2 flex items-center gap-2 rounded-b-[12px] px-2 py-2"
+                >
                   {search && (
                     <span className="hint text-[11.5px]">
                       {totalMatches === 0
@@ -754,7 +974,7 @@ export function TranscriptPanel() {
                       title="Clear speaker filter"
                     >
                       <Icon name="filter" size={11} />
-                      {visibleSegments.length} from “{speakerFilter}”
+                      {visibleSegments.length} from “{showSpeaker(speakerFilter)}”
                       <Icon name="close" size={11} />
                     </button>
                   )}
@@ -783,10 +1003,82 @@ export function TranscriptPanel() {
                       }}
                       id={`segment-${seg.id}`}
                       role="option"
-                      aria-label={`Passage ${seg.segment_index + 1}${isCoded ? "" : " — Not yet coded"}: ${seg.speaker}`}
+                      aria-label={`Passage ${seg.segment_index + 1}${isCoded ? "" : " — Not yet coded"}: ${showSpeaker(seg.speaker)}`}
                       aria-selected={isSelected}
                       tabIndex={isSelected ? 0 : -1}
                       onClick={(e) => {
+                        // Shift+click extends the pending span from its stored
+                        // anchor instead of re-selecting. Same passage only:
+                        // a different passage keeps today's behavior below,
+                        // plus the cross-passage notice.
+                        if (e.shiftKey) {
+                          const anchor = anchorRef.current;
+                          if (anchor && anchor.segmentId !== seg.id) {
+                            showStatus(
+                              "A coded span has to sit inside one speaker turn.",
+                              "info",
+                            );
+                          } else if (anchor) {
+                            const article = e.currentTarget;
+                            const p = article.querySelector("p");
+                            if (p) {
+                              const focus = clickOffsetIn(
+                                p,
+                                e.clientX,
+                                e.clientY,
+                              );
+                              if (focus !== null) {
+                                const extended = extendSpan(
+                                  seg.text,
+                                  anchor.anchor,
+                                  focus,
+                                );
+                                if (extended) {
+                                  setPendingSelection({
+                                    segmentId: seg.id,
+                                    ...extended,
+                                  });
+                                  const box = p.getBoundingClientRect();
+                                  const sel = window.getSelection();
+                                  const r =
+                                    sel && sel.rangeCount > 0
+                                      ? sel.getRangeAt(0).getBoundingClientRect()
+                                      : null;
+                                  setBubbleAnchor({
+                                    segmentId: seg.id,
+                                    rel: r
+                                      ? {
+                                          top: r.top - box.top,
+                                          left: r.left - box.left,
+                                          bottom: r.bottom - box.top,
+                                        }
+                                      : null,
+                                  });
+                                  return;
+                                }
+                              }
+                            }
+                            showStatus(
+                              "A coded span has to sit inside one speaker turn.",
+                              "info",
+                            );
+                            return;
+                          }
+                        }
+                        // The click that ends a drag-select: the mouseup just
+                        // stored the pending span (and the anchor) for this
+                        // passage, so there is nothing to do — and clearing
+                        // here would wipe the anchor. (The bubble focusing its
+                        // input collapses the native selection, so a
+                        // collapsed-selection check cannot tell this echo
+                        // apart from a genuine plain click; the live pending
+                        // span can.)
+                        if (pendingSpan && pendingSpan.segmentId === seg.id) {
+                          return;
+                        }
+                        if (window.getSelection()?.isCollapsed !== false) {
+                          anchorRef.current = null;
+                        }
                         setSelectedSegmentId(seg.id, "click");
                         if (window.getSelection()?.isCollapsed !== false) {
                           const article = e.currentTarget;
@@ -835,7 +1127,7 @@ export function TranscriptPanel() {
                                 : "var(--ink)",
                           }}
                         >
-                          {seg.speaker}
+                          {showSpeaker(seg.speaker)}
                         </span>
                         <span className="font-mono text-[10.5px] tabular-nums" style={{ color: "var(--ink-4)" }}>
                           {formatTimestampDisplay(seg.timestamp_start)}
@@ -949,6 +1241,11 @@ export function TranscriptPanel() {
         onConfirm={handleNewInterviewConfirm}
       />
 
+      <BulkImportModal
+        open={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+      />
+
       {editingInterview && (
         <InterviewSettingsModal
           interview={editingInterview}
@@ -956,6 +1253,21 @@ export function TranscriptPanel() {
           onRename={renameInterview}
           onDelete={deleteInterview}
           loadImpact={interviewDeleteImpact}
+          redactionOn={
+            editingInterview.id === activeInterviewId ? redactionOn : false
+          }
+          redactionPreview={
+            editingInterview.id === activeInterviewId
+              ? aliasPreview(
+                  [...segments]
+                    .sort((a, b) => a.segment_index - b.segment_index)
+                    .map((seg) => seg.speaker),
+                )
+              : []
+          }
+          onToggleRedaction={(on) =>
+            void setSpeakerRedaction(editingInterview.id, on)
+          }
         />
       )}
 
@@ -1137,7 +1449,11 @@ const PassageText = memo(function PassageText({
         </div>
       )}
 
-      <p data-passage-copy className="pl-6 pr-7 font-serif text-[15.5px] leading-[1.62]">
+      <p
+        data-passage-copy
+        className="pl-6 pr-7 font-serif leading-[1.62]"
+        style={{ fontSize: "calc(15.5px * var(--reading-scale, 1))" }}
+      >
         {pieces.map((run) => {
           const hasOtherCoder =
             Boolean(activeCoder && run.coders.some((c) => c !== activeCoder)) ||
