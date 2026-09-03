@@ -248,21 +248,18 @@ pub fn auto_relink_study(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
-    use super::*;
+    use std::path::Path;
 
     #[test]
     fn unmounted_volume_detection() {
         // A nonexistent volume path
         let unmounted = "/Volumes/DefNotRealBackupHD12345/MyStudy.fleuron";
-        #[cfg(target_os = "macos")]
-        {
-            // Even without app handle, the volume check triggers first
-            let parts: Vec<&str> = unmounted.split('/').collect();
-            let volume_name = parts[2];
-            let volume_path = Path::new("/Volumes").join(volume_name);
-            assert!(!volume_path.exists());
-        }
+        // Even without app handle, the volume check triggers first
+        let parts: Vec<&str> = unmounted.split('/').collect();
+        let volume_name = parts[2];
+        let volume_path = Path::new("/Volumes").join(volume_name);
+        assert!(!volume_path.exists());
     }
 }
