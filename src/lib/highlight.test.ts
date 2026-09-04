@@ -443,4 +443,27 @@ describe("splitRunsOnMatches", () => {
     expect(pendingPiece).toBeDefined();
     expect(pendingPiece!.text).toBe("rehearse");
   });
+
+  describe("getSpanUnderlineColor", () => {
+    it("picks first code color for single and multi-code runs", async () => {
+      const { getSpanUnderlineColor } = await import("./highlight");
+      const code1 = { id: "c1", name: "One", color: "#e11d48", sort_order: 1 } as any;
+      const code2 = { id: "c2", name: "Two", color: "#2563eb", sort_order: 2 } as any;
+
+      expect(getSpanUnderlineColor({ codes: [code1] })).toBe("#e11d48");
+      expect(getSpanUnderlineColor({ codes: [code1, code2] })).toBe("#e11d48");
+      expect(getSpanUnderlineColor({ codes: [code2, code1] })).toBe("#2563eb");
+    });
+
+    it("returns neutral color for unresolved codes", async () => {
+      const { getSpanUnderlineColor } = await import("./highlight");
+      expect(getSpanUnderlineColor({ codes: [], unresolvedCount: 1 })).toBe("rgba(150, 150, 150, 0.65)");
+    });
+
+    it("returns null for plain text runs", async () => {
+      const { getSpanUnderlineColor } = await import("./highlight");
+      expect(getSpanUnderlineColor({ codes: [], unresolvedCount: 0 })).toBeNull();
+    });
+  });
 });
+

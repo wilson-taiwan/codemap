@@ -3,6 +3,27 @@ import type { Code, CodedSegment } from "./types";
 export const MAX_STRIPE_COLUMNS = 5;
 export const STRIPE_WIDTH_PX = 3;
 export const STRIPE_GAP_PX = 2;
+export const GUTTER_WIDTH_PX = 28;
+export const PASSAGE_TEXT_INSET_PX = 32;
+
+/**
+ * Returns gutter and clearance geometry to ensure stripes never overlap text or pills.
+ */
+export function getStripeGutterGeometry() {
+  const maxStripeRight =
+    (MAX_STRIPE_COLUMNS - 1) * (STRIPE_WIDTH_PX + STRIPE_GAP_PX) +
+    STRIPE_WIDTH_PX;
+  const clearanceToText = PASSAGE_TEXT_INSET_PX - maxStripeRight;
+  const fitsInGutter = maxStripeRight <= GUTTER_WIDTH_PX;
+  return {
+    gutterWidth: GUTTER_WIDTH_PX,
+    textInset: PASSAGE_TEXT_INSET_PX,
+    maxStripeRight,
+    clearanceToText,
+    fitsInGutter,
+    maxColumns: MAX_STRIPE_COLUMNS,
+  };
+}
 
 export interface LineRect {
   top: number;

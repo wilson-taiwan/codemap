@@ -19,8 +19,10 @@ import {
   formatRunAttribution,
   matchRanges,
   splitRunsOnMatches,
+  getSpanUnderlineColor,
   type MatchRange,
 } from "../lib/highlight";
+import { resolveClickedCoding } from "../lib/coding-target";
 import {
   normalizeZoom,
   stepZoom,
@@ -134,6 +136,8 @@ export function TranscriptPanel() {
   const [pendingCoded, setPendingCoded] = useState(0);
   const [editingInterview, setEditingInterview] = useState<Interview | null>(null);
   const [showNotes, setShowNotes] = useState(true);
+  const [hoveredPillCodeId, setHoveredPillCodeId] = useState<string | null>(null);
+  const [flashCodeId, setFlashCodeId] = useState<string | null>(null);
   const articleRefs = useRef<Map<string, HTMLElement>>(new Map());
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [bubbleAnchor, setBubbleAnchor] = useState<BubbleAnchor | null>(null);
@@ -212,7 +216,7 @@ export function TranscriptPanel() {
   }, [pendingSpan]);
 
   /**
-   * Reader's place (T02): the selected passage plus the scroll fraction,
+   * Reader's place (T02/T03): the selected passage plus the scroll fraction,
    * refreshed on selection change and on every scroll so a filter change
    * always has a pre-change snapshot to restore. The fraction — not pixels —
    * survives the list-height change a filter causes.
@@ -222,18 +226,36 @@ export function TranscriptPanel() {
     fraction: number;
   }>({ selectedSegmentId: null, fraction: 0 });
 
+  // Holds the exact place in the UNFILTERED transcript so clearing a filter
+  // never inherits the clamped fraction/height of the filtered view.
+  const preFilterPlaceRef = useRef<{
+    selectedSegmentId: string | null;
+    fraction: number;
+  }>({ selectedSegmentId: null, fraction: 0 });
+
   useEffect(() => {
     placeRef.current.selectedSegmentId = selectedSegmentId;
-  }, [selectedSegmentId]);
+    if (!codeFilter && !speakerFilter) {
+      preFilterPlaceRef.current.selectedSegmentId = selectedSegmentId;
+    }
+  }, [selectedSegmentId, codeFilter, speakerFilter]);
 
   const recordScrollPlace = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
+    const curSeg = useProjectStore.getState().selectedSegmentId;
+    const frac = scrollFraction(el.scrollTop, el.scrollHeight, el.clientHeight);
     placeRef.current = {
-      selectedSegmentId: useProjectStore.getState().selectedSegmentId,
-      fraction: scrollFraction(el.scrollTop, el.scrollHeight, el.clientHeight),
+      selectedSegmentId: curSeg,
+      fraction: frac,
     };
-  }, []);
+    if (!codeFilter && !speakerFilter) {
+      preFilterPlaceRef.current = {
+        selectedSegmentId: curSeg,
+        fraction: frac,
+      };
+    }
+  }, [codeFilter, speakerFilter]);
 
   const filterKey = `${codeFilter ?? ""}\n${speakerFilter ?? ""}`;
   const filterKeyRef = useRef<string | null>(null);
@@ -406,7 +428,7 @@ export function TranscriptPanel() {
   }, [search, activeInterviewId, codeFilter, speakerFilter]);
 
   useEffect(() => {
-    // Filtering keeps your place (T02). First run just arms the key;
+    // Filtering keeps your place (T02/T03). First run just arms the key;
     // interview switches keep their own behavior (each interview has its own
     // saved selection). Search-only changes never reach this effect's key.
     if (filterKeyRef.current === null) {
@@ -421,18 +443,39 @@ export function TranscriptPanel() {
     }
     if (filterKeyRef.current === filterKey) return;
     filterKeyRef.current = filterKey;
-    const snap = placeRef.current;
+
+    const snap = preFilterPlaceRef.current;
     if (!snap) return;
+
     const stillVisible =
       snap.selectedSegmentId !== null &&
       visibleSegments.some((seg) => seg.id === snap.selectedSegmentId);
+
     if (stillVisible && snap.selectedSegmentId) {
-      // Kept by the filter: re-assert with instant "restore" semantics so
-      // the passage stays (or comes back) into view instead of jumping top.
-      setSelectedSegmentId(snap.selectedSegmentId, "restore");
+      const segId = snap.selectedSegmentId;
+      setSelectedSegmentId(segId, "restore");
+      requestAnimationFrame(() => {
+        const el =
+          articleRefs.current.get(segId) ??
+          document.getElementById(`segment-${segId}`);
+        const scroller = scrollerRef.current;
+        if (el && scroller) {
+          const elRect = el.getBoundingClientRect();
+          const scrollerRect = scroller.getBoundingClientRect();
+          const elTop = scroller.scrollTop + (elRect.top - scrollerRect.top);
+          const targetScrollTop = scrollPlan({
+            elTop,
+            elHeight: elRect.height,
+            scrollTop: scroller.scrollTop,
+            viewportHeight: scrollerRect.height,
+            intent: "restore",
+          });
+          if (targetScrollTop !== null) {
+            scroller.scrollTop = targetScrollTop;
+          }
+        }
+      });
     } else {
-      // Filtered out: hold the same fraction of the new list on the next
-      // frame, after the filtered rows have rendered.
       const fraction = snap.fraction;
       requestAnimationFrame(() => {
         const el = scrollerRef.current;
@@ -548,6 +591,36 @@ export function TranscriptPanel() {
     anchorRef.current = null;
     window.getSelection()?.removeAllRanges();
   };
+
+  const selectCoding = useCallback(
+    (coding: CodedSegment, codeId?: string) => {
+      const seg = segments.find((s) => s.id === coding.segment_id);
+      if (coding.char_start != null && coding.char_end != null && seg) {
+        setPendingSelection({
+          segmentId: coding.segment_id,
+          start: coding.char_start,
+          end: coding.char_end,
+          text: seg.text.slice(coding.char_start, coding.char_end),
+        });
+        anchorRef.current = {
+          segmentId: coding.segment_id,
+          anchor: coding.char_start,
+        };
+      } else {
+        setPendingSelection(null);
+        anchorRef.current = null;
+      }
+      setSelectedSegmentId(coding.segment_id, "click");
+      setBubbleAnchor({ segmentId: coding.segment_id, rel: null });
+
+      const targetCodeId = codeId ?? coding.code_ids[0];
+      if (targetCodeId) {
+        setFlashCodeId(targetCodeId);
+        window.setTimeout(() => setFlashCodeId(null), 150);
+      }
+    },
+    [segments, setSelectedSegmentId, setPendingSelection, setBubbleAnchor],
+  );
 
   const onListKeyDown = (e: React.KeyboardEvent) => {
     const ids = visibleSegments.map((seg) => seg.id);
@@ -935,7 +1008,7 @@ export function TranscriptPanel() {
               {(search || filteredCode || speakerFilter) && (
                 <div
                   data-testid="transcript-filterbar"
-                  className="glass-bar sticky top-0 z-10 -mx-2 flex items-center gap-2 rounded-b-[12px] px-2 py-2"
+                  className="glass-bar sticky top-0 z-10 -mx-2 flex flex-wrap items-center gap-2 rounded-b-[12px] px-2 py-2"
                 >
                   {search && (
                     <span className="hint text-[11.5px]">
@@ -944,6 +1017,13 @@ export function TranscriptPanel() {
                           ? "No matches in filtered view"
                           : "No matches"
                         : `${currentMatchIndex + 1} of ${totalMatches}${codeFilter || speakerFilter ? " in filtered view" : ""}`}
+                    </span>
+                  )}
+                  {(codeFilter || speakerFilter) && (
+                    <span className="hint text-[11.5px]">
+                      {visibleSegments.length === 0
+                        ? "No passages match"
+                        : `Showing ${visibleSegments.length} of ${segments.length} passages`}
                     </span>
                   )}
                   {filteredCode && (
@@ -978,11 +1058,49 @@ export function TranscriptPanel() {
                       <Icon name="close" size={11} />
                     </button>
                   )}
+                  {(codeFilter || speakerFilter) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCodeFilter(null);
+                        setSpeakerFilter(null);
+                      }}
+                      className="text-[11.5px] font-medium text-[var(--accent)] hover:underline ml-auto"
+                    >
+                      Clear all
+                    </button>
+                  )}
                 </div>
               )}
 
-              <div
-                role="listbox"
+              {visibleSegments.length === 0 && (codeFilter || speakerFilter) ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div
+                    className="grid h-12 w-12 place-items-center rounded-[14px] mb-3"
+                    style={{ background: "var(--fill)", color: "var(--ink-3)" }}
+                  >
+                    <Icon name="filter" size={20} />
+                  </div>
+                  <p className="text-[13px] font-medium text-[var(--ink-2)]">
+                    No passages match
+                  </p>
+                  <p className="text-[12px] text-[var(--ink-3)] mt-0.5">
+                    No passages match the current filters.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCodeFilter(null);
+                      setSpeakerFilter(null);
+                    }}
+                    className="btn btn-secondary btn-sm mt-3"
+                  >
+                    Clear all
+                  </button>
+                </div>
+              ) : (
+                <div
+                  role="listbox"
                 aria-label="Transcript passages"
                 aria-activedescendant={
                   selectedSegmentId ? `segment-${selectedSegmentId}` : undefined
@@ -1169,44 +1287,72 @@ export function TranscriptPanel() {
                             ? activeMatch
                             : null
                         }
+                        onSelectCoding={selectCoding}
+                        hoveredPillCodeId={hoveredPillCodeId}
+                        flashCodeId={flashCodeId}
+                        zoom={zoom}
                       />
 
                       {/* Coding Pills Footer */}
                       {segCodings.length > 0 && (
-                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pt-1">
+                        <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-1.5 pl-8 pt-1">
                           {segCodings.map((coding) => {
                             const theirs = coding.coder_name !== activeCoder;
+                            const codingCodes = coding.code_ids
+                              .map((id) => codesById.get(id))
+                              .filter((c): c is Code => Boolean(c));
                             return (
                               <span
                                 key={coding.id}
-                                className="inline-flex items-center gap-1"
+                                className="inline-flex min-w-0 items-center gap-1"
                               >
-                                {coding.code_ids.map((id) => {
-                                  const code = codesById.get(id);
-                                  if (!code) return null;
+                                {codingCodes.map((code) => {
                                   return (
                                     <button
-                                      key={id}
+                                      key={code.id}
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setCodeFilter(code.id);
+                                        if (e.altKey) {
+                                          setCodeFilter(code.id);
+                                        } else {
+                                          selectCoding(coding, code.id);
+                                        }
                                       }}
+                                      onPointerEnter={() => setHoveredPillCodeId(code.id)}
+                                      onPointerLeave={() => setHoveredPillCodeId(null)}
                                       title={
                                         theirs
-                                          ? `${coding.coder_name} coded this — show only passages coded "${code.name}"`
-                                          : `Show only passages coded "${code.name}"`
+                                          ? `${coding.coder_name} coded this — Edit coding — “${code.name}” on passage ${seg.segment_index + 1}`
+                                          : `Edit coding — “${code.name}” on passage ${seg.segment_index + 1}`
                                       }
-                                      className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white transition-opacity hover:opacity-80"
-                                      style={{ backgroundColor: code.color }}
+                                      className="rounded-full px-2 py-0.5 text-[11px] font-medium transition-opacity hover:opacity-80"
+                                      style={{
+                                        backgroundColor: code.color,
+                                        color: readableOn(code.color, ground),
+                                      }}
                                     >
                                       {code.name}
                                     </button>
                                   );
                                 })}
+                                {codingCodes.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCodeFilter(codingCodes[0].id);
+                                    }}
+                                    aria-label={`Show only passages coded “${codingCodes.map((c) => c.name).join(", ")}”`}
+                                    title={`Show only passages coded “${codingCodes.map((c) => c.name).join(", ")}”`}
+                                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--ink-4)] hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+                                  >
+                                    <Icon name="filter" size={10} />
+                                  </button>
+                                )}
                                 {theirs && (
                                   <span
-                                    className="text-[11px]"
+                                    className="text-[11px] truncate"
                                     style={{ color: "var(--ink-3)" }}
                                   >
                                     {coding.coder_name}
@@ -1221,6 +1367,7 @@ export function TranscriptPanel() {
                   );
                 })}
               </div>
+            )}
             </div>
           </div>
         </div>
@@ -1300,6 +1447,10 @@ const PassageText = memo(function PassageText({
   saveMemoForCoding,
   matches,
   currentMatch,
+  onSelectCoding,
+  hoveredPillCodeId,
+  flashCodeId,
+  zoom,
 }: {
   segmentId: string;
   text: string;
@@ -1320,6 +1471,10 @@ const PassageText = memo(function PassageText({
   ) => Promise<CodedSegment>;
   matches: MatchRange[];
   currentMatch: MatchRange | null;
+  onSelectCoding?: (coding: CodedSegment, codeId?: string) => void;
+  hoveredPillCodeId?: string | null;
+  flashCodeId?: string | null;
+  zoom?: number;
 }) {
   const runs = useMemo(
     () => highlightRuns(text, coded, codesById),
@@ -1340,6 +1495,7 @@ const PassageText = memo(function PassageText({
   const [noteTops, setNoteTops] = useState<Record<string, number>>({});
   const [hoveredStripeCodeId, setHoveredStripeCodeId] = useState<string | null>(null);
   const [stripeLayout, setStripeLayout] = useState<StripeLayoutResult | null>(null);
+  const [paragraphHeight, setParagraphHeight] = useState<number>(0);
 
   const pendingRun =
     pending && pending.end > pending.start
@@ -1351,6 +1507,8 @@ const PassageText = memo(function PassageText({
     const root = textRootRef.current;
     const paragraph = root?.querySelector<HTMLElement>("[data-passage-copy]");
     if (!root || !paragraph) return;
+
+    setParagraphHeight(paragraph.offsetHeight);
 
     const base = paragraph.getBoundingClientRect().top;
     const noteButtons = root.querySelectorAll<HTMLElement>(
@@ -1394,7 +1552,7 @@ const PassageText = memo(function PassageText({
       },
     });
     setStripeLayout(layout);
-  }, [showNotes, text, coded, noteKey, codesById, activeCoder, codeFilter]);
+  }, [showNotes, text, coded, noteKey, codesById, activeCoder, codeFilter, zoom]);
 
   const pieces = useMemo(() => {
     return splitRunsOnMatches(runs, text, {
@@ -1410,11 +1568,12 @@ const PassageText = memo(function PassageText({
       {stripeLayout && (
         <div
           data-testid="stripe-gutter"
-          className="absolute left-0 top-0 bottom-0 w-5 select-none pointer-events-auto z-10"
+          className="absolute left-0 top-0 w-7 select-none pointer-events-auto z-10"
+          style={{ height: paragraphHeight || undefined }}
           aria-hidden="true"
         >
           {stripeLayout.stripes.map((s, idx) => {
-            const isHovered = hoveredStripeCodeId === s.codeId;
+            const isHovered = (hoveredPillCodeId ?? hoveredStripeCodeId) === s.codeId;
             return (
               <div
                 key={`${s.codeId}-${idx}`}
@@ -1432,7 +1591,10 @@ const PassageText = memo(function PassageText({
                   borderLeft: s.isDashed
                     ? `3px dashed ${s.color}`
                     : `3px solid ${s.color}`,
-                  opacity: hoveredStripeCodeId && !isHovered ? 0.35 : 1,
+                  opacity:
+                    (hoveredPillCodeId ?? hoveredStripeCodeId) && !isHovered
+                      ? 0.35
+                      : 1,
                   borderRadius: 1,
                 }}
               />
@@ -1451,27 +1613,45 @@ const PassageText = memo(function PassageText({
 
       <p
         data-passage-copy
-        className="pl-6 pr-7 font-serif leading-[1.62]"
+        className="pl-8 pr-7 font-serif leading-[1.62]"
         style={{ fontSize: "calc(15.5px * var(--reading-scale, 1))" }}
       >
-        {pieces.map((run) => {
+        {pieces.map((run, idx) => {
           const hasOtherCoder =
             Boolean(activeCoder && run.coders.some((c) => c !== activeCoder)) ||
             run.unresolvedCount > 0;
 
+          const nextPiece = pieces[idx + 1];
+          const hasAdjacentCodedRun = Boolean(
+            (run.codes.length > 0 || run.unresolvedCount > 0) &&
+              nextPiece &&
+              (nextPiece.codes.length > 0 || nextPiece.unresolvedCount > 0),
+          );
+
           if (run.codes.length === 0) {
             if (run.unresolvedCount > 0) {
               return (
-                <span key={run.start} data-run-start={run.start} data-run-end={run.end}>
+                <span
+                  key={run.start}
+                  data-run-start={run.start}
+                  data-run-end={run.end}
+                  className={hasAdjacentCodedRun ? "mr-1" : undefined}
+                >
                   <mark
                     title={formatRunAttribution(run, activeCoder)}
                     className="rounded-[3px] px-px cursor-help"
                     style={{
                       color: "inherit",
-                      background: dark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.07)",
-                      boxShadow: `inset 0 -1px 0 0 ${dark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.25)"}`,
+                      background: dark
+                        ? "rgba(255, 255, 255, 0.12)"
+                        : "rgba(0, 0, 0, 0.07)",
+                      boxShadow: `inset 0 -1px 0 0 ${
+                        dark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.25)"
+                      }`,
                       textDecorationLine: "underline",
-                      textDecorationColor: dark ? "rgba(255, 255, 255, 0.55)" : "rgba(0, 0, 0, 0.45)",
+                      textDecorationColor: dark
+                        ? "rgba(255, 255, 255, 0.55)"
+                        : "rgba(0, 0, 0, 0.45)",
                       textUnderlineOffset: "2px",
                     }}
                   >
@@ -1481,7 +1661,11 @@ const PassageText = memo(function PassageText({
               );
             }
             return (
-              <span key={run.start} data-run-start={run.start} data-run-end={run.end}>
+              <span
+                key={run.start}
+                data-run-start={run.start}
+                data-run-end={run.end}
+              >
                 <span
                   data-is-match={run.isMatch ? "true" : undefined}
                   data-current-match={run.isCurrentMatch ? "true" : undefined}
@@ -1495,7 +1679,9 @@ const PassageText = memo(function PassageText({
                       : run.isMatch
                         ? {
                             boxShadow: "0 0 0 1.5px var(--find-ring)",
-                            background: run.isCurrentMatch ? "var(--find-on)" : undefined,
+                            background: run.isCurrentMatch
+                              ? "var(--find-on)"
+                              : undefined,
                             borderRadius: 2,
                           }
                         : undefined
@@ -1507,15 +1693,20 @@ const PassageText = memo(function PassageText({
             );
           }
 
-          const hasHoveredStripe = hoveredStripeCodeId !== null;
-          const isStripeHighlighted =
-            hasHoveredStripe && run.codes.some((c) => c.id === hoveredStripeCodeId);
+          const activeHoverId =
+            flashCodeId ?? hoveredPillCodeId ?? hoveredStripeCodeId;
+          const hasActiveHover = activeHoverId !== null;
+          const isStripeOrPillHighlighted =
+            hasActiveHover && run.codes.some((c) => c.id === activeHoverId);
           const isFilterHighlighted =
             Boolean(codeFilter) && run.codes.some((c) => c.id === codeFilter);
+          const isFlashed = Boolean(
+            flashCodeId && run.codes.some((c) => c.id === flashCodeId),
+          );
 
           let bg = dark ? "rgba(255, 255, 255, 0.085)" : "rgba(0, 0, 0, 0.055)";
-          if (isStripeHighlighted) {
-            const matchedCode = run.codes.find((c) => c.id === hoveredStripeCodeId);
+          if (isStripeOrPillHighlighted) {
+            const matchedCode = run.codes.find((c) => c.id === activeHoverId);
             if (matchedCode) {
               bg = `${matchedCode.color}${dark ? "40" : "2e"}`;
             }
@@ -1524,22 +1715,68 @@ const PassageText = memo(function PassageText({
             if (matchedCode) {
               bg = `${matchedCode.color}${dark ? "40" : "2e"}`;
             }
-          } else if (hasHoveredStripe) {
+          } else if (hasActiveHover) {
             bg = dark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.02)";
           }
 
+          const underlineRaw = getSpanUnderlineColor(run);
+          const underlineColor = underlineRaw
+            ? underlineRaw.startsWith("#") && underlineRaw.length === 7
+              ? `${underlineRaw}a6`
+              : underlineRaw
+            : null;
+
+          const shadows: string[] = [];
+          if (run.isMatch) shadows.push("0 0 0 1.5px var(--find-ring)");
+          if (underlineColor) shadows.push(`inset 0 -2px 0 0 ${underlineColor}`);
+
+          const matchedCodeForFlash = isFlashed
+            ? run.codes.find((c) => c.id === flashCodeId)
+            : null;
+
           return (
-            <span key={run.start} data-run-start={run.start} data-run-end={run.end}>
+            <span
+              key={run.start}
+              data-run-start={run.start}
+              data-run-end={run.end}
+              className={hasAdjacentCodedRun ? "mr-1" : undefined}
+            >
               <mark
                 data-coding-id={run.codes.map((c) => c.id).join(",")}
                 data-is-match={run.isMatch ? "true" : undefined}
                 data-current-match={run.isCurrentMatch ? "true" : undefined}
                 title={formatRunAttribution(run, activeCoder)}
+                onClick={(e) => {
+                  if (e.shiftKey) return;
+                  const sel = window.getSelection();
+                  if (sel && !sel.isCollapsed) return;
+                  e.stopPropagation();
+
+                  const p = textRootRef.current?.querySelector<HTMLElement>(
+                    "[data-passage-copy]",
+                  );
+                  const clickOffset = p
+                    ? clickOffsetIn(p, e.clientX, e.clientY)
+                    : run.start;
+                  const targetCoding =
+                    resolveClickedCoding(coded, clickOffset ?? run.start) ??
+                    coded.find((c) =>
+                      run.codes.some((rc) => c.code_ids.includes(rc.id)),
+                    ) ??
+                    null;
+                  if (targetCoding) {
+                    onSelectCoding?.(targetCoding, run.codes[0]?.id);
+                  }
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   const items = buildMarkMenuItems({
                     segmentId,
-                    run: { start: run.start, end: run.end, wholeTurnOnly: run.wholeTurnOnly },
+                    run: {
+                      start: run.start,
+                      end: run.end,
+                      wholeTurnOnly: run.wholeTurnOnly,
+                    },
                     codedSegments: coded,
                     codesById,
                     activeCoder,
@@ -1551,16 +1788,22 @@ const PassageText = memo(function PassageText({
                   });
                   openContextMenu(e, items);
                 }}
-                className="rounded-[3px] px-px cursor-context-menu"
+                className="rounded-[3px] px-px cursor-pointer"
                 style={{
                   color: "inherit",
                   backgroundColor: bg,
                   backgroundImage: run.isCurrentMatch
                     ? "linear-gradient(var(--find-on), var(--find-on))"
                     : undefined,
-                  boxShadow: run.isMatch ? "0 0 0 1.5px var(--find-ring)" : undefined,
+                  boxShadow: shadows.length > 0 ? shadows.join(", ") : undefined,
+                  outline: isFlashed
+                    ? `2px solid ${matchedCodeForFlash?.color ?? "var(--accent)"}`
+                    : undefined,
+                  outlineOffset: isFlashed ? "1px" : undefined,
                   textDecorationLine: hasOtherCoder ? "underline" : undefined,
-                  textDecorationColor: dark ? "rgba(255, 255, 255, 0.55)" : "rgba(0, 0, 0, 0.45)",
+                  textDecorationColor: dark
+                    ? "rgba(255, 255, 255, 0.55)"
+                    : "rgba(0, 0, 0, 0.45)",
                   textUnderlineOffset: "2px",
                 }}
               >
@@ -1595,18 +1838,28 @@ const PassageText = memo(function PassageText({
               >
                 <Icon name="note" size={12} />
               </button>
-              {isExpanded && (
-                <PassageNoteCard
-                  coding={coding}
-                  passageText={text}
-                  codesById={codesById}
-                  onClose={() => setExpandedNoteId(null)}
-                  saveMemoForCoding={saveMemoForCoding}
-                />
-              )}
             </div>
           );
         })}
+
+      {/* Expanded note card docked below the passage text, never overlaying it */}
+      {showNotes &&
+        expandedNoteId &&
+        (() => {
+          const expandedCoding = notes.find((c) => c.id === expandedNoteId);
+          if (!expandedCoding) return null;
+          return (
+            <div className="pl-8 pr-7 pt-2">
+              <PassageNoteCard
+                coding={expandedCoding}
+                passageText={text}
+                codesById={codesById}
+                onClose={() => setExpandedNoteId(null)}
+                saveMemoForCoding={saveMemoForCoding}
+              />
+            </div>
+          );
+        })()}
     </div>
   );
 });
@@ -1658,7 +1911,7 @@ function PassageNoteCard({
 
   return (
     <div
-      className="glass-card absolute right-6 top-0 w-72 p-3 shadow-xl z-30"
+      className="note-card relative w-full max-w-lg p-3 shadow-xl z-10"
       onClick={(event) => event.stopPropagation()}
     >
       <NoteEditor

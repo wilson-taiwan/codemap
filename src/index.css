@@ -146,6 +146,7 @@
   --g2: #ffffff; /* bars, cards */
   --g3: #ffffff; /* sheets, popovers, modals */
   --reading-bg: #ffffff; /* transcript page — opaque paper, never a wash */
+  --note-bg: #ffffff; /* passage notes & codebook previews — solid card */
   --g-hairline: rgba(40, 36, 28, 0.14);
   --g-rim: rgba(40, 36, 28, 0.15);
 
@@ -231,6 +232,7 @@
     --g2: rgba(255, 255, 255, 0.08);
     --g3: rgba(38, 38, 46, 0.74);
     --reading-bg: rgba(255, 255, 255, 0.08);
+    --note-bg: #1c1c1f;
     --g-hairline: rgba(255, 255, 255, 0.12);
     --g-rim: rgba(0, 0, 0, 0.4);
 
@@ -304,6 +306,7 @@
     --g2: rgba(255, 255, 255, 0.08);
     --g3: rgba(38, 38, 46, 0.74);
     --reading-bg: rgba(255, 255, 255, 0.08);
+    --note-bg: #1c1c1f;
     --g-hairline: rgba(255, 255, 255, 0.12);
     --g-rim: rgba(0, 0, 0, 0.4);
 
@@ -507,6 +510,13 @@ body {
     backdrop-filter: var(--blur-2);
     border-radius: var(--r-xl);
     box-shadow: var(--shadow-1);
+  }
+
+  .note-card {
+    background: var(--note-bg);
+    border: 1px solid var(--g-rim);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-2);
   }
 
   .glass-sheet {

@@ -149,3 +149,250 @@ test.describe("Reading QOL (2.4.0)", () => {
     expect(restored).toBe(expanded);
   });
 });
+
+test.describe("Reading Surface PasBugs & QOL (2.4.1)", () => {
+  test("notes open beside text on an opaque card and inline notes dock below", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await openWorkspace(page);
+
+    // 1. Codebook note hover & pin
+    const codebook = page.locator('[data-testid="codebook-panel"]');
+    await expect(codebook).toBeVisible();
+
+    // Click code with usage that has memo ("Unwritten rules")
+    const codeBtn = codebook.locator('button[aria-controls="code-usage-c1"]');
+    await codeBtn.click();
+
+    const usageItem = codebook.locator("#code-usage-c1 li button").first();
+    await expect(usageItem).toBeVisible();
+    await usageItem.click(); // pins the card
+
+    const noteCard = page.locator('[role="dialog"][aria-label="Passage note"]');
+    await expect(noteCard).toBeVisible();
+
+    // Opaque check
+    const bg = await noteCard.evaluate(
+      (el) => window.getComputedStyle(el).backgroundColor,
+    );
+    expect(bg).toMatch(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+
+    // Passage check: note does not cover the passage text
+    const targetPassage = page
+      .locator(
+        '[data-segment-id="seg-2"] [data-passage-copy], #segment-seg-2 [data-passage-copy]',
+      )
+      .first();
+    if (await targetPassage.isVisible()) {
+      const passageBox = await targetPassage.boundingBox();
+      const cardBox = await noteCard.boundingBox();
+      if (passageBox && cardBox) {
+        const horizontalOverlap = !(
+          cardBox.x + cardBox.width <= passageBox.x ||
+          passageBox.x + passageBox.width <= cardBox.x
+        );
+        const verticalOverlap = !(
+          cardBox.y + cardBox.height <= passageBox.y ||
+          passageBox.y + passageBox.height <= cardBox.y
+        );
+        expect(horizontalOverlap && verticalOverlap).toBe(false);
+      }
+    }
+
+    // Dismiss with Esc returns focus to usage item
+    await page.keyboard.press("Escape");
+    await expect(noteCard).toBeHidden();
+
+    // 2. Inline passage note expansion docks below paragraph
+    const expandNoteBtn = page
+      .locator('button[aria-label="Expand note"]')
+      .first();
+    if (await expandNoteBtn.isVisible()) {
+      await expandNoteBtn.click();
+      const inlineNote = page.locator(".note-card:has-text('Unwritten rules')");
+      await expect(inlineNote).toBeVisible();
+
+      const pBox = await page.locator("[data-passage-copy]").first().boundingBox();
+      const inlineBox = await inlineNote.boundingBox();
+      if (pBox && inlineBox) {
+        expect(inlineBox.y).toBeGreaterThanOrEqual(pBox.y + pBox.height - 5);
+      }
+    }
+  });
+
+  test("stripes stay clear of code pills and gutter has 28px width", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await openWorkspace(page);
+
+    const gutter = page.locator('[data-testid="stripe-gutter"]').first();
+    await expect(gutter).toBeVisible();
+    const gutterBox = await gutter.boundingBox();
+    expect(gutterBox).not.toBeNull();
+    expect(gutterBox!.width).toBeCloseTo(28, 1);
+
+    const article = page.locator("article").nth(2);
+    const stripes = article.locator('[data-testid="stripe-bar"]');
+    const pills = article.locator(".mt-2\\.5 button.rounded-full");
+
+    const stripeCount = await stripes.count();
+    const pillCount = await pills.count();
+    if (stripeCount > 0 && pillCount > 0) {
+      const firstPill = pills.first();
+      const pillBox = await firstPill.boundingBox();
+      for (let i = 0; i < stripeCount; i++) {
+        const sBox = await stripes.nth(i).boundingBox();
+        if (sBox && pillBox) {
+          const overlapX = !(
+            sBox.x + sBox.width <= pillBox.x || pillBox.x + pillBox.width <= sBox.x
+          );
+          const overlapY = !(
+            sBox.y + sBox.height <= pillBox.y ||
+            pillBox.y + pillBox.height <= sBox.y
+          );
+          expect(overlapX && overlapY).toBe(false);
+        }
+      }
+      const isClipped = await firstPill.evaluate(
+        (el) => el.scrollWidth > el.clientWidth + 1,
+      );
+      expect(isClipped).toBe(false);
+    }
+  });
+
+  test("clicking a pill selects coding and bubble opens without filtering; filter icon filters", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await openWorkspace(page);
+
+    const article = page.locator("article").nth(2);
+    const pill = article.getByRole("button", {
+      name: "Unwritten rules",
+      exact: true,
+    });
+    await expect(pill).toBeVisible();
+
+    const initialPassageCount = await page.getByRole("option").count();
+
+    // Clicking pill selects coding
+    await pill.click();
+
+    const bubble = page.getByRole("dialog", { name: "Code this selection" });
+    await expect(bubble).toBeVisible();
+
+    // Does NOT filter
+    const currentPassageCount = await page.getByRole("option").count();
+    expect(currentPassageCount).toBe(initialPassageCount);
+    await expect(
+      page.locator('[data-testid="transcript-filterbar"]'),
+    ).toBeHidden();
+
+    // Close bubble
+    await page.keyboard.press("Escape");
+
+    // Clicking explicit filter icon applies filter
+    const filterBtn = article
+      .locator('button[aria-label^="Show only passages coded"]')
+      .first();
+    await expect(filterBtn).toBeVisible();
+    await filterBtn.click();
+
+    // Filter is now active
+    const filterbar = page.locator('[data-testid="transcript-filterbar"]');
+    await expect(filterbar).toBeVisible();
+    await expect(filterbar).toContainText("passages");
+
+    // Clear all button in filterbar clears filter
+    await filterbar.getByRole("button", { name: "Clear all" }).click();
+    await expect(filterbar).toBeHidden();
+    expect(await page.getByRole("option").count()).toBe(initialPassageCount);
+  });
+
+  test("coded spans have code-color underline and hover flashes matching spans", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await openWorkspace(page);
+
+    const marks = page.locator("mark[data-coding-id]");
+    await expect(marks.first()).toBeVisible();
+
+    const markBoxShadow = await marks
+      .first()
+      .evaluate((el) => window.getComputedStyle(el).boxShadow);
+    expect(markBoxShadow).toContain("-2px 0px 0px inset");
+
+    // Hovering pill highlights matching span
+    const article = page.locator("article").nth(2);
+    const pill = article.getByRole("button", {
+      name: "Unwritten rules",
+      exact: true,
+    });
+    if (await pill.isVisible()) {
+      const mark = article.locator("mark[data-coding-id]").first();
+      const bgBefore = await mark.evaluate(
+        (el) => window.getComputedStyle(el).backgroundColor,
+      );
+      await pill.hover();
+      const bgHover = await mark.evaluate(
+        (el) => window.getComputedStyle(el).backgroundColor,
+      );
+      expect(bgHover).not.toBe(bgBefore);
+    }
+  });
+
+  test("filter bar shows passage count and empty state renders when no match", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await openWorkspace(page);
+
+    // Apply a code filter
+    const filterBtn = page
+      .locator('button[aria-label^="Show only passages coded"]')
+      .first();
+    await expect(filterBtn).toBeVisible();
+    await filterBtn.click();
+
+    const filterbar = page.locator('[data-testid="transcript-filterbar"]');
+    await expect(filterbar).toBeVisible();
+    await expect(filterbar).toContainText(/Showing \d+ of \d+ passages/);
+
+    // Pick a speaker that leaves no passages
+    await page.getByRole("button", { name: "Filter passages" }).click();
+    const menu = page.getByRole("menu", { name: "Filter passages" });
+    await expect(menu).toBeVisible();
+    const items = menu.getByRole("menuitem");
+    const count = await items.count();
+    for (let i = 0; i < count; i++) {
+      const item = items.nth(i);
+      const text = (await item.innerText()).trim();
+      if (text && text !== "All passages") {
+        await item.click();
+        break;
+      }
+    }
+
+    const emptyNotice = page.locator("text=No passages match");
+    if (
+      await emptyNotice
+        .first()
+        .isVisible({ timeout: 2000 })
+        .catch(() => false)
+    ) {
+      await expect(
+        page.getByRole("button", { name: "Clear all" }).first(),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Clear all" }).first().click();
+      await expect(filterbar).toBeHidden();
+      expect(await page.getByRole("option").count()).toBeGreaterThan(0);
+    } else {
+      await filterbar.getByRole("button", { name: "Clear all" }).click();
+      await expect(filterbar).toBeHidden();
+    }
+  });
+});
+

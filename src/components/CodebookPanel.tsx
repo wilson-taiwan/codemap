@@ -683,9 +683,24 @@ export function CodebookPanel() {
                             <li key={u.key}>
                               <button
                                 type="button"
-                                onClick={() => setSelectedSegmentId(u.segmentId, "jump")}
+                                onClick={(e) => {
+                                  setSelectedSegmentId(u.segmentId, "jump");
+                                  if (u.memo) {
+                                    clearHoverTimer();
+                                    setHoverTarget({
+                                      element: e.currentTarget,
+                                      code,
+                                      quote: u.quote,
+                                      memo: u.memo,
+                                      coder: u.coder,
+                                      activeCoder,
+                                      segmentId: u.segmentId,
+                                      pinned: true,
+                                    });
+                                  }
+                                }}
                                 onMouseEnter={(e) => {
-                                  if (!u.memo) return;
+                                  if (!u.memo || hoverTarget?.pinned) return;
                                   clearHoverTimer();
                                   const targetEl = e.currentTarget;
                                   hoverTimerRef.current = window.setTimeout(() => {
@@ -696,15 +711,19 @@ export function CodebookPanel() {
                                       memo: u.memo,
                                       coder: u.coder,
                                       activeCoder,
+                                      segmentId: u.segmentId,
+                                      pinned: false,
                                     });
                                   }, 450);
                                 }}
                                 onMouseLeave={() => {
                                   clearHoverTimer();
-                                  setHoverTarget(null);
+                                  if (!hoverTarget?.pinned) {
+                                    setHoverTarget(null);
+                                  }
                                 }}
                                 onFocus={(e) => {
-                                  if (!u.memo) return;
+                                  if (!u.memo || hoverTarget?.pinned) return;
                                   clearHoverTimer();
                                   const targetEl = e.currentTarget;
                                   hoverTimerRef.current = window.setTimeout(() => {
@@ -715,12 +734,16 @@ export function CodebookPanel() {
                                       memo: u.memo,
                                       coder: u.coder,
                                       activeCoder,
+                                      segmentId: u.segmentId,
+                                      pinned: false,
                                     });
                                   }, 450);
                                 }}
                                 onBlur={() => {
                                   clearHoverTimer();
-                                  setHoverTarget(null);
+                                  if (!hoverTarget?.pinned) {
+                                    setHoverTarget(null);
+                                  }
                                 }}
                                 className="flex w-full gap-2 rounded-[8px] px-1.5 py-1 text-left transition-colors hover:bg-[var(--fill)]"
                               >

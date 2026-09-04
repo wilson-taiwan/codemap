@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.1]
+
+### Fixed
+
+- **Passage note positioning and dark contrast:** Notes open beside the reading column on a solid, opaque card with a 1px rim border, never covering the passage text they quote; Esc closes pinned notes and returns focus to the trigger row.
+- **Stripe and pill alignment:** Widened the stripe gutter to 28px and inset passage copy and pills footer to 32px (`pl-8`), preventing the 5th stripe from clipping into or overlapping pill buttons.
+- **Filter place restoration:** Preserved pre-filter scroll fraction and selected passage across active filter states so list contraction cannot overwrite the reference place with 0, restoring the exact passage place on filter clear.
+
+### Added
+
+- **Single-click coding selection:** Clicking a highlighted phrase selects that exact coding and opens the coding bubble directly, eliminating the need to re-drag overlapping text.
+- **Pill editing and dedicated filter controls:** Clicking a code pill selects the coding and opens the bubble; filtering moves to an explicit filter icon and Alt-click shortcut.
+- **Span boundary legibility:** Adjacent coded spans now feature 2px code-color inset underlines and a 4px visual seam to distinguish touching highlights.
+- **Filter count & empty state:** Active filters display "Showing X of Y passages" with a "Clear all" control; empty filter results display a dedicated no-match state.
+
 ## [2.4.0]
 
 ### Added

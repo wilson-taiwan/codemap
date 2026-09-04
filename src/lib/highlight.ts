@@ -428,3 +428,21 @@ export function splitRunsOnMatches(
   });
 }
 
+/**
+ * Picks the underline color for a coded span.
+ * Multi-code runs use the first code's color.
+ * Unresolved runs use a neutral tone.
+ * Plain text runs return null.
+ */
+export function getSpanUnderlineColor(
+  run: { codes?: Code[]; unresolvedCount?: number },
+): string | null {
+  if (run.codes && run.codes.length > 0) {
+    return run.codes[0].color;
+  }
+  if (run.unresolvedCount && run.unresolvedCount > 0) {
+    return "rgba(150, 150, 150, 0.65)";
+  }
+  return null;
+}
+

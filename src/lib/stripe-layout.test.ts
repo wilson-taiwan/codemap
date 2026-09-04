@@ -3,6 +3,7 @@ import {
   computeStripeLayout,
   mergeAdjacentRects,
   MAX_STRIPE_COLUMNS,
+  getStripeGutterGeometry,
 } from "./stripe-layout";
 import type { Code, CodedSegment } from "./types";
 
@@ -157,5 +158,14 @@ describe("stripe-layout", () => {
       { top: 10, height: 30 },
       { top: 50, height: 15 },
     ]);
+  });
+
+  it("calculates gutter geometry with clearance to text and pills", () => {
+    const geo = getStripeGutterGeometry();
+    expect(geo.gutterWidth).toBe(28);
+    expect(geo.textInset).toBe(32);
+    expect(geo.maxStripeRight).toBe(23);
+    expect(geo.clearanceToText).toBe(9);
+    expect(geo.fitsInGutter).toBe(true);
   });
 });

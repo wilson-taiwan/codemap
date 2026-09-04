@@ -169,3 +169,16 @@ describe("ambient wash", () => {
     expect(dark["--amb-alpha-vibrant"]).toBeTruthy();
   });
 });
+
+describe("note card surface", () => {
+  it("uses solid white in light mode", () => {
+    expect(light["--note-bg"]).toBe("#ffffff");
+  });
+
+  it("uses an opaque dark surface clearing 7:1 contrast for body text", () => {
+    expect(dark["--note-bg"]).toBe("#1c1c1f");
+    const ratio = contrast(dark["--ink"], dark["--note-bg"]);
+    expect(ratio).toBeGreaterThanOrEqual(7.0);
+  });
+});
+
