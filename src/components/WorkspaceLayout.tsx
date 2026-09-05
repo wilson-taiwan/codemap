@@ -3,6 +3,7 @@ import { useAppStore } from "../store/app-store";
 import { useProjectStore } from "../store/project-store";
 import { hasModKey } from "../lib/platform";
 import { Icon } from "./ui/Icon";
+import { Tooltip } from "./ui/Tooltip";
 import { CodebookPanel } from "./CodebookPanel";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { MemoPanel } from "./MemoPanel";
@@ -39,7 +40,7 @@ const RESIZER = 5;
 const TRANSCRIPT_MIN = 512;
 
 /** Width of the slim expand rail shown while the codebook is collapsed. */
-const COLLAPSED_RAIL = 28;
+const COLLAPSED_RAIL = 24;
 
 /**
  * Grid columns for the workspace rails (T04).
@@ -262,20 +263,46 @@ export function WorkspaceLayout() {
         }
       >
         {codebookCollapsed ? (
-          <button
-            type="button"
-            onClick={() => void setCodebookCollapsed(false)}
-            aria-label="Show codebook"
-            title="Show codebook (Cmd/Ctrl+B)"
+          <div
             data-testid="show-codebook-rail"
-            className="flex h-full w-full items-start justify-center border-r border-[var(--g-rim)] pt-3 text-[var(--ink-3)] transition-colors hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+            className="relative flex h-full w-full items-center justify-center border-r border-[var(--g-rim)] select-none"
           >
-            <Icon name="arrowRight" size={14} />
-          </button>
+            <Tooltip content="Show codebook (Cmd/Ctrl+B)">
+              <button
+                type="button"
+                onClick={() => void setCodebookCollapsed(false)}
+                aria-label="Show codebook"
+                title="Show codebook (Cmd/Ctrl+B)"
+                data-testid="codebook-collapse-toggle"
+                className="grid h-6 w-6 place-items-center rounded-md border border-[var(--g-rim)] bg-[var(--surface)] text-[var(--ink-3)] shadow-xs transition-colors hover:bg-[var(--fill)] hover:text-[var(--ink)] cursor-pointer"
+              >
+                <Icon name="chevronRight" size={13} />
+              </button>
+            </Tooltip>
+          </div>
         ) : (
           <>
             <CodebookPanel />
-            <Resizer onGrab={() => (dragging.current = "codebook")} />
+            <Resizer
+              onGrab={() => (dragging.current = "codebook")}
+              toggleButton={
+                <Tooltip content="Hide codebook (Cmd/Ctrl+B)">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void setCodebookCollapsed(true);
+                    }}
+                    aria-label="Hide codebook"
+                    title="Hide codebook (Cmd/Ctrl+B)"
+                    data-testid="codebook-collapse-toggle"
+                    className="grid h-6 w-6 place-items-center rounded-md border border-[var(--g-rim)] bg-[var(--surface)] text-[var(--ink-3)] shadow-xs transition-colors hover:bg-[var(--fill)] hover:text-[var(--ink)] cursor-pointer"
+                  >
+                    <Icon name="chevronLeft" size={13} />
+                  </button>
+                </Tooltip>
+              }
+            />
           </>
         )}
         <TranscriptPanel />
@@ -308,18 +335,32 @@ export function WorkspaceLayout() {
   );
 }
 
-function Resizer({ onGrab }: { onGrab: () => void }) {
+function Resizer({
+  onGrab,
+  toggleButton,
+}: {
+  onGrab: () => void;
+  toggleButton?: React.ReactNode;
+}) {
   return (
     <div
       role="separator"
       aria-orientation="vertical"
       onMouseDown={onGrab}
-      className="group relative cursor-col-resize"
+      className="group relative cursor-col-resize select-none"
     >
       <span
         className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors group-hover:w-0.5"
         style={{ background: "var(--g-rim)" }}
       />
+      {toggleButton && (
+        <div
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 cursor-default"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {toggleButton}
+        </div>
+      )}
     </div>
   );
 }

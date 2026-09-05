@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Modal } from "./ui/Surfaces";
 import { Icon } from "./ui/Icon";
+import { InfoTip } from "./ui/InfoTip";
 import type { Interview, InterviewDeleteImpact } from "../lib/types";
 
 interface InterviewSettingsModalProps {
@@ -12,7 +13,7 @@ interface InterviewSettingsModalProps {
   /** Per-interview speaker redaction (T06). Local-only view/export layer. */
   redactionOn?: boolean;
   redactionPreview?: { real: string; alias: string }[];
-  onToggleRedaction?: (on: boolean) => void;
+  onToggleRedaction?: (on: boolean) => Promise<void>;
 }
 
 /**
@@ -40,6 +41,8 @@ export function InterviewSettingsModal({
   const [impact, setImpact] = useState<InterviewDeleteImpact | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [redactionBusy, setRedactionBusy] = useState(false);
+  const [redactionError, setRedactionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!interview) return;
@@ -47,6 +50,8 @@ export function InterviewSettingsModal({
     setConfirmingDelete(false);
     setImpact(null);
     setBusy(false);
+    setRedactionBusy(false);
+    setRedactionError(null);
   }, [interview]);
 
   if (!interview) return null;
@@ -166,7 +171,7 @@ export function InterviewSettingsModal({
             disabled={!dirty || busy}
             className="btn btn-primary"
           >
-            Save
+            Save date
           </button>
         </>
       }
@@ -175,8 +180,9 @@ export function InterviewSettingsModal({
       <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13.5px] font-medium text-[var(--ink-1)]">
         {interview.participant_label}
       </div>
-      <p className="hint mt-1.5 text-[11.5px]">
-        A Participant ID cannot be changed — it is how your copy and your colleagues&apos; copies recognise the same interview.
+      <p className="hint mt-1.5 flex items-center gap-1.5 text-[11.5px]">
+        <span>Used to match this interview across group members.</span>
+        <InfoTip content="Participant IDs cannot be changed after creation." />
       </p>
 
       <label className="label mt-3.5" htmlFor="interview-date">
@@ -197,19 +203,40 @@ export function InterviewSettingsModal({
               <span className="block text-[13px] font-medium text-[var(--ink-1)]">
                 Redact speaker names
               </span>
-              <span className="hint mt-0.5 block text-[11.5px]">
-                Shows Speaker 1, Speaker 2 instead of real names — on screen,
-                on copy, and in exports. The stored transcript is unchanged.
+              <span className="hint mt-0.5 flex items-center gap-1.5 text-[11.5px]">
+                <span>Shows Speaker 1, Speaker 2 on screen, copy, and export.</span>
+                <InfoTip content="Stored speaker names are unchanged. This setting applies on this computer." />
+              </span>
+              <span className="hint mt-1 block text-[11px] text-[var(--ink-4)]">
+                Applies immediately on this computer.
               </span>
             </span>
             <input
               type="checkbox"
               checked={redactionOn}
-              onChange={(e) => onToggleRedaction(e.target.checked)}
+              disabled={redactionBusy}
+              onChange={(e) => {
+                const nextVal = e.target.checked;
+                if (!onToggleRedaction || redactionBusy) return;
+                setRedactionBusy(true);
+                setRedactionError(null);
+                void onToggleRedaction(nextVal)
+                  .catch(() => {
+                    setRedactionError("Could not save the redaction setting.");
+                  })
+                  .finally(() => {
+                    setRedactionBusy(false);
+                  });
+              }}
               aria-label="Redact speaker names"
               className="h-4 w-4 shrink-0 accent-[var(--accent)]"
             />
           </label>
+          {redactionError && (
+            <p role="alert" className="mt-1.5 text-[11.5px] text-[var(--danger)] font-medium">
+              {redactionError}
+            </p>
+          )}
           {redactionPreview.length > 0 && (
             <p className="hint mt-2 text-[11.5px]">
               {redactionPreview.map((p) => `${p.real} → ${p.alias}`).join(" · ")}

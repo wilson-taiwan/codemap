@@ -84,13 +84,13 @@ describe("workspaceColumns", () => {
   it("replaces the codebook with the slim rail when collapsed", () => {
     expect(
       workspaceColumns({ collapsed: true, memoRail: false, codebook: 248, memos: 300 }),
-    ).toBe("28px minmax(0, 1fr)");
+    ).toBe("24px minmax(0, 1fr)");
   });
 
   it("leaves the memo rail untouched while collapsed", () => {
     expect(
       workspaceColumns({ collapsed: true, memoRail: true, codebook: 248, memos: 300 }),
-    ).toBe("28px minmax(0, 1fr) 5px 300px");
+    ).toBe("24px minmax(0, 1fr) 5px 300px");
   });
 
   it("keeps the stored codebook width out of the collapsed template", () => {

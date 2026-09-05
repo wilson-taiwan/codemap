@@ -2,6 +2,7 @@ import { formatBytes, formatRelativeTime } from "../lib/format";
 import type { UpdateCoordinatorStatus } from "../lib/types";
 import { useUpdateStore } from "../store/update-store";
 import { Icon } from "./ui/Icon";
+import { InfoTip } from "./ui/InfoTip";
 
 export interface UpdateActionCopy {
   label: string;
@@ -189,10 +190,15 @@ export function UpdateStatus() {
         ) : null}
         {progress ? <p className="hint mt-1">{progress}</p> : null}
         {status?.phase === "preparing" ? (
-          <p className="hint mt-1">
-            {status.syncPreflightOutcome === null
-              ? "Saving changes before update…"
-              : "Your durable local changes are safe during restart."}
+          <p className="hint mt-1 flex items-center gap-1.5">
+            {status.syncPreflightOutcome === null ? (
+              "Saving changes before update…"
+            ) : (
+              <>
+                <span>Saved locally. Restarting…</span>
+                <InfoTip content="Fleuron checks for unsent group changes before installing an update." />
+              </>
+            )}
           </p>
         ) : null}
         {status?.failure ? (

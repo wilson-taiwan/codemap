@@ -14,11 +14,13 @@ function ToastItem({
 }) {
   const [isPaused, setIsPaused] = useState(false);
   const [exiting, setExiting] = useState(false);
-  const remainingRef = useRef(toast.type === "error" ? Infinity : 6000);
+  const defaultDuration =
+    toast.durationMs ?? (toast.type === "error" ? Infinity : 6000);
+  const remainingRef = useRef(defaultDuration);
   const startRef = useRef(Date.now());
 
   useEffect(() => {
-    if (toast.type === "error") return;
+    if (!Number.isFinite(defaultDuration)) return;
 
     if (isPaused) {
       const elapsed = Date.now() - startRef.current;
@@ -33,7 +35,7 @@ function ToastItem({
     }, remainingRef.current);
 
     return () => clearTimeout(timeout);
-  }, [isPaused, toast.id, toast.type, onDismiss]);
+  }, [isPaused, toast.id, toast.type, defaultDuration, onDismiss]);
 
   const handleClose = () => {
     setExiting(true);

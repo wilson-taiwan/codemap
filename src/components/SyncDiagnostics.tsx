@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { useSyncStore } from "../store/sync-store";
 import type { DiagnosticsReport, SyncStatus } from "../lib/types";
 import { Icon } from "./ui/Icon";
+import { InfoTip } from "./ui/InfoTip";
 
 interface SyncDiagnosticsProps {
   status: SyncStatus | null;
@@ -66,20 +67,20 @@ export function SyncDiagnostics({ status }: SyncDiagnosticsProps) {
     ? "Connected"
     : status?.realtimeHealth === "connecting"
       ? "Connecting…"
-      : "Live updates are unavailable; Fleuron is still checking for changes every minute.";
+      : "Unavailable — checking every minute";
 
   return (
     <section className="mb-5 border-t pt-4">
-      <h3 className="label mb-2">Sync Diagnostics</h3>
+      <h3 className="label mb-2">Sync diagnostics</h3>
 
       <div className="rounded-lg border bg-surface-base p-3 text-xs space-y-2">
         <div className="flex justify-between">
-          <span className="text-muted">Last received from study:</span>
+          <span className="text-muted">Last received</span>
           <span className="font-mono">{lastReceived}</span>
         </div>
 
         <div className="flex justify-between">
-          <span className="text-muted">Waiting to send:</span>
+          <span className="text-muted">Waiting to send</span>
           <span>
             {status?.pendingChanges
               ? `${status.pendingChanges} change${status.pendingChanges === 1 ? "" : "s"}`
@@ -87,8 +88,11 @@ export function SyncDiagnostics({ status }: SyncDiagnosticsProps) {
           </span>
         </div>
 
-        <div className="flex justify-between">
-          <span className="text-muted">Live connection:</span>
+        <div className="flex justify-between items-center">
+          <span className="text-muted flex items-center gap-1.5">
+            <span>Live connection</span>
+            <InfoTip content="Live updates trigger immediate checks; the minute-by-minute fallback still runs." />
+          </span>
           <span
             className={
               isConnected
@@ -102,7 +106,7 @@ export function SyncDiagnostics({ status }: SyncDiagnosticsProps) {
 
         {report?.clockSkewSeconds !== undefined && report.clockSkewSeconds !== null && (
           <div className="flex justify-between">
-            <span className="text-muted">Your clock vs. study:</span>
+            <span className="text-muted">Clock difference</span>
             <span className="font-mono">
               {Math.abs(report.clockSkewSeconds) < 2
                 ? "In sync (<2s)"
@@ -112,7 +116,7 @@ export function SyncDiagnostics({ status }: SyncDiagnosticsProps) {
         )}
 
         <div className="flex justify-between">
-          <span className="text-muted">Last problem:</span>
+          <span className="text-muted">Last problem</span>
           <span
             className={error ? "text-[var(--danger)] font-medium" : "text-muted"}
           >

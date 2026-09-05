@@ -154,6 +154,13 @@ pub struct ImportSegmentsInput {
     pub raw_vtt_path: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SegmentSpeakerChange {
+    pub segment_id: String,
+    pub old_speaker: String,
+    pub new_speaker: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CodedSegment {
     pub id: String,
@@ -587,6 +594,7 @@ pub struct ProjectOpenSnapshot {
     pub coded_segments: Vec<CodedSegment>,
     pub total_coded_count: usize,
     pub recent_code_ids: Vec<String>,
+    pub reviewed_segment_ids: Vec<String>,
     pub diagnostics: ProjectOpenDiagnostics,
 }
 
@@ -639,6 +647,7 @@ pub struct LiveWorkspaceSnapshot {
     pub conflicts: Vec<SyncConflictSummary>,
     pub sync_status: LiveWorkspaceSyncStatus,
     pub local_revision: i64,
+    pub reviewed_segment_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

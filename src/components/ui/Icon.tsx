@@ -14,6 +14,8 @@ export type IconName =
   | "check"
   | "checkCircle"
   | "chevronDown"
+  | "chevronLeft"
+  | "chevronRight"
   | "clock"
   | "close"
   | "code"
@@ -46,6 +48,8 @@ const PATHS: Record<IconName, string> = {
   check: "M4.5 12.8 9.5 17.8 19.5 6.5",
   checkCircle: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-12.8.4 2.9 2.9 5.7-6.2",
   chevronDown: "m6 9.5 6 6 6-6",
+  chevronLeft: "m15 18-6-6 6-6",
+  chevronRight: "m9 18 6-6-6-6",
   clock: "M12 7.2V12l3.2 2.1M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
   close: "M6 6l12 12M18 6 6 18",
   code: "M8.5 4.8 4 12l4.5 7.2M15.5 4.8 20 12l-4.5 7.2",

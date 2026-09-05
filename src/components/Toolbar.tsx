@@ -6,10 +6,13 @@ import { useGuideStore } from "../store/guide-store";
 import { useAppStore } from "../store/app-store";
 import { Icon } from "./ui/Icon";
 import { Menu } from "./ui/Menu";
+import { Tooltip } from "./ui/Tooltip";
 import { SyncChip } from "./SyncChip";
+import { FilterButton } from "./FilterButton";
 import { UpdateAction, describeUpdateAction } from "./UpdateAction";
 import { useSyncStore } from "../store/sync-store";
 import { useUpdateStore } from "../store/update-store";
+import { shortcut } from "../lib/platform";
 import type { PresenceUser } from "../lib/types";
 
 export interface BreadcrumbParams {
@@ -81,6 +84,10 @@ export function Toolbar() {
     setShowProjectFiles,
     setShowBackups,
     setShowInterviewMemo,
+    interviewHistory,
+    historyCursor,
+    goBackInterview,
+    goForwardInterview,
   } = useProjectStore(
     useShallow((s) => ({
       project: s.project,
@@ -97,6 +104,10 @@ export function Toolbar() {
       setShowProjectFiles: s.setShowProjectFiles,
       setShowBackups: s.setShowBackups,
       setShowInterviewMemo: s.setShowInterviewMemo,
+      interviewHistory: s.interviewHistory,
+      historyCursor: s.historyCursor,
+      goBackInterview: s.goBackInterview,
+      goForwardInterview: s.goForwardInterview,
     })),
   );
   const openGuide = useGuideStore((s) => s.openGuide);
@@ -110,6 +121,34 @@ export function Toolbar() {
 
   const [participantMenuOpen, setParticipantMenuOpen] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent);
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (!mod || e.shiftKey || e.altKey) return;
+      const target = e.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT")
+      ) {
+        return;
+      }
+
+      if (e.key === "[") {
+        e.preventDefault();
+        void goBackInterview();
+      } else if (e.key === "]") {
+        e.preventDefault();
+        void goForwardInterview();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [goBackInterview, goForwardInterview]);
 
   useEffect(() => {
     if (!inGroup) {
@@ -166,6 +205,37 @@ export function Toolbar() {
           {segments.study}
         </span>
         <span className="text-[var(--ink-4)] shrink-0 select-none">›</span>
+
+        {/* Back and Forward transcript navigation */}
+        <div
+          data-tauri-drag-region="false"
+          className="flex items-center gap-0.5 shrink-0"
+        >
+          <Tooltip content={`Previous transcript (${shortcut("mod", "[")})`}>
+            <button
+              type="button"
+              disabled={historyCursor <= 0}
+              onClick={() => void goBackInterview()}
+              aria-label="Previous transcript"
+              title={`Previous transcript (${shortcut("mod", "[")})`}
+              className="btn btn-ghost btn-sm h-6 w-6 p-0 grid place-items-center rounded disabled:opacity-30 text-[var(--ink-3)] hover:text-[var(--ink)]"
+            >
+              <Icon name="chevronLeft" size={13} />
+            </button>
+          </Tooltip>
+          <Tooltip content={`Next transcript (${shortcut("mod", "]")})`}>
+            <button
+              type="button"
+              disabled={historyCursor < 0 || historyCursor >= interviewHistory.length - 1}
+              onClick={() => void goForwardInterview()}
+              aria-label="Next transcript"
+              title={`Next transcript (${shortcut("mod", "]")})`}
+              className="btn btn-ghost btn-sm h-6 w-6 p-0 grid place-items-center rounded disabled:opacity-30 text-[var(--ink-3)] hover:text-[var(--ink)]"
+            >
+              <Icon name="chevronRight" size={13} />
+            </button>
+          </Tooltip>
+        </div>
 
         {/* Participant segment with dropdown switcher */}
         <div className="relative shrink min-w-0 max-w-[150px]">
@@ -292,6 +362,7 @@ export function Toolbar() {
         data-tauri-drag-region="false"
         className="flex shrink-0 items-center gap-2"
       >
+        <FilterButton />
         <SyncChip />
         <UpdateAction compact />
 

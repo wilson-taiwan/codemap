@@ -904,4 +904,78 @@ mod tests {
         assert!(delete(&path.join("project.db")).is_err());
         assert!(path.join("project.db").exists());
     }
+
+    #[test]
+    fn backup_and_restore_preserves_local_segment_reviews() {
+        let (_dir, path, conn) = make_project();
+        db::create_interview(
+            &conn,
+            &crate::models::CreateInterviewInput {
+                participant_label: "P-Rev".into(),
+                interview_date: None,
+                modality: None,
+                diagnosis_notes: None,
+                interviewers: vec![],
+            },
+        )
+        .unwrap();
+        let interviews = db::list_interviews(&conn).unwrap();
+        let iv = &interviews[0];
+        db::import_segments(
+            &conn,
+            &crate::models::ImportSegmentsInput {
+                interview_id: iv.id.clone(),
+                segments: vec![
+                    crate::models::SegmentInput {
+                        speaker: "Speaker 1".into(),
+                        timestamp_start: "00:00:01".into(),
+                        timestamp_end: None,
+                        text: "First turn".into(),
+                        section_tag: None,
+                    },
+                    crate::models::SegmentInput {
+                        speaker: "Speaker 2".into(),
+                        timestamp_start: "00:00:05".into(),
+                        timestamp_end: None,
+                        text: "Second turn".into(),
+                        section_tag: None,
+                    },
+                ],
+                raw_vtt_path: None,
+            },
+        )
+        .unwrap();
+        let segs = db::get_segments(&conn, &iv.id).unwrap();
+        assert_eq!(segs.len(), 2);
+        let s0 = &segs[0].id;
+        db::set_segment_reviewed(&conn, s0, true).unwrap();
+        assert_eq!(
+            db::list_segment_reviews(&conn, &iv.id).unwrap(),
+            vec![s0.clone()]
+        );
+
+        let made = create(
+            &conn,
+            &path,
+            BackupReason::Manual,
+            Some("with review".to_string()),
+        )
+        .unwrap();
+
+        // Clear the review in the live database
+        db::set_segment_reviewed(&conn, s0, false).unwrap();
+        assert!(db::list_segment_reviews(&conn, &iv.id).unwrap().is_empty());
+
+        // Drop the open connection before restoring
+        drop(conn);
+
+        restore(&path, Path::new(&made.path)).unwrap();
+
+        let reopened = db::open_project(&path.to_string_lossy()).unwrap();
+        assert_eq!(
+            db::list_segment_reviews(&reopened, &iv.id).unwrap(),
+            vec![s0.clone()],
+            "Restored database must retain segment_reviews"
+        );
+    }
 }

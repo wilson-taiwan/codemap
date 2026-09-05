@@ -854,6 +854,14 @@ body {
   }
 }
 
+html[data-no-transitions],
+html[data-no-transitions] *,
+html[data-no-transitions] *::before,
+html[data-no-transitions] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
 /* ==========================================================================
    Typography helpers
    ========================================================================== */

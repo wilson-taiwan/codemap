@@ -158,7 +158,7 @@ export function SyncSheet() {
     return () => {
       cancelled = true;
     };
-  }, [showSyncSheet, signedIn, inGroup, serverSchemaVersion]);
+  }, [showSyncSheet, signedIn, inGroup, serverSchemaVersion, status?.protocol]);
 
   async function refreshConflicts() {
     if (!showSyncSheet || !signedIn || !inGroup || status?.protocol !== 2) {

@@ -48,10 +48,9 @@ test("fixture=sync-error renders the failure as a friendly status", async ({
   await openWorkspace(page);
   await openSyncSheet(page);
 
-  const syncBtn = page.getByRole("button", { name: /Sync now/i });
-  if (await syncBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await syncBtn.click();
-  }
+  const syncBtn = page.getByRole("button", { name: /^Sync now$/i });
+  await expect(syncBtn).toBeVisible({ timeout: 15_000 });
+  await syncBtn.click();
 
   // A polite failure appears — and it is not a raw network dump.
   const alert = page.getByRole("alert").first();

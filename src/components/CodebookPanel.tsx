@@ -58,7 +58,6 @@ export function CodebookPanel() {
   );
   const intent = useAppStore((s) => s.intent);
   const setIntent = useAppStore((s) => s.setIntent);
-  const setCodebookCollapsed = useAppStore((s) => s.setCodebookCollapsed);
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -396,16 +395,6 @@ export function CodebookPanel() {
                 : `${codes.length}`}
             </span>
           )}
-          <Tooltip content="Hide codebook (Cmd/Ctrl+B)">
-            <button
-              type="button"
-              onClick={() => void setCodebookCollapsed(true)}
-              aria-label="Hide codebook"
-              className="grid h-5 w-5 place-items-center rounded-md text-[var(--ink-3)] transition-colors hover:bg-[var(--fill)] hover:text-[var(--ink)]"
-            >
-              <Icon name="arrowLeft" size={13} />
-            </button>
-          </Tooltip>
         </span>
       </div>
 

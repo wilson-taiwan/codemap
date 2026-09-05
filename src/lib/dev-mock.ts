@@ -19,6 +19,7 @@ import type {
   Interview,
   ProjectInfo,
   ProjectOpenSnapshot,
+  SegmentSpeakerChange,
   TranscriptSegment,
 } from "./types";
 import { CODE_PALETTE } from "./code-colors";
@@ -505,6 +506,7 @@ let interviews: Interview[] = [];
 let segments: TranscriptSegment[] = [];
 let codes: Code[] = [];
 let codedSegments: CodedSegment[] = [];
+let reviewedSegmentIds = new Set<string>();
 
 function resetFixture() {
   const f = isStressFixture()
@@ -519,6 +521,7 @@ function resetFixture() {
   segments = f.segments;
   codes = f.codes;
   codedSegments = f.codedSegments;
+  reviewedSegmentIds = new Set();
   return f;
 }
 
@@ -568,6 +571,7 @@ function buildSnapshot(): ProjectOpenSnapshot {
     coded_segments: ivCoded,
     total_coded_count: codedSegments.length,
     recent_code_ids: codes.slice(0, 6).map((c) => c.id),
+    reviewed_segment_ids: [],
     diagnostics: {
       schema_version: 4,
       counts: {
@@ -796,6 +800,7 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
           unresolved_conflict_count: fixtureConflictsActive.length,
         },
         local_revision: 0,
+        reviewed_segment_ids: [],
       };
     }
     case "adopt_project_coder": {
@@ -1056,6 +1061,61 @@ function handle(cmd: string, args: Record<string, unknown>): unknown {
     }
     case "get_segments":
       return args.interviewId === "iv-1" ? segments.map((s) => ({ ...s })) : [];
+    case "list_segment_reviews":
+      return segments
+        .filter((s) => reviewedSegmentIds.has(s.id))
+        .map((s) => s.id);
+    case "set_segment_reviewed": {
+      const segmentId = args.segmentId as string;
+      const reviewed = Boolean(args.reviewed);
+      if (reviewed) {
+        reviewedSegmentIds.add(segmentId);
+      } else {
+        reviewedSegmentIds.delete(segmentId);
+      }
+      return null;
+    }
+    case "set_segment_speaker": {
+      const segmentId = args.segmentId as string;
+      const newSpeaker = String(args.newSpeaker ?? "").trim();
+      const includeFollowing = Boolean(args.includeFollowing);
+      if (!newSpeaker) throw new Error("Speaker name cannot be empty");
+      const targetIndex = segments.findIndex((s) => s.id === segmentId);
+      if (targetIndex === -1) throw new Error(`Segment not found: ${segmentId}`);
+      const target = segments[targetIndex];
+      const oldSpeaker = target.speaker;
+      const changes: SegmentSpeakerChange[] = [];
+      if (includeFollowing) {
+        for (let i = targetIndex; i < segments.length; i++) {
+          if (segments[i].speaker === oldSpeaker) {
+            changes.push({
+              segment_id: segments[i].id,
+              old_speaker: oldSpeaker,
+              new_speaker: newSpeaker,
+            });
+            segments[i].speaker = newSpeaker;
+          }
+        }
+      } else {
+        changes.push({
+          segment_id: target.id,
+          old_speaker: oldSpeaker,
+          new_speaker: newSpeaker,
+        });
+        target.speaker = newSpeaker;
+      }
+      return changes;
+    }
+    case "restore_segment_speakers": {
+      const changes = (args.changes as SegmentSpeakerChange[]) || [];
+      for (const change of changes) {
+        const seg = segments.find((s) => s.id === change.segment_id);
+        if (seg) {
+          seg.speaker = change.old_speaker;
+        }
+      }
+      return null;
+    }
     case "list_coded_segments":
       return args.interviewId && args.interviewId !== "iv-1"
         ? []

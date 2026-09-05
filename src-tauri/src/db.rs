@@ -382,6 +382,12 @@ const MIGRATIONS: &[&str] = &[
        value TEXT NOT NULL
      );",
     "ALTER TABLE sync_conflicts ADD COLUMN proposer_label TEXT;",
+    // 9 — local review marks on transcript segments.
+    "CREATE TABLE segment_reviews (
+       segment_id TEXT PRIMARY KEY
+         REFERENCES transcript_segments(id) ON DELETE CASCADE,
+       updated_at TEXT NOT NULL
+     );",
 ];
 
 /// Bring a project database up to the current schema version.
@@ -1817,18 +1823,44 @@ fn set_v2_assignment_edge(
     Ok(())
 }
 
+pub(crate) fn build_v2_coding_edge(
+    interview_id: &str,
+    segment_id: &str,
+    code_id: &str,
+    char_start: Option<i32>,
+    char_end: Option<i32>,
+) -> rusqlite::Result<serde_json::Value> {
+    match (char_start, char_end) {
+        (Some(start), Some(end)) => Ok(serde_json::json!({
+            "interview_id": interview_id,
+            "segment_id": segment_id,
+            "code_id": code_id,
+            "char_start": start,
+            "char_end": end,
+        })),
+        (None, None) => Ok(serde_json::json!({
+            "interview_id": interview_id,
+            "segment_id": segment_id,
+            "code_id": code_id,
+        })),
+        _ => Err(rusqlite::Error::InvalidParameterName(
+            "Mixed char_start and char_end are invalid for coding edge".into(),
+        )),
+    }
+}
+
 fn enqueue_v2_coding_patch(
     tx: &Transaction<'_>,
     input: &MutateCodingEdgeInput,
     timestamp: &str,
 ) -> rusqlite::Result<()> {
-    let edge = serde_json::json!({
-        "interview_id": input.interview_id,
-        "segment_id": input.segment_id,
-        "code_id": input.code_id,
-        "char_start": input.char_start,
-        "char_end": input.char_end,
-    });
+    let edge = build_v2_coding_edge(
+        &input.interview_id,
+        &input.segment_id,
+        &input.code_id,
+        input.char_start,
+        input.char_end,
+    )?;
     let payload = if input.present {
         serde_json::json!({ "adds": [edge], "removes": [] })
     } else {
@@ -2001,15 +2033,11 @@ pub fn salvage_legacy_v1_state_for_v2(conn: &Connection) -> rusqlite::Result<usi
             });
         let current = current.into_iter().collect::<HashSet<_>>();
         let base = base.into_iter().collect::<HashSet<_>>();
-        let edge = |code_id: &String| {
-            serde_json::json!({
-                "interview_id": interview_id,
-                "segment_id": segment_id,
-                "code_id": code_id,
-                "char_start": char_start,
-                "char_end": char_end,
-            })
-        };
+        if char_start.is_some() ^ char_end.is_some() {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Mixed char_start and char_end are invalid for coding edge".into(),
+            ));
+        }
         let adds = current.difference(&base).collect::<Vec<_>>();
         let removes = base.difference(&current).collect::<Vec<_>>();
         // Normal v2 edits key one coding entity PER CODE —
@@ -2018,6 +2046,8 @@ pub fn salvage_legacy_v1_state_for_v2(conn: &Connection) -> rusqlite::Result<usi
         // on one span into a single span-keyed entity diverges from what any
         // normal edit would ever produce and resists reset/repair.
         for code_id in &adds {
+            let edge =
+                build_v2_coding_edge(&interview_id, &segment_id, code_id, char_start, char_end)?;
             let entity_id = format!(
                 "{}:{}:{}:{}",
                 interview_id,
@@ -2030,12 +2060,14 @@ pub fn salvage_legacy_v1_state_for_v2(conn: &Connection) -> rusqlite::Result<usi
                 "coding",
                 &entity_id,
                 "coding.patch",
-                serde_json::json!({ "adds": [edge(code_id)], "removes": [] }),
+                serde_json::json!({ "adds": [edge], "removes": [] }),
                 &timestamp,
             )?;
             salvaged += 1;
         }
         for code_id in &removes {
+            let edge =
+                build_v2_coding_edge(&interview_id, &segment_id, code_id, char_start, char_end)?;
             let entity_id = format!(
                 "{}:{}:{}:{}",
                 interview_id,
@@ -2048,7 +2080,7 @@ pub fn salvage_legacy_v1_state_for_v2(conn: &Connection) -> rusqlite::Result<usi
                 "coding",
                 &entity_id,
                 "coding.patch",
-                serde_json::json!({ "adds": [], "removes": [edge(code_id)] }),
+                serde_json::json!({ "adds": [], "removes": [edge] }),
                 &timestamp,
             )?;
             salvaged += 1;
@@ -2484,6 +2516,11 @@ pub fn get_open_project_snapshot(
         },
     };
 
+    let reviewed_segment_ids = match active_interview_id.as_deref() {
+        Some(id) => list_segment_reviews(conn, id)?,
+        None => Vec::new(),
+    };
+
     Ok(ProjectOpenSnapshot {
         project,
         codes,
@@ -2495,6 +2532,7 @@ pub fn get_open_project_snapshot(
         coded_segments,
         total_coded_count,
         recent_code_ids,
+        reviewed_segment_ids,
         diagnostics,
     })
 }
@@ -2636,6 +2674,10 @@ pub fn get_live_workspace_snapshot(
         unresolved_conflict_count: conflicts.len() as i64,
     };
     let local_revision = parse_sequence("sync_client_seq").max(parse_sequence("sync_server_seq"));
+    let reviewed_segment_ids = match active_interview_id.as_deref() {
+        Some(id) => list_segment_reviews(&tx, id)?,
+        None => Vec::new(),
+    };
     tx.commit()?;
 
     Ok(LiveWorkspaceSnapshot {
@@ -2652,6 +2694,7 @@ pub fn get_live_workspace_snapshot(
         conflicts,
         sync_status,
         local_revision,
+        reviewed_segment_ids,
     })
 }
 
@@ -4053,6 +4096,150 @@ pub fn get_segments(
         })
     })?;
     rows.collect()
+}
+
+pub fn set_segment_speaker(
+    conn: &Connection,
+    segment_id: &str,
+    new_speaker: &str,
+    include_following: bool,
+) -> rusqlite::Result<Vec<SegmentSpeakerChange>> {
+    let trimmed = new_speaker.trim();
+    if trimmed.is_empty() {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "Speaker cannot be empty".into(),
+        ));
+    }
+
+    let tx = conn.unchecked_transaction()?;
+
+    let (interview_id, target_index, old_speaker): (String, i32, String) = tx.query_row(
+        "SELECT interview_id, segment_index, speaker FROM transcript_segments WHERE id = ?1",
+        params![segment_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+
+    let mut affected: Vec<(String, i32, String)> = Vec::new();
+    affected.push((segment_id.to_string(), target_index, old_speaker.clone()));
+
+    if include_following {
+        let mut stmt = tx.prepare(
+            "SELECT id, segment_index, speaker FROM transcript_segments
+             WHERE interview_id = ?1 AND segment_index > ?2 AND speaker = ?3
+             ORDER BY segment_index ASC",
+        )?;
+        let rows = stmt.query_map(params![interview_id, target_index, old_speaker], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i32>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        for row in rows {
+            affected.push(row?);
+        }
+    }
+
+    let mut changes = Vec::with_capacity(affected.len());
+    let mut update_stmt =
+        tx.prepare("UPDATE transcript_segments SET speaker = ?1 WHERE id = ?2")?;
+
+    for (id, _idx, old) in affected {
+        update_stmt.execute(params![trimmed, id])?;
+        changes.push(SegmentSpeakerChange {
+            segment_id: id,
+            old_speaker: old,
+            new_speaker: trimmed.to_string(),
+        });
+    }
+    drop(update_stmt);
+
+    tx.commit()?;
+    Ok(changes)
+}
+
+pub fn restore_segment_speakers(
+    conn: &Connection,
+    changes: &[SegmentSpeakerChange],
+) -> rusqlite::Result<()> {
+    if changes.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn.unchecked_transaction()?;
+
+    let mut verify_stmt = tx.prepare("SELECT speaker FROM transcript_segments WHERE id = ?1")?;
+
+    for change in changes {
+        let current_speaker: String =
+            verify_stmt.query_row([&change.segment_id], |row| row.get(0))?;
+        if current_speaker != change.new_speaker {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Speaker on segment {} has changed (expected '{}', found '{}')",
+                change.segment_id, change.new_speaker, current_speaker
+            )));
+        }
+    }
+    drop(verify_stmt);
+
+    let mut update_stmt =
+        tx.prepare("UPDATE transcript_segments SET speaker = ?1 WHERE id = ?2")?;
+
+    for change in changes {
+        update_stmt.execute(params![change.old_speaker, change.segment_id])?;
+    }
+    drop(update_stmt);
+
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn set_segment_reviewed(
+    conn: &Connection,
+    segment_id: &str,
+    reviewed: bool,
+) -> rusqlite::Result<()> {
+    if reviewed {
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM transcript_segments WHERE id = ?1)",
+            params![segment_id],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        let now = now_iso();
+        conn.execute(
+            "INSERT INTO segment_reviews (segment_id, updated_at) VALUES (?1, ?2)
+             ON CONFLICT(segment_id) DO UPDATE SET updated_at = ?2",
+            params![segment_id, now],
+        )?;
+    } else {
+        conn.execute(
+            "DELETE FROM segment_reviews WHERE segment_id = ?1",
+            params![segment_id],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn list_segment_reviews(
+    conn: &Connection,
+    interview_id: &str,
+) -> rusqlite::Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT sr.segment_id
+         FROM segment_reviews sr
+         JOIN transcript_segments ts ON ts.id = sr.segment_id
+         WHERE ts.interview_id = ?1
+         ORDER BY ts.segment_index ASC",
+    )?;
+    let rows = stmt.query_map(params![interview_id], |row| row.get::<_, String>(0))?;
+    let mut ids = Vec::new();
+    for row in rows {
+        ids.push(row?);
+    }
+    Ok(ids)
 }
 
 fn apply_codes_in_tx(
@@ -7244,6 +7431,243 @@ mod tests {
     }
 
     #[test]
+    fn build_v2_coding_edge_omits_null_spans_and_rejects_mixed() {
+        let whole = build_v2_coding_edge("iv1", "seg1", "c1", None, None).unwrap();
+        assert_eq!(whole["interview_id"], "iv1");
+        assert_eq!(whole["segment_id"], "seg1");
+        assert_eq!(whole["code_id"], "c1");
+        assert!(whole.get("char_start").is_none());
+        assert!(whole.get("char_end").is_none());
+
+        let span = build_v2_coding_edge("iv1", "seg1", "c1", Some(12), Some(34)).unwrap();
+        assert_eq!(span["interview_id"], "iv1");
+        assert_eq!(span["segment_id"], "seg1");
+        assert_eq!(span["code_id"], "c1");
+        assert_eq!(span["char_start"], 12);
+        assert_eq!(span["char_end"], 34);
+
+        assert!(build_v2_coding_edge("iv1", "seg1", "c1", Some(12), None).is_err());
+        assert!(build_v2_coding_edge("iv1", "seg1", "c1", None, Some(34)).is_err());
+    }
+
+    #[test]
+    fn v2_live_enqueue_omits_null_spans_and_rejects_mixed() {
+        let (_dir, _path, conn) = make_project();
+        set_sync_state_value(&conn, "project_id", "project").unwrap();
+        set_sync_state_value(
+            &conn,
+            "sync_device_id",
+            "00000000-0000-4000-8000-0000000000aa",
+        )
+        .unwrap();
+        set_sync_state_value(&conn, "sync_protocol", "2").unwrap();
+        set_sync_state_value(
+            &conn,
+            "sync_generation",
+            "00000000-0000-4000-8000-0000000000bb",
+        )
+        .unwrap();
+
+        let iv = make_interview(&conn, "P01");
+        import_segments(
+            &conn,
+            &ImportSegmentsInput {
+                interview_id: iv.id.clone(),
+                segments: vec![make_segment(
+                    "Hello world transcript content",
+                    "00:00:00.000",
+                )],
+                raw_vtt_path: None,
+            },
+        )
+        .unwrap();
+        let segments = get_segments(&conn, &iv.id).unwrap();
+        let seg_id = &segments[0].id;
+        let code = create_code(
+            &conn,
+            &CreateCodeInput {
+                name: "Alpha".into(),
+                definition: None,
+                color: Some("#111111".into()),
+                parent_id: None,
+                inclusion_criteria: None,
+                exclusion_criteria: None,
+                example: None,
+            },
+        )
+        .unwrap();
+
+        // 1. Whole-turn live enqueue
+        mutate_coding_edge(
+            &conn,
+            &MutateCodingEdgeInput {
+                interview_id: iv.id.clone(),
+                segment_id: seg_id.clone(),
+                code_id: code.id.clone(),
+                coder_name: "Coder Alice".into(),
+                char_start: None,
+                char_end: None,
+                present: true,
+            },
+        )
+        .unwrap();
+
+        let outbox_rows: Vec<(String, String)> = conn
+            .prepare("SELECT entity_id, payload_json FROM sync_outbox WHERE entity_type = 'coding'")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+
+        assert_eq!(outbox_rows.len(), 1);
+        let whole_payload: serde_json::Value = serde_json::from_str(&outbox_rows[0].1).unwrap();
+        let whole_edge = &whole_payload["adds"][0];
+        assert_eq!(whole_edge["code_id"], code.id);
+        assert!(whole_edge.get("char_start").is_none());
+        assert!(whole_edge.get("char_end").is_none());
+
+        // 2. Span live enqueue
+        mutate_coding_edge(
+            &conn,
+            &MutateCodingEdgeInput {
+                interview_id: iv.id.clone(),
+                segment_id: seg_id.clone(),
+                code_id: code.id.clone(),
+                coder_name: "Coder Alice".into(),
+                char_start: Some(0),
+                char_end: Some(5),
+                present: true,
+            },
+        )
+        .unwrap();
+
+        let outbox_rows: Vec<(String, String)> = conn
+            .prepare("SELECT entity_id, payload_json FROM sync_outbox WHERE entity_type = 'coding' ORDER BY client_seq ASC")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+
+        assert_eq!(outbox_rows.len(), 2);
+        let span_payload: serde_json::Value = serde_json::from_str(&outbox_rows[1].1).unwrap();
+        let span_edge = &span_payload["adds"][0];
+        assert_eq!(span_edge["char_start"], 0);
+        assert_eq!(span_edge["char_end"], 5);
+
+        // 3. Mixed span live enqueue returns error and does not enqueue
+        let mixed_res = mutate_coding_edge(
+            &conn,
+            &MutateCodingEdgeInput {
+                interview_id: iv.id.clone(),
+                segment_id: seg_id.clone(),
+                code_id: code.id.clone(),
+                coder_name: "Coder Alice".into(),
+                char_start: Some(0),
+                char_end: None,
+                present: true,
+            },
+        );
+        assert!(mixed_res.is_err());
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sync_outbox WHERE entity_type = 'coding'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn v2_salvage_omits_null_spans_and_rejects_mixed() {
+        let (_dir, _path, conn) = make_project();
+        set_sync_state_value(&conn, "project_id", "project").unwrap();
+        set_sync_state_value(
+            &conn,
+            "sync_device_id",
+            "00000000-0000-4000-8000-0000000000aa",
+        )
+        .unwrap();
+        set_sync_state_value(&conn, "sync_protocol", "2").unwrap();
+        set_sync_state_value(
+            &conn,
+            "sync_generation",
+            "00000000-0000-4000-8000-0000000000bb",
+        )
+        .unwrap();
+
+        let now = now_iso();
+        conn.execute(
+            "INSERT INTO codebook (id, name, definition, color, sort_order, is_retired, created_at, updated_at)
+             VALUES ('cA', 'Alpha', NULL, '#111111', 0, 0, ?1, ?1)",
+            [&now],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO interviews (id, participant_label, created_at, updated_at)
+             VALUES ('iv1', 'P01', ?1, ?1)",
+            [&now],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO transcript_segments (id, interview_id, segment_index, speaker, timestamp_start, timestamp_end, text)
+             VALUES ('seg1', 'iv1', 0, 'Alice', '00:00:00.000', '00:00:05.000', 'Hello world')",
+            [],
+        )
+        .unwrap();
+
+        // Insert whole-turn and span legacy dirty rows
+        conn.execute(
+            "INSERT INTO coded_segments (id, interview_id, segment_id, code_ids, coder_name, char_start, char_end, created_at, updated_at, sync_dirty)
+             VALUES ('cs_whole', 'iv1', 'seg1', '[\"cA\"]', 'Coder', NULL, NULL, ?1, ?1, 1),
+                    ('cs_span', 'iv1', 'seg1', '[\"cA\"]', 'Coder', 10, 25, ?1, ?1, 1)",
+            [&now],
+        )
+        .unwrap();
+        conn.execute("UPDATE codebook SET sync_dirty = 0", [])
+            .unwrap();
+        conn.execute("UPDATE interviews SET sync_dirty = 0", [])
+            .unwrap();
+
+        let salvaged = salvage_legacy_v1_state_for_v2(&conn).unwrap();
+        assert_eq!(salvaged, 2);
+
+        let outbox_rows: Vec<(String, String)> = conn
+            .prepare("SELECT entity_id, payload_json FROM sync_outbox WHERE entity_type = 'coding' ORDER BY entity_id ASC")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+
+        assert_eq!(outbox_rows.len(), 2);
+        let whole_payload: serde_json::Value = serde_json::from_str(&outbox_rows[1].1).unwrap();
+        assert_eq!(outbox_rows[1].0, "iv1:seg1:whole:cA");
+        let whole_edge = &whole_payload["adds"][0];
+        assert!(whole_edge.get("char_start").is_none());
+        assert!(whole_edge.get("char_end").is_none());
+
+        let span_payload: serde_json::Value = serde_json::from_str(&outbox_rows[0].1).unwrap();
+        assert_eq!(outbox_rows[0].0, "iv1:seg1:span:10:25:cA");
+        let span_edge = &span_payload["adds"][0];
+        assert_eq!(span_edge["char_start"], 10);
+        assert_eq!(span_edge["char_end"], 25);
+
+        // Mixed legacy row fails salvage
+        conn.execute(
+            "INSERT INTO coded_segments (id, interview_id, segment_id, code_ids, coder_name, char_start, char_end, created_at, updated_at, sync_dirty)
+             VALUES ('cs_mixed', 'iv1', 'seg1', '[\"cA\"]', 'Coder', 10, NULL, ?1, ?1, 1)",
+            [&now],
+        )
+        .unwrap();
+        let mixed_err = salvage_legacy_v1_state_for_v2(&conn);
+        assert!(mixed_err.is_err());
+    }
+
+    #[test]
     fn block_id_is_monotonic_across_workspace_reset() {
         let (_dir, _path, conn) = make_project();
         let iv = make_interview(&conn, "A");
@@ -8604,5 +9028,223 @@ mod tests {
             }
             other => panic!("expected BoundElsewhere, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn speaker_reassign_single_turn_and_scope_and_atomic_restore() {
+        let (_dir, _path, conn) = make_project();
+        create_interview(
+            &conn,
+            &CreateInterviewInput {
+                participant_label: "P-Speaker".into(),
+                interview_date: None,
+                modality: None,
+                diagnosis_notes: None,
+                interviewers: vec![],
+            },
+        )
+        .unwrap();
+        let iv = &list_interviews(&conn).unwrap()[0];
+
+        // Sequence: A, A, Interviewer, A
+        import_segments(
+            &conn,
+            &ImportSegmentsInput {
+                interview_id: iv.id.clone(),
+                segments: vec![
+                    SegmentInput {
+                        speaker: "A".into(),
+                        timestamp_start: "00:00:01".into(),
+                        timestamp_end: None,
+                        text: "Turn 0".into(),
+                        section_tag: None,
+                    },
+                    SegmentInput {
+                        speaker: "A".into(),
+                        timestamp_start: "00:00:05".into(),
+                        timestamp_end: None,
+                        text: "Turn 1".into(),
+                        section_tag: None,
+                    },
+                    SegmentInput {
+                        speaker: "Interviewer".into(),
+                        timestamp_start: "00:00:10".into(),
+                        timestamp_end: None,
+                        text: "Turn 2".into(),
+                        section_tag: None,
+                    },
+                    SegmentInput {
+                        speaker: "A".into(),
+                        timestamp_start: "00:00:15".into(),
+                        timestamp_end: None,
+                        text: "Turn 3".into(),
+                        section_tag: None,
+                    },
+                ],
+                raw_vtt_path: None,
+            },
+        )
+        .unwrap();
+
+        let segs = get_segments(&conn, &iv.id).unwrap();
+        assert_eq!(segs.len(), 4);
+
+        // 1. Trimming and empty rejection
+        assert!(set_segment_speaker(&conn, &segs[0].id, "   ", false).is_err());
+
+        // 2. Single turn mode on turn 1
+        let single_changes = set_segment_speaker(&conn, &segs[1].id, "  B  ", false).unwrap();
+        assert_eq!(single_changes.len(), 1);
+        assert_eq!(single_changes[0].segment_id, segs[1].id);
+        assert_eq!(single_changes[0].old_speaker, "A");
+        assert_eq!(single_changes[0].new_speaker, "B");
+
+        let cur_segs = get_segments(&conn, &iv.id).unwrap();
+        assert_eq!(cur_segs[0].speaker, "A");
+        assert_eq!(cur_segs[1].speaker, "B");
+        assert_eq!(cur_segs[2].speaker, "Interviewer");
+        assert_eq!(cur_segs[3].speaker, "A");
+
+        // Restore single turn
+        restore_segment_speakers(&conn, &single_changes).unwrap();
+        let cur_segs = get_segments(&conn, &iv.id).unwrap();
+        assert_eq!(cur_segs[1].speaker, "A");
+
+        // 3. "And following" on turn 0: should affect turn 0, 1, 3 (all "A"), but leave Interviewer untouched
+        let multi_changes = set_segment_speaker(&conn, &segs[0].id, "Participant 1", true).unwrap();
+        assert_eq!(multi_changes.len(), 3);
+        assert_eq!(multi_changes[0].segment_id, segs[0].id);
+        assert_eq!(multi_changes[1].segment_id, segs[1].id);
+        assert_eq!(multi_changes[2].segment_id, segs[3].id);
+
+        let cur_segs = get_segments(&conn, &iv.id).unwrap();
+        assert_eq!(cur_segs[0].speaker, "Participant 1");
+        assert_eq!(cur_segs[1].speaker, "Participant 1");
+        assert_eq!(cur_segs[2].speaker, "Interviewer");
+        assert_eq!(cur_segs[3].speaker, "Participant 1");
+
+        // 4. Stale-expected rollback test
+        // Modify segs[1] to something else behind the scenes
+        conn.execute(
+            "UPDATE transcript_segments SET speaker = 'Tampered' WHERE id = ?1",
+            params![segs[1].id],
+        )
+        .unwrap();
+
+        let restore_res = restore_segment_speakers(&conn, &multi_changes);
+        assert!(restore_res.is_err(), "Expected rollback on stale speaker");
+
+        // Check that segs[0] and segs[3] were NOT restored because the transaction rolled back
+        let after_rollback = get_segments(&conn, &iv.id).unwrap();
+        assert_eq!(after_rollback[0].speaker, "Participant 1");
+        assert_eq!(after_rollback[1].speaker, "Tampered");
+        assert_eq!(after_rollback[3].speaker, "Participant 1");
+
+        // Fix the tampered segment back to "Participant 1", then restore succeeds
+        conn.execute(
+            "UPDATE transcript_segments SET speaker = 'Participant 1' WHERE id = ?1",
+            params![segs[1].id],
+        )
+        .unwrap();
+        restore_segment_speakers(&conn, &multi_changes).unwrap();
+        let restored_segs = get_segments(&conn, &iv.id).unwrap();
+        assert_eq!(restored_segs[0].speaker, "A");
+        assert_eq!(restored_segs[1].speaker, "A");
+        assert_eq!(restored_segs[2].speaker, "Interviewer");
+        assert_eq!(restored_segs[3].speaker, "A");
+
+        // 5. No sync side effect: outbox is empty
+        let outbox_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sync_outbox", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(outbox_count, 0);
+    }
+
+    #[test]
+    fn segment_reviews_set_clear_cascade_list() {
+        let (_dir, _path, conn) = make_project();
+        create_interview(
+            &conn,
+            &CreateInterviewInput {
+                participant_label: "P-Review".into(),
+                interview_date: None,
+                modality: None,
+                diagnosis_notes: None,
+                interviewers: vec![],
+            },
+        )
+        .unwrap();
+        let iv = &list_interviews(&conn).unwrap()[0];
+
+        import_segments(
+            &conn,
+            &ImportSegmentsInput {
+                interview_id: iv.id.clone(),
+                segments: vec![
+                    SegmentInput {
+                        speaker: "S1".into(),
+                        timestamp_start: "00:00:01".into(),
+                        timestamp_end: None,
+                        text: "Turn 0".into(),
+                        section_tag: None,
+                    },
+                    SegmentInput {
+                        speaker: "S2".into(),
+                        timestamp_start: "00:00:05".into(),
+                        timestamp_end: None,
+                        text: "Turn 1".into(),
+                        section_tag: None,
+                    },
+                    SegmentInput {
+                        speaker: "S1".into(),
+                        timestamp_start: "00:00:10".into(),
+                        timestamp_end: None,
+                        text: "Turn 2".into(),
+                        section_tag: None,
+                    },
+                ],
+                raw_vtt_path: None,
+            },
+        )
+        .unwrap();
+
+        let segs = get_segments(&conn, &iv.id).unwrap();
+        assert_eq!(segs.len(), 3);
+
+        // Initial list is empty
+        assert!(list_segment_reviews(&conn, &iv.id).unwrap().is_empty());
+
+        // Error on non-existent segment
+        assert!(set_segment_reviewed(&conn, "non-existent-seg", true).is_err());
+
+        // Mark turn 2 reviewed, then turn 0 reviewed
+        set_segment_reviewed(&conn, &segs[2].id, true).unwrap();
+        set_segment_reviewed(&conn, &segs[0].id, true).unwrap();
+
+        // List must return in segment_index order: segs[0], segs[2]
+        let reviewed = list_segment_reviews(&conn, &iv.id).unwrap();
+        assert_eq!(reviewed, vec![segs[0].id.clone(), segs[2].id.clone()]);
+
+        // Duplicate set true updates timestamp and succeeds
+        set_segment_reviewed(&conn, &segs[0].id, true).unwrap();
+
+        // Clear turn 0
+        set_segment_reviewed(&conn, &segs[0].id, false).unwrap();
+        let reviewed = list_segment_reviews(&conn, &iv.id).unwrap();
+        assert_eq!(reviewed, vec![segs[2].id.clone()]);
+
+        // Cascades on delete segment
+        conn.execute(
+            "DELETE FROM transcript_segments WHERE id = ?1",
+            params![segs[2].id],
+        )
+        .unwrap();
+        assert!(list_segment_reviews(&conn, &iv.id).unwrap().is_empty());
+
+        // No sync side effects
+        let outbox_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sync_outbox", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(outbox_count, 0);
     }
 }

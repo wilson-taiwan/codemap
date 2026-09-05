@@ -122,3 +122,18 @@ export function readableOn(color: string, background: string): string {
   }
   return target;
 }
+
+/**
+ * Pick white or black text to guarantee legibility when drawn directly over a solid fill.
+ * Returns a candidate meeting 4.5:1, choosing the higher ratio if both or neither pass.
+ */
+export function textOnSolid(fill: string): string {
+  const whiteContrast = contrast("#ffffff", fill);
+  const blackContrast = contrast("#000000", fill);
+  const whitePasses = whiteContrast >= 4.5;
+  const blackPasses = blackContrast >= 4.5;
+
+  if (whitePasses && !blackPasses) return "#ffffff";
+  if (blackPasses && !whitePasses) return "#000000";
+  return whiteContrast >= blackContrast ? "#ffffff" : "#000000";
+}

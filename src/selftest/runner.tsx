@@ -161,12 +161,17 @@ export function SelftestRunner() {
       await runSuite("dark-mode-contrast", async () => {
         const root = document.documentElement;
         const priorTheme = root.getAttribute("data-theme");
+        root.setAttribute("data-no-transitions", "true");
+        void root.offsetHeight;
         root.setAttribute("data-theme", "dark");
+        void root.offsetHeight;
         await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => resolve(), 300);
           requestAnimationFrame(() =>
-            requestAnimationFrame(() =>
-              setTimeout(() => resolve(), 150),
-            ),
+            requestAnimationFrame(() => {
+              clearTimeout(timer);
+              setTimeout(() => resolve(), 150);
+            }),
           );
         });
         try {
@@ -177,8 +182,11 @@ export function SelftestRunner() {
             );
           }
         } finally {
+          void root.offsetHeight;
           if (priorTheme == null) root.removeAttribute("data-theme");
           else root.setAttribute("data-theme", priorTheme);
+          void root.offsetHeight;
+          root.removeAttribute("data-no-transitions");
         }
       });
 
@@ -581,6 +589,7 @@ export function SelftestRunner() {
         }
       });
 
+      if (cancelled) return;
       setDone(true);
 
       // Report back to backend

@@ -1,6 +1,6 @@
 [package]
 name = "qualitative-coding-app"
-version = "2.4.1"
+version = "2.5.0"
 description = "Offline qualitative coding for reflexive thematic analysis"
 authors = ["Fleuron contributors"]
 license = "MIT"
@@ -56,6 +56,10 @@ futures-util = { version = "0.3", default-features = false, features = ["sink"] 
 tempfile = "3"
 fs2 = "0.4"
 libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSApplication"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

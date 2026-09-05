@@ -764,6 +764,46 @@ pub fn get_segments(
 }
 
 #[tauri::command]
+pub fn set_segment_speaker(
+    state: State<'_, AppState>,
+    segment_id: String,
+    new_speaker: String,
+    include_following: bool,
+) -> Result<Vec<SegmentSpeakerChange>, String> {
+    state.with_conn(|conn| {
+        db::set_segment_speaker(conn, &segment_id, &new_speaker, include_following)
+            .map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+pub fn restore_segment_speakers(
+    state: State<'_, AppState>,
+    changes: Vec<SegmentSpeakerChange>,
+) -> Result<(), String> {
+    state.with_conn(|conn| db::restore_segment_speakers(conn, &changes).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+pub fn set_segment_reviewed(
+    state: State<'_, AppState>,
+    segment_id: String,
+    reviewed: bool,
+) -> Result<(), String> {
+    state.with_conn(|conn| {
+        db::set_segment_reviewed(conn, &segment_id, reviewed).map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+pub fn list_segment_reviews(
+    state: State<'_, AppState>,
+    interview_id: String,
+) -> Result<Vec<String>, String> {
+    state.with_conn(|conn| db::list_segment_reviews(conn, &interview_id).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
 pub fn apply_codes(
     app: tauri::AppHandle,
     state: State<'_, AppState>,

@@ -243,13 +243,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         [interviewId]: value,
       },
     };
-    set({ preferences: prefs });
-    try {
-      const saved = await api.setAppPreferences(prefs);
-      set({ preferences: saved });
-    } catch {
-      // View-layer toggle — the choice still applies for this session.
-    }
+    const saved = await api.setAppPreferences(prefs);
+    set({ preferences: saved });
   },
 
   setAutomaticUpdateChecks: async (value) => {

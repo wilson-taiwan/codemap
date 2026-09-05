@@ -4,6 +4,7 @@ import type { GroupInfo, SyncOutcome, SyncStatus } from "../lib/types";
 import { useProjectStore } from "./project-store";
 
 let activeUiSyncRequests = 0;
+let inFlightActivation: Promise<void> | null = null;
 
 /**
  * Sync state for the toolbar chip and the group sheet.
@@ -345,6 +346,10 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
   },
 
   maybeAutoActivateV2: async () => {
+    if (inFlightActivation) {
+      await inFlightActivation;
+      return;
+    }
     const s = get();
     const status = s.status;
     // Only a study admin can activate; the server re-checks admin + all-ready
@@ -354,23 +359,27 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
     if ((status.serverSchemaVersion ?? 0) < 10) return;
     if (s.autoActivatingV2) return; // in-flight guard: no duplicate RPCs
     set({ autoActivatingV2: true });
-    try {
-      const readiness = await api.syncV2Readiness();
-      const allReady =
-        readiness.protocol === 1 &&
-        readiness.members.length > 0 &&
-        readiness.members.every((m) => m.ready);
-      if (!allReady) return; // wait until every member has updated + synced
-      await api.syncV2Activate(); // server re-checks admin + all-ready
-      await get().syncNow({ silent: true }); // re-register → protocol 2 + salvage
-      await get().refreshStatus();
-      await get().refreshGroup();
-    } catch {
-      // Not-all-ready / transient / pre-v2 server: stay on P1, retry next
-      // trigger. This must never replace the store's visible error.
-    } finally {
-      set({ autoActivatingV2: false });
-    }
+    inFlightActivation = (async () => {
+      try {
+        const readiness = await api.syncV2Readiness();
+        const allReady =
+          readiness.protocol === 1 &&
+          readiness.members.length > 0 &&
+          readiness.members.every((m) => m.ready);
+        if (!allReady) return; // wait until every member has updated + synced
+        await api.syncV2Activate(); // server re-checks admin + all-ready
+        await get().syncNow({ silent: true }); // re-register → protocol 2 + salvage
+        await get().refreshStatus();
+        await get().refreshGroup();
+      } catch {
+        // Not-all-ready / transient / pre-v2 server: stay on P1, retry next
+        // trigger. This must never replace the store's visible error.
+      } finally {
+        set({ autoActivatingV2: false });
+        inFlightActivation = null;
+      }
+    })();
+    await inFlightActivation;
   },
 
   openSyncSheet: () => {

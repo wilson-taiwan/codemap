@@ -4,11 +4,13 @@ import { useProjectStore } from "../store/project-store";
 import { useGuideStore } from "../store/guide-store";
 import { useSyncStore } from "../store/sync-store";
 import { Icon, type IconName } from "./ui/Icon";
+import { InfoTip } from "./ui/InfoTip";
 
 interface Task {
   id: string;
   title: string;
   why: string;
+  infoTip: string;
   icon: IconName;
   action?: { label: string; run: () => void };
   guideSection: string;
@@ -49,7 +51,8 @@ export function NextStepCoach() {
     {
       id: "codes",
       title: "Add your first code",
-      why: "Codes live in the left panel. Start with one — the codebook grows as you read.",
+      why: "Create a code, then start reading.",
+      infoTip: "Codes live in the left panel and can grow as you read.",
       icon: "book",
       action: { label: "Add a code", run: () => setIntent("add-code") },
       guideSection: "add-code",
@@ -57,7 +60,8 @@ export function NextStepCoach() {
     {
       id: "transcript",
       title: "Import a transcript",
-      why: "Zoom captions, SRT, a Word document, or plain text — Fleuron splits it into speaker turns.",
+      why: "Import VTT, SRT, Word, or plain text.",
+      infoTip: "Fleuron splits supported files into speaker turns.",
       icon: "import",
       action: { label: "Import a transcript", run: () => setIntent("import-vtt") },
       guideSection: "import-vtt-first",
@@ -65,14 +69,16 @@ export function NextStepCoach() {
     {
       id: "first-code",
       title: "Code your first passage",
-      why: "Drag across the words you mean and name them in the bubble that appears. Right-click a passage (or press C) to code it whole.",
+      why: "Select words to code a span, or press C for the whole turn.",
+      infoTip: "Right-click a turn to see the same whole-turn action.",
       icon: "sparkle",
       guideSection: "apply-codes",
     },
     {
       id: "sync",
       title: "Start a group with your coder",
-      why: "Your coding travels to them and theirs to you. Collaboration sync excludes transcript text.",
+      why: "Share coding with your group; transcript text stays local.",
+      infoTip: "Coding metadata syncs. Transcript text stays on this computer.",
       icon: "people",
       action: { label: "Start a group", run: () => openSyncSheet() },
       guideSection: "sync-with-your-coder",
@@ -144,7 +150,10 @@ export function NextStepCoach() {
               ))}
             </span>
           </div>
-          <p className="mt-1 text-[14px] font-medium">{active.title}</p>
+          <div className="mt-1 flex items-center gap-1.5">
+            <p className="text-[14px] font-medium">{active.title}</p>
+            <InfoTip content={active.infoTip} />
+          </div>
           <p className="hint mt-0.5">{active.why}</p>
 
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">

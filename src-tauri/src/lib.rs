@@ -89,6 +89,17 @@ fn deliver_open_project(app: &tauri::AppHandle, path: &str) {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn activate_macos_app() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSApplication;
+
+    if let Some(mtm) = MainThreadMarker::new() {
+        let app = NSApplication::sharedApplication(mtm);
+        app.activate();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let is_selftest_flag = std::env::args().any(|a| a == "--selftest");
@@ -172,6 +183,16 @@ pub fn run() {
                 .start_sync_polling(app.handle().clone());
             window_guard::clamp_main_window_to_work_area(app.handle());
 
+            if !crate::selftest::is_selftest_active() {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    #[cfg(target_os = "macos")]
+                    activate_macos_app();
+                    let _ = window.set_focus();
+                }
+            }
+
             if let Some(path) = std::env::args().nth(1) {
                 if path != "--selftest" {
                     deliver_open_project(app.handle(), &path);
@@ -214,6 +235,10 @@ pub fn run() {
             commands::delete_interview,
             commands::import_segments,
             commands::get_segments,
+            commands::set_segment_speaker,
+            commands::restore_segment_speakers,
+            commands::set_segment_reviewed,
+            commands::list_segment_reviews,
             commands::apply_codes,
             commands::mutate_coding_edge,
             commands::patch_coding_memo,

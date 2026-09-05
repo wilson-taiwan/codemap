@@ -458,6 +458,7 @@ export interface StatusMessage {
   type: "success" | "error" | "info";
   text: string;
   action?: StatusMessageAction;
+  durationMs?: number;
 }
 
 export type ToastAction = StatusMessageAction;
@@ -467,6 +468,13 @@ export interface Toast {
   type: "success" | "info" | "error";
   text: string;
   action?: ToastAction;
+  durationMs?: number;
+}
+
+export interface SegmentSpeakerChange {
+  segment_id: string;
+  old_speaker: string;
+  new_speaker: string;
 }
 
 export interface OpenStage {
@@ -568,6 +576,7 @@ export interface ProjectOpenSnapshot {
   coded_segments: CodedSegment[];
   total_coded_count: number;
   recent_code_ids: string[];
+  reviewed_segment_ids: string[];
   diagnostics: ProjectOpenDiagnostics;
 }
 
@@ -616,6 +625,7 @@ export interface LiveWorkspaceSnapshot {
   conflicts: SyncConflictSummary[];
   sync_status: LiveWorkspaceSyncStatus;
   local_revision: number;
+  reviewed_segment_ids: string[];
 }
 
 export type JoinTargetVerdict =

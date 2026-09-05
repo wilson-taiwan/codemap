@@ -48,6 +48,28 @@ export function findFleuronBinary(customRoot = rootDir) {
   return null;
 }
 
+async function ensureDevServer(binaryPath) {
+  if (!binaryPath.includes("debug")) return null;
+  try {
+    const res = await fetch("http://localhost:1420");
+    if (res.ok || res.status === 200) return null;
+  } catch {
+    // dev server not running, start it
+  }
+  const viteProc = spawn("npx", ["vite", "--port", "1420"], {
+    cwd: rootDir,
+    stdio: "ignore",
+  });
+  for (let i = 0; i < 50; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    try {
+      const res = await fetch("http://localhost:1420");
+      if (res.ok || res.status === 200) break;
+    } catch {}
+  }
+  return viteProc;
+}
+
 export function runSelftest({
   binaryPath = findFleuronBinary(),
   timeoutMs = 90000,
@@ -62,55 +84,68 @@ export function runSelftest({
       return;
     }
 
-    const spawnArgs = ["--selftest", ...args.filter((a) => a !== "--selftest")];
-    console.log(
-      `[selftest] Launching binary: ${binaryPath} with ${spawnArgs.join(" ")} (timeout: ${timeoutMs}ms)`,
-    );
+    ensureDevServer(binaryPath).then((devServer) => {
+      const cleanup = () => {
+        if (devServer) {
+          try {
+            devServer.kill();
+          } catch {}
+        }
+      };
 
-    const proc = spawn(binaryPath, spawnArgs, {
-      env: { ...env },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+      const spawnArgs = ["--selftest", ...args.filter((a) => a !== "--selftest")];
+      console.log(
+        `[selftest] Launching binary: ${binaryPath} with ${spawnArgs.join(" ")} (timeout: ${timeoutMs}ms)`,
+      );
 
-    let stdout = "";
-    let stderr = "";
-
-    proc.stdout.on("data", (chunk) => {
-      const text = chunk.toString();
-      stdout += text;
-      process.stdout.write(text);
-    });
-
-    proc.stderr.on("data", (chunk) => {
-      const text = chunk.toString();
-      stderr += text;
-      process.stderr.write(text);
-    });
-
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      console.error(`[selftest] ❌ Timeout after ${timeoutMs}ms. Terminating process...`);
-      proc.kill("SIGKILL");
-    }, timeoutMs);
-
-    proc.on("error", (err) => {
-      clearTimeout(timer);
-      rejectPromise(err);
-    });
-
-    proc.on("exit", (code, signal) => {
-      clearTimeout(timer);
-      const passed = code === 0 && !timedOut;
-      resolvePromise({
-        code: code ?? (timedOut ? -1 : 1),
-        signal,
-        stdout,
-        stderr,
-        passed,
-        timedOut,
+      const proc = spawn(binaryPath, spawnArgs, {
+        env: { ...env },
+        stdio: ["ignore", "pipe", "pipe"],
       });
-    });
+
+      let stdout = "";
+      let stderr = "";
+
+      proc.stdout.on("data", (chunk) => {
+        const text = chunk.toString();
+        stdout += text;
+        process.stdout.write(text);
+      });
+
+      proc.stderr.on("data", (chunk) => {
+        const text = chunk.toString();
+        stderr += text;
+        process.stderr.write(text);
+      });
+
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        console.error(`[selftest] ❌ Timeout after ${timeoutMs}ms. Terminating process...`);
+        proc.kill("SIGKILL");
+        cleanup();
+      }, timeoutMs);
+
+      proc.on("error", (err) => {
+        clearTimeout(timer);
+        cleanup();
+        rejectPromise(err);
+      });
+
+      proc.on("exit", (code, signal) => {
+        clearTimeout(timer);
+        cleanup();
+        const passed = code === 0 && !timedOut;
+        resolvePromise({
+          code: code ?? (timedOut ? -1 : 1),
+          signal,
+          stdout,
+          stderr,
+          passed,
+          timedOut,
+        });
+      });
+    }).catch(rejectPromise);
   });
 }
 

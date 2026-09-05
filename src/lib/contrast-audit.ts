@@ -207,7 +207,15 @@ async function settle(timeoutMs = 2000): Promise<void> {
     Promise.all(running),
     new Promise((r) => setTimeout(r, timeoutMs)),
   ]);
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  await new Promise<void>((r) => {
+    const timer = setTimeout(() => r(), 100);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        clearTimeout(timer);
+        r();
+      }),
+    );
+  });
 }
 
 /**

@@ -7,6 +7,7 @@ import { api } from "../lib/api";
 import { isMac } from "../lib/platform";
 import { STORED_SIGN_IN, CRASH_LOG_CAUTION, OFFICIAL_URLS } from "../content/trust-and-permissions";
 import { UpdateStatus } from "./UpdateAction";
+import { InfoTip } from "./ui/InfoTip";
 
 const THEMES: { value: ThemePreference; label: string }[] = [
   { value: "light", label: "Light" },
@@ -177,12 +178,19 @@ export function SettingsSheet() {
               <span className="block text-[13px] font-medium">
                 Merge consecutive turns by the same speaker
               </span>
-              <span className="hint mt-0.5 block">
-                {inGroup
-                  ? `This setting is pinned to the study (${
-                      mergeSameSpeaker ? "merged" : "unmerged"
-                    }) so all coders produce identical passage segmentation.`
-                  : "When importing, glue adjacent turns by one speaker into a single turn. Turn this off if your transcripts mark a new turn wherever a quotation starts."}
+              <span className="hint mt-0.5 flex items-center gap-1.5">
+                <span>
+                  {inGroup
+                    ? "Locked for this shared study."
+                    : "Combines adjacent turns from the same speaker."}
+                </span>
+                <InfoTip
+                  content={
+                    inGroup
+                      ? `This study pins ${mergeSameSpeaker ? "merged" : "unmerged"} passage boundaries so every member imports the same turns.`
+                      : "Turn this off when your transcript starts a new turn at each quotation."
+                  }
+                />
               </span>
             </span>
           </label>

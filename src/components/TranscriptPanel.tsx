@@ -37,15 +37,14 @@ import {
 } from "../hooks/useSpeakerDisplay";
 import { aliasPreview } from "../lib/speaker-alias";
 import { SelectionBubble, type BubbleAnchor } from "./SelectionBubble";
-import { CodeFilterButton } from "./CodeFilterButton";
+import { SpeakerPickerPopover } from "./SpeakerPickerPopover";
 import { buildMarkMenuItems } from "./TranscriptPanel.menu";
 import { NoteEditor } from "./NoteEditor";
 import { THEME_GROUND, usePrefersDark } from "../hooks/useTheme";
 import { computeStripeLayout, type StripeLayoutResult } from "../lib/stripe-layout";
 import { Icon } from "./ui/Icon";
-import { Tooltip } from "./ui/Tooltip";
 import { openContextMenu } from "./ui/ContextMenu";
-import { readableOn } from "../lib/code-colors";
+import { readableOn, textOnSolid } from "../lib/code-colors";
 import {
   scrollFraction,
   scrollPlan,
@@ -84,9 +83,18 @@ export function TranscriptPanel() {
     setPendingSelection,
     pendingSpan,
     codeFilter,
+    codeFilterIds,
+    filterMatchMode,
+    toggleCodeFilter,
+    setCodeFilters,
+    setFilterMatchMode,
+    clearAllFilters,
     setCodeFilter,
     speakerFilter,
     setSpeakerFilter,
+    reviewedBySegment,
+    setSegmentReviewed,
+    setSegmentSpeaker,
   } = useProjectStore(
     useShallow((s) => ({
       segments: s.segments,
@@ -115,9 +123,18 @@ export function TranscriptPanel() {
       setPendingSelection: s.setPendingSelection,
       pendingSpan: s.pendingSelection,
       codeFilter: s.codeFilter,
+      codeFilterIds: s.codeFilterIds,
+      filterMatchMode: s.filterMatchMode,
+      toggleCodeFilter: s.toggleCodeFilter,
+      setCodeFilters: s.setCodeFilters,
+      setFilterMatchMode: s.setFilterMatchMode,
+      clearAllFilters: s.clearAllFilters,
       setCodeFilter: s.setCodeFilter,
       speakerFilter: s.speakerFilter,
       setSpeakerFilter: s.setSpeakerFilter,
+      reviewedBySegment: s.reviewedBySegment,
+      setSegmentReviewed: s.setSegmentReviewed,
+      setSegmentSpeaker: s.setSegmentSpeaker,
     })),
   );
   const intent = useAppStore((s) => s.intent);
@@ -135,7 +152,27 @@ export function TranscriptPanel() {
   const [showLinkPanel, setShowLinkPanel] = useState(false);
   const [pendingCoded, setPendingCoded] = useState(0);
   const [editingInterview, setEditingInterview] = useState<Interview | null>(null);
-  const [showNotes, setShowNotes] = useState(true);
+  const [speakerPopoverSegment, setSpeakerPopoverSegment] =
+    useState<TranscriptSegment | null>(null);
+  const [speakerPopoverRect, setSpeakerPopoverRect] = useState<DOMRect | null>(
+    null,
+  );
+  const speakerButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const openSpeakerPopover = (
+    seg: TranscriptSegment,
+    target: HTMLButtonElement,
+  ) => {
+    speakerButtonRef.current = target;
+    setSpeakerPopoverSegment(seg);
+    setSpeakerPopoverRect(target.getBoundingClientRect());
+  };
+
+  const closeSpeakerPopover = () => {
+    setSpeakerPopoverSegment(null);
+    setSpeakerPopoverRect(null);
+    speakerButtonRef.current?.focus();
+  };
   const [hoveredPillCodeId, setHoveredPillCodeId] = useState<string | null>(null);
   const [flashCodeId, setFlashCodeId] = useState<string | null>(null);
   const articleRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -235,10 +272,10 @@ export function TranscriptPanel() {
 
   useEffect(() => {
     placeRef.current.selectedSegmentId = selectedSegmentId;
-    if (!codeFilter && !speakerFilter) {
+    if (codeFilterIds.length === 0 && !speakerFilter) {
       preFilterPlaceRef.current.selectedSegmentId = selectedSegmentId;
     }
-  }, [selectedSegmentId, codeFilter, speakerFilter]);
+  }, [selectedSegmentId, codeFilterIds, speakerFilter]);
 
   const recordScrollPlace = useCallback(() => {
     const el = scrollerRef.current;
@@ -249,15 +286,15 @@ export function TranscriptPanel() {
       selectedSegmentId: curSeg,
       fraction: frac,
     };
-    if (!codeFilter && !speakerFilter) {
+    if (codeFilterIds.length === 0 && !speakerFilter) {
       preFilterPlaceRef.current = {
         selectedSegmentId: curSeg,
         fraction: frac,
       };
     }
-  }, [codeFilter, speakerFilter]);
+  }, [codeFilterIds, speakerFilter]);
 
-  const filterKey = `${codeFilter ?? ""}\n${speakerFilter ?? ""}`;
+  const filterKey = `${codeFilterIds.join(",")}\n${filterMatchMode}\n${speakerFilter ?? ""}`;
   const filterKeyRef = useRef<string | null>(null);
   const placeInterviewRef = useRef<string | null>(null);
 
@@ -386,16 +423,26 @@ export function TranscriptPanel() {
   const search = transcriptSearch.trim();
   const visibleSegments = useMemo(() => {
     return segments.filter((seg) => {
-      if (codeFilter) {
-        const here = codedBySegment.get(seg.id);
-        if (!here?.some((c) => c.code_ids.includes(codeFilter))) return false;
+      if (codeFilterIds.length > 0) {
+        const here = codedBySegment.get(seg.id) ?? [];
+        const turnCodes = new Set<string>();
+        for (const c of here) {
+          for (const cid of c.code_ids) {
+            turnCodes.add(cid);
+          }
+        }
+        if (filterMatchMode === "all") {
+          if (!codeFilterIds.every((id) => turnCodes.has(id))) return false;
+        } else {
+          if (!codeFilterIds.some((id) => turnCodes.has(id))) return false;
+        }
       }
       if (speakerFilter) {
         if (seg.speaker !== speakerFilter) return false;
       }
       return true;
     });
-  }, [segments, codeFilter, speakerFilter, codedBySegment]);
+  }, [segments, codeFilterIds, filterMatchMode, speakerFilter, codedBySegment]);
 
   const allMatches = useMemo(() => {
     const q = search;
@@ -425,7 +472,7 @@ export function TranscriptPanel() {
 
   useEffect(() => {
     setCurrentMatchIndex(0);
-  }, [search, activeInterviewId, codeFilter, speakerFilter]);
+  }, [search, activeInterviewId, codeFilterIds, filterMatchMode, speakerFilter]);
 
   useEffect(() => {
     // Filtering keeps your place (T02/T03). First run just arms the key;
@@ -820,8 +867,12 @@ export function TranscriptPanel() {
 
   const dark = usePrefersDark();
   const ground = dark ? THEME_GROUND.dark : THEME_GROUND.light;
-  const filteredCode = codes.find((c) => c.id === codeFilter) ?? null;
-  const noteCount = codedSegments.filter((c) => c.memo?.trim()).length;
+  const isFiltered = codeFilterIds.length > 0 || speakerFilter !== null;
+
+  const reviewedCount = useMemo(
+    () => segments.filter((s) => reviewedBySegment[s.id]).length,
+    [segments, reviewedBySegment],
+  );
 
   const passageCodings = useCallback(
     (segId: string) => {
@@ -866,43 +917,18 @@ export function TranscriptPanel() {
                 <Icon name="dots" size={14} />
               </button>
             )}
+
+            {segments.length > 0 && (
+              <span className="text-xs text-[var(--ink-3)] shrink-0 ml-1">
+                {reviewedCount} of {segments.length} reviewed
+              </span>
+            )}
           </>
         ) : (
           <span className="hint">No interviews yet</span>
         )}
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          <Tooltip content="Add many transcripts at once">
-            <button
-              type="button"
-              onClick={() => setShowBulkImport(true)}
-              aria-label="Add transcripts in bulk"
-              className="btn btn-ghost btn-sm"
-            >
-              <Icon name="import" size={13} />
-              <span className="hidden @2xl:inline">Add transcripts</span>
-            </button>
-          </Tooltip>
-
-          {/* Code Filter Button (A6) */}
-          <CodeFilterButton />
-
-          {noteCount > 0 && (
-            <Tooltip content={showNotes ? "Hide passage notes" : "Show passage notes"}>
-              <button
-                type="button"
-                aria-pressed={showNotes}
-                aria-label={showNotes ? "Hide passage notes" : "Show passage notes"}
-                onClick={() => setShowNotes((visible) => !visible)}
-                className="btn btn-ghost btn-sm"
-              >
-                <Icon name="note" size={13} />
-                <span className="hidden @2xl:inline">
-                  {showNotes ? "Notes" : "Notes hidden"}
-                </span>
-              </button>
-            </Tooltip>
-          )}
 
           {segments.length > 0 && (
             <span
@@ -1005,7 +1031,7 @@ export function TranscriptPanel() {
             }}
           >
             <div className="reading-page mx-auto max-w-xl px-2 pb-2">
-              {(search || filteredCode || speakerFilter) && (
+              {(search || isFiltered) && (
                 <div
                   data-testid="transcript-filterbar"
                   className="glass-bar sticky top-0 z-10 -mx-2 flex flex-wrap items-center gap-2 rounded-b-[12px] px-2 py-2"
@@ -1013,37 +1039,55 @@ export function TranscriptPanel() {
                   {search && (
                     <span className="hint text-[11.5px]">
                       {totalMatches === 0
-                        ? codeFilter || speakerFilter
+                        ? isFiltered
                           ? "No matches in filtered view"
                           : "No matches"
-                        : `${currentMatchIndex + 1} of ${totalMatches}${codeFilter || speakerFilter ? " in filtered view" : ""}`}
+                        : `${currentMatchIndex + 1} of ${totalMatches}${isFiltered ? " in filtered view" : ""}`}
                     </span>
                   )}
-                  {(codeFilter || speakerFilter) && (
+                  {isFiltered && (
                     <span className="hint text-[11.5px]">
                       {visibleSegments.length === 0
                         ? "No passages match"
                         : `Showing ${visibleSegments.length} of ${segments.length} passages`}
                     </span>
                   )}
-                  {filteredCode && (
+                  {codeFilterIds.map((cid) => {
+                    const code = codesById.get(cid);
+                    if (!code) return null;
+                    return (
+                      <button
+                        key={cid}
+                        type="button"
+                        onClick={() => toggleCodeFilter(cid)}
+                        className="chip"
+                        style={{
+                          background: `${code.color}22`,
+                          color: readableOn(code.color, ground),
+                        }}
+                        title={`Remove "${code.name}" filter`}
+                      >
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ background: readableOn(code.color, ground) }}
+                        />
+                        <span>{code.name}</span>
+                        <Icon name="close" size={11} />
+                      </button>
+                    );
+                  })}
+                  {codeFilterIds.length >= 2 && (
                     <button
                       type="button"
-                      onClick={() => setCodeFilter(null)}
-                      className="chip"
-                      style={{
-                        background: `${filteredCode.color}22`,
-                        color: readableOn(filteredCode.color, ground),
-                      }}
-                      title="Clear code filter"
+                      onClick={() =>
+                        setFilterMatchMode(
+                          filterMatchMode === "any" ? "all" : "any",
+                        )
+                      }
+                      className="chip text-[11.5px] font-medium"
+                      title="Toggle match mode between Any and All"
                     >
-                      <Icon name="filter" size={11} />
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ background: readableOn(filteredCode.color, ground) }}
-                      />
-                      {visibleSegments.length} coded “{filteredCode.name}”
-                      <Icon name="close" size={11} />
+                      <span>Match: {filterMatchMode === "any" ? "Any" : "All"}</span>
                     </button>
                   )}
                   {speakerFilter && (
@@ -1054,17 +1098,14 @@ export function TranscriptPanel() {
                       title="Clear speaker filter"
                     >
                       <Icon name="filter" size={11} />
-                      {visibleSegments.length} from “{showSpeaker(speakerFilter)}”
+                      <span>from “{showSpeaker(speakerFilter)}”</span>
                       <Icon name="close" size={11} />
                     </button>
                   )}
-                  {(codeFilter || speakerFilter) && (
+                  {isFiltered && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setCodeFilter(null);
-                        setSpeakerFilter(null);
-                      }}
+                      onClick={() => clearAllFilters()}
                       className="text-[11.5px] font-medium text-[var(--accent)] hover:underline ml-auto"
                     >
                       Clear all
@@ -1073,7 +1114,7 @@ export function TranscriptPanel() {
                 </div>
               )}
 
-              {visibleSegments.length === 0 && (codeFilter || speakerFilter) ? (
+              {visibleSegments.length === 0 && isFiltered ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <div
                     className="grid h-12 w-12 place-items-center rounded-[14px] mb-3"
@@ -1089,10 +1130,7 @@ export function TranscriptPanel() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setCodeFilter(null);
-                      setSpeakerFilter(null);
-                    }}
+                    onClick={() => clearAllFilters()}
                     className="btn btn-secondary btn-sm mt-3"
                   >
                     Clear all
@@ -1112,6 +1150,7 @@ export function TranscriptPanel() {
                   const isSelected = seg.id === selectedSegmentId;
                   const segCodings = passageCodings(seg.id);
                   const isCoded = segCodings.length > 0;
+                  const isReviewed = Boolean(reviewedBySegment[seg.id]);
                   return (
                     <article
                       key={seg.id}
@@ -1121,7 +1160,7 @@ export function TranscriptPanel() {
                       }}
                       id={`segment-${seg.id}`}
                       role="option"
-                      aria-label={`Passage ${seg.segment_index + 1}${isCoded ? "" : " — Not yet coded"}: ${showSpeaker(seg.speaker)}`}
+                      aria-label={`Passage ${seg.segment_index + 1}${isReviewed ? " — Reviewed" : ""}${isCoded ? "" : " — Not yet coded"}: ${showSpeaker(seg.speaker)}`}
                       aria-selected={isSelected}
                       tabIndex={isSelected ? 0 : -1}
                       onClick={(e) => {
@@ -1212,7 +1251,7 @@ export function TranscriptPanel() {
                         setSelectedSegmentId(seg.id, "click");
                         openContextMenu(e, segmentMenu(seg));
                       }}
-                      className="rounded-[14px] px-4 py-3 transition-all"
+                      className="group rounded-[14px] px-4 py-3 transition-all"
                       style={{
                         background: isSelected ? "var(--fill-on)" : "transparent",
                         boxShadow: isSelected
@@ -1231,28 +1270,40 @@ export function TranscriptPanel() {
                       <header className="mb-1.5 flex items-center gap-2 text-[11px]">
                         <span
                           className="shrink-0 font-mono tabular-nums"
-                          style={{ color: "var(--ink-4)" }}
+                          style={{ color: isReviewed ? "var(--ink-3)" : "var(--ink-4)" }}
                           aria-label={`Passage ${seg.segment_index + 1}`}
                         >
                           {seg.segment_index + 1}
                         </span>
-                        <span
-                          className="font-medium"
+                        <button
+                          type="button"
+                          ref={speakerPopoverSegment?.id === seg.id ? speakerButtonRef : undefined}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openSpeakerPopover(seg, e.currentTarget);
+                          }}
+                          aria-label={`Change speaker for passage ${seg.segment_index + 1} (currently ${showSpeaker(seg.speaker)})`}
+                          title="Change speaker label"
+                          className="font-medium rounded px-1 -mx-1 transition-colors hover:bg-[var(--fill)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] text-left"
                           style={{
-                            color:
-                              seg.speaker === "Interviewer"
+                            color: isReviewed
+                              ? "var(--ink-3)"
+                              : seg.speaker === "Interviewer"
                                 ? "var(--ink-3)"
                                 : "var(--ink)",
                           }}
                         >
                           {showSpeaker(seg.speaker)}
-                        </span>
-                        <span className="font-mono text-[10.5px] tabular-nums" style={{ color: "var(--ink-4)" }}>
+                        </button>
+                        <span
+                          className="font-mono text-[10.5px] tabular-nums"
+                          style={{ color: isReviewed ? "var(--ink-3)" : "var(--ink-4)" }}
+                        >
                           {formatTimestampDisplay(seg.timestamp_start)}
                         </span>
                         {isCoded && (
                           <span
-                            className="ml-auto h-1.5 w-1.5 rounded-full"
+                            className="h-1.5 w-1.5 rounded-full"
                             style={{
                               backgroundColor:
                                 codesById.get(segCodings[0].code_ids[0])?.color ??
@@ -1261,6 +1312,29 @@ export function TranscriptPanel() {
                             title="Coded passage"
                           />
                         )}
+                        <div className="ml-auto flex items-center gap-1.5">
+                          {isReviewed && (
+                            <span
+                              data-testid="reviewed-badge"
+                              title="Reviewed"
+                              className="inline-flex items-center text-[var(--ok)]"
+                            >
+                              <Icon name="check" size={12} />
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void setSegmentReviewed(seg.id, !isReviewed);
+                            }}
+                            aria-label={isReviewed ? "Mark not reviewed" : "Mark reviewed"}
+                            title={isReviewed ? "Mark not reviewed" : "Mark reviewed"}
+                            className="opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 rounded px-1.5 py-0.5 text-[10.5px] font-medium text-[var(--ink-3)] transition-opacity hover:bg-[var(--fill)] hover:text-[var(--ink)]"
+                          >
+                            {isReviewed ? "Mark not reviewed" : "Mark reviewed"}
+                          </button>
+                        </div>
                       </header>
 
                       <PassageText
@@ -1279,7 +1353,6 @@ export function TranscriptPanel() {
                             ? { start: pendingSpan.start, end: pendingSpan.end }
                             : null
                         }
-                        showNotes={showNotes}
                         saveMemoForCoding={saveMemoForCoding}
                         matches={matchesBySegment.get(seg.id) ?? EMPTY_MATCHES}
                         currentMatch={
@@ -1291,6 +1364,7 @@ export function TranscriptPanel() {
                         hoveredPillCodeId={hoveredPillCodeId}
                         flashCodeId={flashCodeId}
                         zoom={zoom}
+                        isReviewed={isReviewed}
                       />
 
                       {/* Coding Pills Footer */}
@@ -1314,7 +1388,7 @@ export function TranscriptPanel() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         if (e.altKey) {
-                                          setCodeFilter(code.id);
+                                          setCodeFilters([code.id]);
                                         } else {
                                           selectCoding(coding, code.id);
                                         }
@@ -1329,7 +1403,7 @@ export function TranscriptPanel() {
                                       className="rounded-full px-2 py-0.5 text-[11px] font-medium transition-opacity hover:opacity-80"
                                       style={{
                                         backgroundColor: code.color,
-                                        color: readableOn(code.color, ground),
+                                        color: textOnSolid(code.color),
                                       }}
                                     >
                                       {code.name}
@@ -1341,7 +1415,7 @@ export function TranscriptPanel() {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setCodeFilter(codingCodes[0].id);
+                                      setCodeFilters([codingCodes[0].id]);
                                     }}
                                     aria-label={`Show only passages coded “${codingCodes.map((c) => c.name).join(", ")}”`}
                                     title={`Show only passages coded “${codingCodes.map((c) => c.name).join(", ")}”`}
@@ -1413,7 +1487,7 @@ export function TranscriptPanel() {
               : []
           }
           onToggleRedaction={(on) =>
-            void setSpeakerRedaction(editingInterview.id, on)
+            setSpeakerRedaction(editingInterview.id, on)
           }
         />
       )}
@@ -1422,6 +1496,19 @@ export function TranscriptPanel() {
         <TranscriptLinkPanel
           open={showLinkPanel}
           onClose={() => setShowLinkPanel(false)}
+        />
+      )}
+
+      {speakerPopoverSegment && speakerPopoverRect && (
+        <SpeakerPickerPopover
+          segment={speakerPopoverSegment}
+          allSegments={segments}
+          anchorRect={speakerPopoverRect}
+          showSpeaker={showSpeaker}
+          onApply={async (segmentId, newSpeaker, includeFollowing) => {
+            await setSegmentSpeaker(segmentId, newSpeaker, includeFollowing);
+          }}
+          onClose={closeSpeakerPopover}
         />
       )}
     </main>
@@ -1443,7 +1530,6 @@ const PassageText = memo(function PassageText({
   clearMemoForCoding,
   codesById,
   pending,
-  showNotes,
   saveMemoForCoding,
   matches,
   currentMatch,
@@ -1451,6 +1537,7 @@ const PassageText = memo(function PassageText({
   hoveredPillCodeId,
   flashCodeId,
   zoom,
+  isReviewed,
 }: {
   segmentId: string;
   text: string;
@@ -1463,7 +1550,6 @@ const PassageText = memo(function PassageText({
   clearMemoForCoding: (codingId: string) => Promise<void>;
   codesById: Map<string, Code>;
   pending: { start: number; end: number } | null;
-  showNotes: boolean;
   saveMemoForCoding: (
     codedSegmentId: string,
     memo: string,
@@ -1475,6 +1561,7 @@ const PassageText = memo(function PassageText({
   hoveredPillCodeId?: string | null;
   flashCodeId?: string | null;
   zoom?: number;
+  isReviewed?: boolean;
 }) {
   const runs = useMemo(
     () => highlightRuns(text, coded, codesById),
@@ -1552,7 +1639,7 @@ const PassageText = memo(function PassageText({
       },
     });
     setStripeLayout(layout);
-  }, [showNotes, text, coded, noteKey, codesById, activeCoder, codeFilter, zoom]);
+  }, [text, coded, noteKey, codesById, activeCoder, codeFilter, zoom]);
 
   const pieces = useMemo(() => {
     return splitRunsOnMatches(runs, text, {
@@ -1569,7 +1656,10 @@ const PassageText = memo(function PassageText({
         <div
           data-testid="stripe-gutter"
           className="absolute left-0 top-0 w-7 select-none pointer-events-auto z-10"
-          style={{ height: paragraphHeight || undefined }}
+          style={{
+            height: paragraphHeight || undefined,
+            opacity: isReviewed ? 0.55 : undefined,
+          }}
           aria-hidden="true"
         >
           {stripeLayout.stripes.map((s, idx) => {
@@ -1614,7 +1704,10 @@ const PassageText = memo(function PassageText({
       <p
         data-passage-copy
         className="pl-8 pr-7 font-serif leading-[1.62]"
-        style={{ fontSize: "calc(15.5px * var(--reading-scale, 1))" }}
+        style={{
+          fontSize: "calc(15.5px * var(--reading-scale, 1))",
+          color: isReviewed ? "var(--ink-3)" : undefined,
+        }}
       >
         {pieces.map((run, idx) => {
           const hasOtherCoder =
@@ -1815,36 +1908,34 @@ const PassageText = memo(function PassageText({
       </p>
 
       {/* Inline passage notes column */}
-      {showNotes &&
-        notes.map((coding) => {
-          const top = noteTops[coding.id] ?? 0;
-          const isExpanded = expandedNoteId === coding.id;
-          return (
-            <div
-              key={coding.id}
-              className="absolute right-0 w-6 flex justify-center"
-              style={{ top }}
+      {notes.map((coding) => {
+        const top = noteTops[coding.id] ?? 0;
+        const isExpanded = expandedNoteId === coding.id;
+        return (
+          <div
+            key={coding.id}
+            className="absolute right-0 w-6 flex justify-center"
+            style={{ top }}
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpandedNoteId(isExpanded ? null : coding.id);
+              }}
+              aria-expanded={isExpanded}
+              aria-label={isExpanded ? "Collapse note" : "Expand note"}
+              className="flex h-5 w-5 items-center justify-center rounded-full text-[var(--accent)] hover:bg-[var(--fill)]"
+              title={coding.memo ?? "Passage note"}
             >
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setExpandedNoteId(isExpanded ? null : coding.id);
-                }}
-                aria-expanded={isExpanded}
-                aria-label={isExpanded ? "Collapse note" : "Expand note"}
-                className="flex h-5 w-5 items-center justify-center rounded-full text-[var(--accent)] hover:bg-[var(--fill)]"
-                title={coding.memo ?? "Passage note"}
-              >
-                <Icon name="note" size={12} />
-              </button>
-            </div>
-          );
-        })}
+              <Icon name="note" size={12} />
+            </button>
+          </div>
+        );
+      })}
 
       {/* Expanded note card docked below the passage text, never overlaying it */}
-      {showNotes &&
-        expandedNoteId &&
+      {expandedNoteId &&
         (() => {
           const expandedCoding = notes.find((c) => c.id === expandedNoteId);
           if (!expandedCoding) return null;

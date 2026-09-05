@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.5.0]
+
+### Fixed
+
+- **Sync Protocol 2 whole-turn coding repair:** Whole-turn coding edges now omit character range keys on new clients and permit explicit null/null ranges on the server, draining queued 2.4.x operations without data loss or outbox resets.
+- **Realtime subscription restoration:** Restored table-level `SELECT` privilege on `sync_project_heads` for authenticated users, enabling live Realtime change hints while preserving member-only row-level security.
+- **Scoped SQLSTATE 22023 diagnostics:** Sanitized server error messages from `sync_v2_apply` are now exposed in the sync diagnostics panel while keeping internal database messages from other RPCs generic.
+- **Solid-pill text contrast repair:** Dark-mode code pills with solid backgrounds now dynamically calculate high-contrast text color based on background luminance, ensuring WCAG AA legibility across all custom code colors.
+- **App launch and window focus:** On macOS, launching or relaunching Fleuron (including after an updater restart) properly brings the main window to the foreground.
+
+### Added
+
+- **Inline speaker reassignment with atomic undo:** Click any speaker label in a transcript to change the speaker for that turn or all subsequent turns from that speaker, with an 8-second toast offering one-click atomic undo.
+- **Local transcript reviewed marks and resume:** Mark transcript segments as reviewed with a check badge; returning to an interview automatically scrolls to the first unreviewed segment so you can pick up right where you left off.
+- **Transcript toolbar filtering and layout polish:** Combined code and speaker filtering into a single toolbar popover with Any/All matching logic, active filter chips, and Alt-click code isolation; simplified the transcript header and centered the collapsible codebook rail toggle on the divider.
+- **Back and forward navigation:** Navigate across visited interviews with dedicated toolbar buttons and `Cmd/Ctrl+[` / `Cmd/Ctrl+]` shortcuts, preserving exact scroll and selection state.
+- **Targeted copy and redaction clarity:** Added contextual InfoTips across settings, coach, and sync diagnostics; simplified interview date saving and made participant name redaction toggle instantaneous.
+- **Brand refresh and new app icon:** Updated Fleuron icon across macOS dock/finder bundles, Windows packaging, and in-app assets to the refreshed Floral-F identity.
+
 ## [2.4.1]
 
 ### Fixed

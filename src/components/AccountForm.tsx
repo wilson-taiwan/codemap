@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSyncStore } from "../store/sync-store";
 import { BetaNotice } from "./BetaNotice";
+import { InfoTip } from "./ui/InfoTip";
 import {
   joinPasswordProblem,
   parseRecoveryPaste,
@@ -195,9 +196,9 @@ export function AccountForm({
           autoFocus={autoFocus}
         />
         {mode === "new" && (
-          <p className="hint mt-1">
-            Yours alone — colleagues never see it. You will use it on every
-            machine you code from.
+          <p className="hint mt-1 flex items-center gap-1.5">
+            <span>Use this email to sign in on every computer.</span>
+            <InfoTip content="Your group members never see your email." />
           </p>
         )}
       </div>
@@ -240,9 +241,9 @@ export function AccountForm({
 
       {mode === "recover" && (
         <>
-          <p className="hint">
-            We email a short code. Type it here, then choose a new password.
-            There is nothing to click in the message.
+          <p className="hint flex items-center gap-1.5">
+            <span>Enter the code from the reset email, then choose a new password.</span>
+            <InfoTip content="The email contains a code, not a link." />
           </p>
           <button
             type="button"

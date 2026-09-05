@@ -95,6 +95,20 @@ jobs:
 YAML
 check_case "release-workflow db push rejected" fail
 
+echo "── post-schema-10 certification mutation …"
+cat > "$fixture/supabase/migrations/20260905000000_illegal_certification.sql" <<'SQL'
+begin;
+update public.server_meta set schema_version = 11;
+commit;
+SQL
+check_case "post-schema-10 certification write rejected" fail
+rm "$fixture/supabase/migrations/20260905000000_illegal_certification.sql"
+
+echo "── extra table grant in null-spans migration …"
+echo "grant select on table public.sync_devices to authenticated;" >> "$fixture/supabase/migrations/20260904000000_sync_v2_allow_null_spans_and_grant_heads.sql"
+check_case "extra table grant in null-spans migration rejected" fail
+cp "$ROOT/supabase/migrations/20260904000000_sync_v2_allow_null_spans_and_grant_heads.sql" "$fixture/supabase/migrations/"
+
 if ! command -v ruby >/dev/null 2>&1; then
   echo "  · ruby unavailable — skipping YAML workflow validation"
 else

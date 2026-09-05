@@ -33,10 +33,14 @@ import type {
   ProjectInfo,
   ProjectOpenSnapshot,
   RestoreOutcome,
+  SegmentSpeakerChange,
   Toast,
   ToastAction,
   TranscriptSegment,
 } from "../lib/types";
+import { firstUnreviewedSegmentId } from "../lib/reviewed-resume";
+
+let selectInterviewRequestToken = 0;
 
 function pushRecentCode(recentIds: string[], codeId: string): string[] {
   const filtered = recentIds.filter((id) => id !== codeId);
@@ -153,9 +157,29 @@ interface ProjectStore {
   closeNote: () => void;
   /** Show only passages carrying this code. Null shows the whole transcript. */
   codeFilter: string | null;
+  codeFilterIds: string[];
+  filterMatchMode: "any" | "all";
+  toggleCodeFilter: (codeId: string) => void;
+  setCodeFilters: (codeIds: string[]) => void;
+  clearCodeFilters: () => void;
+  setFilterMatchMode: (mode: "any" | "all") => void;
+  clearAllFilters: () => void;
   /** Show only passages spoken by this speaker. Null shows all speakers. */
   speakerFilter: string | null;
   setSpeakerFilter: (speaker: string | null) => void;
+  reviewedBySegment: Record<string, boolean>;
+  reviewsLoadedForInterviewId: string | null;
+  setSegmentReviewed: (segmentId: string, reviewed: boolean) => Promise<void>;
+  setSegmentSpeaker: (
+    segmentId: string,
+    newSpeaker: string,
+    includeFollowing: boolean,
+  ) => Promise<void>;
+  restoreSegmentSpeakers: (changes: SegmentSpeakerChange[]) => Promise<void>;
+  interviewHistory: Array<{ interviewId: string; selectedSegmentId: string | null }>;
+  historyCursor: number;
+  goBackInterview: () => Promise<void>;
+  goForwardInterview: () => Promise<void>;
   showCloseConfirm: boolean;
   showResetConfirm: boolean;
 
@@ -204,6 +228,7 @@ interface ProjectStore {
     text: string,
     type?: "success" | "error" | "info",
     action?: ToastAction,
+    durationMs?: number,
   ) => string;
   removeCodeFromCoding: (codingId: string, codeId: string) => Promise<void>;
   clearMemoForCoding: (codingId: string) => Promise<void>;
@@ -265,7 +290,7 @@ interface ProjectStore {
   selectInterview: (
     id: string,
     preferredSegmentId?: string | null,
-    options?: { persist?: boolean },
+    options?: { persist?: boolean; isHistoryNavigation?: boolean },
   ) => Promise<void>;
   restoreWorkspace: () => Promise<void>;
   persistWorkspace: () => Promise<void>;
@@ -450,7 +475,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   noteEditorCodingId: null,
   showInterviewMemo: false,
   codeFilter: null,
+  codeFilterIds: [],
+  filterMatchMode: "any",
   speakerFilter: null,
+  reviewedBySegment: {},
+  reviewsLoadedForInterviewId: null,
+  interviewHistory: [],
+  historyCursor: -1,
   showCloseConfirm: false,
   showResetConfirm: false,
   showExportDialog: false,
@@ -680,9 +711,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }));
   },
   clearToasts: () => set({ toasts: [] }),
-  showStatus: (text, type = "success", action) => {
+  showStatus: (text, type = "success", action, durationMs) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const toast: Toast = { id, type, text, action };
+    const toast: Toast = { id, type, text, action, durationMs };
     set((state) => {
       const updated = [...state.toasts, toast];
       const nextToasts =
@@ -710,7 +741,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     });
     // Yield one animation frame so the clicked recent row paints busy state
     if (typeof requestAnimationFrame !== "undefined") {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => {
+        const timer = setTimeout(resolve, 50);
+        requestAnimationFrame(() => {
+          clearTimeout(timer);
+          resolve(undefined);
+        });
+      });
     } else {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
@@ -759,6 +796,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
     }
 
+    const reviewedBySegment: Record<string, boolean> = {};
+    for (const segId of snapshot.reviewed_segment_ids ?? []) {
+      reviewedBySegment[segId] = true;
+    }
+
     set({
       project,
       codes,
@@ -779,7 +821,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       showIdentityPrompt: inferred === null,
       transcriptSearch: "",
       codeFilter: null,
+      codeFilterIds: [],
+      filterMatchMode: "any",
       speakerFilter: null,
+      reviewedBySegment,
+      reviewsLoadedForInterviewId: active_interview_id,
+      interviewHistory: active_interview_id
+        ? [{ interviewId: active_interview_id, selectedSegmentId: selected_segment_id }]
+        : [],
+      historyCursor: active_interview_id ? 0 : -1,
       noteEditorCodingId: null,
       undoStack: [],
       redoStack: [],
@@ -806,6 +856,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const codedSegments = usesSnapshotActiveInterview
       ? snapshot.coded_segments
       : current.codedSegments;
+    const reviewedBySegment = usesSnapshotActiveInterview
+      ? (snapshot.reviewed_segment_ids ?? []).reduce<Record<string, boolean>>((acc, id) => {
+          acc[id] = true;
+          return acc;
+        }, {})
+      : current.reviewedBySegment;
+    const reviewsLoadedForInterviewId = usesSnapshotActiveInterview
+      ? activeInterviewId
+      : current.reviewsLoadedForInterviewId;
     const currentSelectionIsValid = current.selectedSegmentId !== null && segments.some(
       (segment) => segment.id === current.selectedSegmentId,
     );
@@ -859,6 +918,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       activeInterviewId,
       segments,
       codedSegments,
+      reviewedBySegment,
+      reviewsLoadedForInterviewId,
       totalCodedCount: snapshot.coded_count,
       interviewCodedCount: computeInterviewCodedCount(codedSegments),
       selectedSegmentId,
@@ -1036,6 +1097,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       coderConfirmed: false,
       showIdentityPrompt: false,
       openingPath: null,
+      reviewedBySegment: {},
+      reviewsLoadedForInterviewId: null,
+      interviewHistory: [],
+      historyCursor: -1,
+      codeFilter: null,
+      codeFilterIds: [],
+      filterMatchMode: "any",
+      speakerFilter: null,
+      transcriptSearch: "",
       // Undo closures capture rows of *this* project's database; kept across
       // a close they would replay against the next project opened.
       undoStack: [],
@@ -1192,8 +1262,147 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     });
   },
 
-  setCodeFilter: (codeId) => set({ codeFilter: codeId }),
+  setCodeFilter: (codeId) =>
+    set({
+      codeFilter: codeId,
+      codeFilterIds: codeId ? [codeId] : [],
+    }),
+  toggleCodeFilter: (codeId) => {
+    const current = get().codeFilterIds;
+    const next = current.includes(codeId)
+      ? current.filter((id) => id !== codeId)
+      : [...current, codeId];
+    set({
+      codeFilterIds: next,
+      codeFilter: next[0] ?? null,
+    });
+  },
+  setCodeFilters: (codeIds) => {
+    set({
+      codeFilterIds: codeIds,
+      codeFilter: codeIds[0] ?? null,
+    });
+  },
+  clearCodeFilters: () => {
+    set({
+      codeFilterIds: [],
+      codeFilter: null,
+    });
+  },
+  setFilterMatchMode: (mode) => set({ filterMatchMode: mode }),
+  clearAllFilters: () => {
+    set({
+      codeFilterIds: [],
+      codeFilter: null,
+      filterMatchMode: "any",
+      speakerFilter: null,
+    });
+  },
   setSpeakerFilter: (speaker) => set({ speakerFilter: speaker }),
+
+  setSegmentReviewed: async (segmentId, reviewed) => {
+    try {
+      await api.setSegmentReviewed(segmentId, reviewed);
+      set((state) => {
+        const next = { ...state.reviewedBySegment };
+        if (reviewed) {
+          next[segmentId] = true;
+        } else {
+          delete next[segmentId];
+        }
+        return { reviewedBySegment: next };
+      });
+    } catch (e) {
+      get().showStatus("Could not update review status: " + String(e), "error");
+      throw e;
+    }
+  },
+
+  setSegmentSpeaker: async (segmentId, newSpeaker, includeFollowing) => {
+    try {
+      const changes = await api.setSegmentSpeaker(
+        segmentId,
+        newSpeaker,
+        includeFollowing,
+      );
+      set((state) => {
+        const changeMap = new Map(
+          changes.map((c) => [c.segment_id, c.new_speaker]),
+        );
+        const nextSegments = state.segments.map((seg) => {
+          const updated = changeMap.get(seg.id);
+          return updated !== undefined ? { ...seg, speaker: updated } : seg;
+        });
+        return { segments: nextSegments };
+      });
+      get().showStatus(
+        "Speaker labels changed on this computer.",
+        "success",
+        {
+          label: "Undo",
+          onClick: () => {
+            void get().restoreSegmentSpeakers(changes);
+          },
+        },
+        8000,
+      );
+    } catch (e) {
+      get().showStatus("Could not change speaker: " + String(e), "error");
+      throw e;
+    }
+  },
+
+  restoreSegmentSpeakers: async (changes) => {
+    try {
+      await api.restoreSegmentSpeakers(changes);
+      set((state) => {
+        const changeMap = new Map(
+          changes.map((c) => [c.segment_id, c.old_speaker]),
+        );
+        const nextSegments = state.segments.map((seg) => {
+          const prev = changeMap.get(seg.id);
+          return prev !== undefined ? { ...seg, speaker: prev } : seg;
+        });
+        return { segments: nextSegments };
+      });
+      get().showStatus("Speaker changes undone.");
+    } catch (e) {
+      get().showStatus("Could not undo speaker changes: " + String(e), "error");
+      throw e;
+    }
+  },
+
+  goBackInterview: async () => {
+    const { interviewHistory, historyCursor, activeInterviewId, selectedSegmentId } = get();
+    if (historyCursor <= 0) return;
+    if (activeInterviewId && interviewHistory[historyCursor]?.interviewId === activeInterviewId) {
+      interviewHistory[historyCursor].selectedSegmentId = selectedSegmentId;
+    }
+    const targetIndex = historyCursor - 1;
+    const target = interviewHistory[targetIndex];
+    if (!target) return;
+    await get().selectInterview(target.interviewId, target.selectedSegmentId, {
+      persist: true,
+      isHistoryNavigation: true,
+    });
+    set({ historyCursor: targetIndex });
+  },
+
+  goForwardInterview: async () => {
+    const { interviewHistory, historyCursor, activeInterviewId, selectedSegmentId } = get();
+    if (historyCursor < 0 || historyCursor >= interviewHistory.length - 1) return;
+    if (activeInterviewId && interviewHistory[historyCursor]?.interviewId === activeInterviewId) {
+      interviewHistory[historyCursor].selectedSegmentId = selectedSegmentId;
+    }
+    const targetIndex = historyCursor + 1;
+    const target = interviewHistory[targetIndex];
+    if (!target) return;
+    await get().selectInterview(target.interviewId, target.selectedSegmentId, {
+      persist: true,
+      isHistoryNavigation: true,
+    });
+    set({ historyCursor: targetIndex });
+  },
 
   /**
    * Swap the project for one of its snapshots, then reload from disk.
@@ -1645,16 +1854,58 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   selectInterview: async (id, preferredSegmentId, options) => {
-    const interview = get().interviews.find((i) => i.id === id);
-    const segments = await api.getSegments(id);
-    const codedSegments = await api.listCodedSegments(id);
+    const requestToken = ++selectInterviewRequestToken;
+    const current = get();
 
-    let selectedSegmentId = segments[0]?.id ?? null;
     if (
-      preferredSegmentId &&
-      segments.some((segment) => segment.id === preferredSegmentId)
+      current.activeInterviewId &&
+      current.historyCursor >= 0 &&
+      current.interviewHistory[current.historyCursor]?.interviewId === current.activeInterviewId
     ) {
+      current.interviewHistory[current.historyCursor].selectedSegmentId = current.selectedSegmentId;
+    }
+
+    const interview = current.interviews.find((i) => i.id === id);
+    const [segments, codedSegments, reviewIds] = await Promise.all([
+      api.getSegments(id),
+      api.listCodedSegments(id),
+      api.listSegmentReviews(id),
+    ]);
+
+    if (requestToken !== selectInterviewRequestToken) {
+      return;
+    }
+
+    const reviewedBySegment: Record<string, boolean> = {};
+    for (const rid of reviewIds) {
+      reviewedBySegment[rid] = true;
+    }
+
+    const preferredValid =
+      preferredSegmentId != null &&
+      segments.some((segment) => segment.id === preferredSegmentId);
+
+    let selectedSegmentId: string | null = null;
+    let didAutoResume = false;
+
+    if (preferredValid) {
       selectedSegmentId = preferredSegmentId;
+    } else if (options?.isHistoryNavigation) {
+      selectedSegmentId = segments[0]?.id ?? null;
+    } else {
+      const hasFilterOrSearch =
+        Boolean(current.transcriptSearch) ||
+        current.codeFilterIds.length > 0 ||
+        Boolean(current.speakerFilter);
+      if (!hasFilterOrSearch) {
+        const resumeId = firstUnreviewedSegmentId(segments, reviewedBySegment);
+        selectedSegmentId = resumeId ?? segments[0]?.id ?? null;
+        if (resumeId && segments[0] && resumeId !== segments[0].id) {
+          didAutoResume = true;
+        }
+      } else {
+        selectedSegmentId = segments[0]?.id ?? null;
+      }
     }
 
     const { activeCoder } = get();
@@ -1672,12 +1923,37 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
     }
 
+    let nextHistory = get().interviewHistory;
+    let nextCursor = get().historyCursor;
+
+    if (!options?.isHistoryNavigation) {
+      const truncated = nextCursor >= 0 ? nextHistory.slice(0, nextCursor + 1) : [];
+      const lastEntry = truncated[truncated.length - 1];
+      if (lastEntry && lastEntry.interviewId === id) {
+        lastEntry.selectedSegmentId = selectedSegmentId;
+        nextHistory = [...truncated];
+        nextCursor = truncated.length - 1;
+      } else {
+        nextHistory = [...truncated, { interviewId: id, selectedSegmentId }];
+        nextCursor = nextHistory.length - 1;
+      }
+    }
+
     const hub = interview?.hub_memo ?? "";
     set({
       activeInterviewId: id,
       segments,
       codedSegments,
       interviewCodedCount: computeInterviewCodedCount(codedSegments),
+      reviewedBySegment,
+      reviewsLoadedForInterviewId: id,
+      interviewHistory: nextHistory,
+      historyCursor: nextCursor,
+      codeFilter: null,
+      codeFilterIds: [],
+      filterMatchMode: "any",
+      speakerFilter: null,
+      transcriptSearch: "",
       hubMemo: hub,
       savedHubMemo: hub,
       hubMemoDirty: false,
@@ -1685,6 +1961,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       selectedCodeIds,
       selectionIntent: options?.persist === false ? "restore" : "jump",
     });
+
+    if (didAutoResume) {
+      get().showStatus("Resumed where you left off", "info");
+    }
 
     if (options?.persist !== false) {
       await get().persistWorkspace();

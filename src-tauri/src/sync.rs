@@ -2704,6 +2704,26 @@ pub fn classify_rpc_failure(status: u16, body_str: &str, function_name: &'static
         };
     }
 
+    if status == 400 && code.as_deref() == Some("22023") && function_name == "sync_v2_apply" {
+        let msg = parsed
+            .as_ref()
+            .and_then(|v| v.get("message").and_then(|m| m.as_str()))
+            .unwrap_or_default();
+        let stripped: String = msg.chars().filter(|c| !c.is_control()).collect();
+        let trimmed = stripped.trim();
+        let public_message = if trimmed.is_empty() {
+            None
+        } else {
+            let capped: String = trimmed.chars().take(240).collect();
+            Some(capped)
+        };
+        return SyncError::ServerRejected {
+            status,
+            code,
+            public_message,
+        };
+    }
+
     SyncError::ServerRejected {
         status,
         code,
@@ -5758,6 +5778,142 @@ mod tests {
         // (c) membership present -> not lost
         assert_eq!(classify_access_lost(true, true), None);
         assert_eq!(classify_access_lost(false, true), None);
+    }
+
+    #[test]
+    fn classify_rpc_failure_22023_scoping_and_sanitization() {
+        // 1. Allowed function (sync_v2_apply) exposes sanitized message
+        let err = classify_rpc_failure(
+            400,
+            r#"{"code":"22023","message":"Malformed coding edge span"}"#,
+            "sync_v2_apply",
+        );
+        match err {
+            SyncError::ServerRejected {
+                status,
+                code,
+                public_message,
+            } => {
+                assert_eq!(status, 400);
+                assert_eq!(code.as_deref(), Some("22023"));
+                assert_eq!(
+                    public_message.as_deref(),
+                    Some("Malformed coding edge span")
+                );
+            }
+            other => panic!("expected ServerRejected, got {other:?}"),
+        }
+
+        // 2. Disallowed RPCs (sync_v2_activate, sync_v2_pull) hide 22023 message
+        for other_fn in &["sync_v2_activate", "sync_v2_pull", "sync_v2_snapshot"] {
+            let err = classify_rpc_failure(
+                400,
+                r#"{"code":"22023","message":"Historical Codemap 0.27 internal detail"}"#,
+                other_fn,
+            );
+            match err {
+                SyncError::ServerRejected {
+                    status,
+                    code,
+                    public_message,
+                } => {
+                    assert_eq!(status, 400);
+                    assert_eq!(code.as_deref(), Some("22023"));
+                    assert_eq!(public_message, None);
+                }
+                other => panic!("expected ServerRejected, got {other:?}"),
+            }
+        }
+
+        // 3. Empty input, missing message, and whitespace-only return None
+        let empty_cases = [
+            r#"{"code":"22023"}"#,
+            r#"{"code":"22023","message":""}"#,
+            r#"{"code":"22023","message":"   \t \n  "}"#,
+        ];
+        for body in empty_cases {
+            let err = classify_rpc_failure(400, body, "sync_v2_apply");
+            match err {
+                SyncError::ServerRejected { public_message, .. } => {
+                    assert_eq!(public_message, None, "body {body} should yield None");
+                }
+                other => panic!("expected ServerRejected, got {other:?}"),
+            }
+        }
+
+        // 4. Control characters are stripped; control-only input returns None
+        let err = classify_rpc_failure(
+            400,
+            "{\"code\":\"22023\",\"message\":\"\\u0000Hello\\u0007 World\\u001b\"}",
+            "sync_v2_apply",
+        );
+        match err {
+            SyncError::ServerRejected { public_message, .. } => {
+                assert_eq!(public_message.as_deref(), Some("Hello World"));
+            }
+            other => panic!("expected ServerRejected, got {other:?}"),
+        }
+        let err_ctrl_only = classify_rpc_failure(
+            400,
+            "{\"code\":\"22023\",\"message\":\"\\u0000\\u0007\\u001b\"}",
+            "sync_v2_apply",
+        );
+        match err_ctrl_only {
+            SyncError::ServerRejected { public_message, .. } => {
+                assert_eq!(public_message, None);
+            }
+            other => panic!("expected ServerRejected, got {other:?}"),
+        }
+
+        // 5. Unicode is preserved without corruption
+        let unicode_msg = "無効なスパン範囲 🚨 éèçñ";
+        let body = format!(r#"{{"code":"22023","message":"{unicode_msg}"}}"#);
+        let err = classify_rpc_failure(400, &body, "sync_v2_apply");
+        match err {
+            SyncError::ServerRejected { public_message, .. } => {
+                assert_eq!(public_message.as_deref(), Some(unicode_msg));
+            }
+            other => panic!("expected ServerRejected, got {other:?}"),
+        }
+
+        // 6. Overlength input is capped at 240 Unicode scalar values without slicing panic
+        let long_msg = "あ".repeat(300);
+        let body = format!(r#"{{"code":"22023","message":"{long_msg}"}}"#);
+        let err = classify_rpc_failure(400, &body, "sync_v2_apply");
+        match err {
+            SyncError::ServerRejected { public_message, .. } => {
+                let msg = public_message.unwrap();
+                assert_eq!(msg.chars().count(), 240);
+                assert_eq!(msg, "あ".repeat(240));
+            }
+            other => panic!("expected ServerRejected, got {other:?}"),
+        }
+
+        // 7. P0001 and entitlement handling remain functional
+        let err_p0001 = classify_rpc_failure(
+            400,
+            r#"{"code":"P0001","message":"Custom server error"}"#,
+            "sync_v2_activate",
+        );
+        match err_p0001 {
+            SyncError::ServerRejected { public_message, .. } => {
+                assert_eq!(public_message.as_deref(), Some("Custom server error"));
+            }
+            other => panic!("expected ServerRejected, got {other:?}"),
+        }
+
+        let err_ent = classify_rpc_failure(
+            400,
+            r#"{"message":"CODEMAP_ENTITLEMENT_REQUIRED"}"#,
+            "sync_v2_apply",
+        );
+        match err_ent {
+            SyncError::ServerRejected { status, code, .. } => {
+                assert_eq!(status, 403);
+                assert_eq!(code.as_deref(), Some("CODEMAP_ENTITLEMENT_REQUIRED"));
+            }
+            other => panic!("expected ServerRejected, got {other:?}"),
+        }
     }
 }
 

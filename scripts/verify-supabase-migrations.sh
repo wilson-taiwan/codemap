@@ -8,18 +8,20 @@
 # What it verifies:
 #   1. Every standard migration has a strictly increasing 14-digit timestamp
 #      prefix and a sane name.
-#   2. The v1 certified baseline, the schema-10 protocol-2 migration, and the
-#      entitlements migration all exist.
+#   2. The v1 certified baseline, the schema-10 protocol-2 migration, the
+#      entitlements migration, and the null-spans/realtime migration all exist.
 #   3. The required protocol-2 RPC tokens still live in the schema-10
 #      migration.
 #   4. The entitlement objects and write gates live in the entitlements
 #      migration (and that the write gate call appears in the required
 #      functions/policies).
-#   5. No migration raises the server schema version past the certified 10.
-#   6. The immutable v1 legacy artifacts (history/, schema.sql, flat
+#   5. The null-span function replacement and exact sync_project_heads grant
+#      exist in the 20260904000000 migration, with no extra table grants.
+#   6. No migration after schema 10 touches server schema certification (stays 10).
+#   7. The immutable v1 legacy artifacts (history/, schema.sql, flat
 #      migrate-*.sql) are still present.
-#   7. `supabase/config.toml` does not override schema_paths.
-#   8. The release workflow never reintroduces `supabase db push`, migration
+#   8. `supabase/config.toml` does not override schema_paths.
+#   9. The release workflow never reintroduces `supabase db push`, migration
 #      repair, or mutating SQL.
 #
 # Env vars:
@@ -36,6 +38,7 @@ RELEASE_WORKFLOW="$ROOT/.github/workflows/release.yml"
 V1_BASELINE="20260823000000_v1_certified_baseline.sql"
 SCHEMA_10="20260823000001_sync_protocol_v2_schema_10.sql"
 ENTITLEMENTS="20260826000000_entitlements_and_sync_gate.sql"
+NULL_SPANS_AND_HEADS="20260904000000_sync_v2_allow_null_spans_and_grant_heads.sql"
 CERTIFIED_SCHEMA_VERSION="10"
 
 fail() {
@@ -72,11 +75,11 @@ done
 ok "all $count migration filenames are well-formed with strictly increasing timestamps"
 
 # ── 2. Required migrations present ───────────────────────────────────────────
-for required in "$V1_BASELINE" "$SCHEMA_10" "$ENTITLEMENTS"; do
+for required in "$V1_BASELINE" "$SCHEMA_10" "$ENTITLEMENTS" "$NULL_SPANS_AND_HEADS"; do
   [[ -f "$MIGRATIONS_DIR/$required" ]] \
     || fail "required migration missing: $required"
 done
-ok "v1 baseline, schema-10 migration, and entitlements migration are present"
+ok "v1 baseline, schema-10 migration, entitlements migration, and null-spans/realtime migration are present"
 
 # ── 3. Protocol-2 RPC tokens in the authoritative migration ──────────────────
 schema10_body="$(cat "$MIGRATIONS_DIR/$SCHEMA_10")"
@@ -136,14 +139,35 @@ grep -Fq "drop policy if exists codebook_rw" <<<"$ent_body" \
   || fail "entitlements migration does not drop the old codebook_rw policy"
 ok "entitlement objects and write gates are present and gated"
 
-# ── 5. Schema certification stays 10 ──────────────────────────────────────────
-new_migration_meta="$(cat "$MIGRATIONS_DIR/$ENTITLEMENTS")"
-if grep -Eq 'INSERT INTO public\.server_meta|UPDATE public\.server_meta|schema_version\s*=|server_schema_version' <<<"$new_migration_meta"; then
-  fail "entitlements migration touches server schema certification (must stay $CERTIFIED_SCHEMA_VERSION)"
-fi
-ok "entitlements migration is additive; server schema certification stays $CERTIFIED_SCHEMA_VERSION"
+# ── 5. Null spans and realtime heads grant ────────────────────────────────────
+null_spans_body="$(cat "$MIGRATIONS_DIR/$NULL_SPANS_AND_HEADS")"
+grep -Fq "create or replace function public.sync_v2_payload_is_allowed" <<<"$null_spans_body" \
+  || fail "null-spans migration does not re-issue sync_v2_payload_is_allowed"
+grep -Fq "2.4.x whole-turn encoding" <<<"$null_spans_body" \
+  || fail "null-spans migration does not permit 2.4.x whole-turn encoding"
+grep -Fq "grant select on table public.sync_project_heads to authenticated;" <<<"$null_spans_body" \
+  || fail "null-spans migration does not grant select on sync_project_heads to authenticated"
 
-# ── 6. Immutable v1 legacy artifacts ─────────────────────────────────────────
+# Only the exact sync_project_heads table grant is permitted in this migration
+extra_grants="$(grep -Ei '^\s*grant\s+' <<<"$null_spans_body" | grep -vF 'grant select on table public.sync_project_heads to authenticated;' || true)"
+if [[ -n "$extra_grants" ]]; then
+  fail "null-spans migration contains extra grants (only select on sync_project_heads is allowed): $extra_grants"
+fi
+ok "null-spans validator replacement and exact sync_project_heads grant are intact"
+
+# ── 6. Schema certification stays 10 across all post-schema-10 migrations ────
+for migration in "$MIGRATIONS_DIR"/*.sql; do
+  m_name="$(basename "$migration")"
+  if [[ "$m_name" > "$SCHEMA_10" ]]; then
+    m_body="$(cat "$migration")"
+    if grep -Eq 'INSERT INTO public\.server_meta|UPDATE public\.server_meta|schema_version\s*=|server_schema_version' <<<"$m_body"; then
+      fail "post-schema-10 migration $m_name touches server schema certification (must stay $CERTIFIED_SCHEMA_VERSION)"
+    fi
+  fi
+done
+ok "all post-schema-10 migrations are additive; server schema certification stays $CERTIFIED_SCHEMA_VERSION"
+
+# ── 7. Immutable v1 legacy artifacts ─────────────────────────────────────────
 [[ -d "$ROOT/supabase/history" && "$(find "$ROOT/supabase/history" -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')" -ge 1 ]] \
   || fail "supabase/history/ legacy artifacts are missing"
 [[ -f "$ROOT/supabase/schema.sql" ]] \
@@ -152,14 +176,14 @@ legacy_count="$(ls "$ROOT"/supabase/migrate-*.sql 2>/dev/null | wc -l | tr -d ' 
 [[ "$legacy_count" -ge 1 ]] || fail "flat legacy migrate-*.sql artifacts are missing"
 ok "immutable v1 legacy artifacts are still present"
 
-# ── 7. No schema_paths override ──────────────────────────────────────────────
+# ── 8. No schema_paths override ──────────────────────────────────────────────
 config_body="$(cat "$ROOT/supabase/config.toml" 2>/dev/null || true)"
 if grep -Eq '^\s*schema_paths\s*=' <<<"$config_body"; then
   fail "supabase/config.toml overrides schema_paths (must keep the standard migrations path)"
 fi
 ok "no schema_paths override in supabase/config.toml"
 
-# ── 8. Release workflow must never mutate a database ─────────────────────────
+# ── 9. Release workflow must never mutate a database ─────────────────────────
 [[ -f "$RELEASE_WORKFLOW" ]] || fail "release workflow missing: $RELEASE_WORKFLOW"
 workflow_body="$(cat "$RELEASE_WORKFLOW")"
 for bad in \

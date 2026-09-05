@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CODE_PALETTE, contrast, luminance, readableOn } from "./code-colors";
+import { CODE_PALETTE, contrast, luminance, readableOn, textOnSolid } from "./code-colors";
 
 const LIGHT_GROUND = "#ffffff";
 const DARK_GROUND = "#0f0f0e";
@@ -78,5 +78,21 @@ describe("readableOn", () => {
   it("copes with the extremes without looping forever", () => {
     expect(contrast(readableOn("#000000", DARK_GROUND), DARK_GROUND)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(readableOn("#ffffff", LIGHT_GROUND), LIGHT_GROUND)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("textOnSolid", () => {
+  it("clears at least 4.5:1 against every swatch in the default palette", () => {
+    for (const color of CODE_PALETTE) {
+      const text = textOnSolid(color);
+      expect(contrast(text, color), `${text} on ${color}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("handles pure white and pure black fills", () => {
+    expect(textOnSolid("#ffffff")).toBe("#000000");
+    expect(textOnSolid("#000000")).toBe("#ffffff");
+    expect(contrast(textOnSolid("#ffffff"), "#ffffff")).toBeCloseTo(21, 1);
+    expect(contrast(textOnSolid("#000000"), "#000000")).toBeCloseTo(21, 1);
   });
 });

@@ -48,6 +48,10 @@ vi.mock("../lib/api", () => ({
     inspectHandoffBundle: vi.fn(),
     openHandoffBundle: vi.fn(),
     restoreWorkspace: vi.fn(),
+    listSegmentReviews: vi.fn().mockResolvedValue([]),
+    setSegmentReviewed: vi.fn().mockResolvedValue(undefined),
+    setSegmentSpeaker: vi.fn().mockResolvedValue([]),
+    restoreSegmentSpeakers: vi.fn().mockResolvedValue(undefined),
     getWorkspaceState: vi.fn().mockResolvedValue({
       active_interview_id: null,
       selected_segment_id: null,

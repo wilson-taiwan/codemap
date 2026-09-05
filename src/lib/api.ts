@@ -43,6 +43,7 @@ import type {
   RelinkOutcome,
   OpenMarkerStatus,
   LeftStudy,
+  SegmentSpeakerChange,
 } from "./types";
 import type { StudyReadiness } from "./home-rows";
 
@@ -153,6 +154,26 @@ export const api = {
 
   getSegments: (interviewId: string) =>
     invoke<TranscriptSegment[]>("get_segments", { interviewId }),
+
+  setSegmentSpeaker: (
+    segmentId: string,
+    newSpeaker: string,
+    includeFollowing: boolean,
+  ) =>
+    invoke<SegmentSpeakerChange[]>("set_segment_speaker", {
+      segmentId,
+      newSpeaker,
+      includeFollowing,
+    }),
+
+  restoreSegmentSpeakers: (changes: SegmentSpeakerChange[]) =>
+    invoke<void>("restore_segment_speakers", { changes }),
+
+  setSegmentReviewed: (segmentId: string, reviewed: boolean) =>
+    invoke<void>("set_segment_reviewed", { segmentId, reviewed }),
+
+  listSegmentReviews: (interviewId: string) =>
+    invoke<string[]>("list_segment_reviews", { interviewId }),
 
   applyCodes: (input: {
     interview_id: string;

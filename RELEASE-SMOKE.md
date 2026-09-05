@@ -8,7 +8,7 @@ release is not ready.
 > All evidence is redacted and synthetic: no real study data, participant text,
 > or account identifiers may be recorded here or in the release notes.
 
-- **Version:** 2.4.1
+- **Version:** 2.5.0
 - **Commit:** pending tag (see git log at release time)
 - **Platform / build:** macOS arm64 debug bundle (`Fleuron.app`, id `study.fleuron.desktop`); Windows unverified
 - **Date (last run):** 2026-09-04
